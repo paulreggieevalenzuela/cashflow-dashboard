@@ -1,0 +1,69 @@
+@import "tailwindcss";
+
+/*
+ * This app is designed as a light, clinical dental-practice tool — white
+ * surfaces, soft amber/sky accents — not a dual-theme product. Switching
+ * `dark:` to a class-based variant (rather than the Tailwind default of
+ * following the OS `prefers-color-scheme`) means the app renders the same
+ * light design for every viewer regardless of their system theme, instead
+ * of silently flipping to the dark: overrides whenever someone's OS/browser
+ * is set to dark mode. The `dark:` utilities already used throughout the
+ * app are left in place (harmless, and ready if a real theme toggle is
+ * ever added) — they just no longer activate on their own.
+ */
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+}
+
+/* Modal entrance animation (see src/components/ui/modal.tsx). Respects
+   prefers-reduced-motion, per the UI/UX motion guidelines this app follows. */
+@keyframes modal-panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes modal-overlay-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.animate-modal-panel-in {
+  animation: modal-panel-in 180ms ease-out;
+}
+
+.animate-modal-overlay-in {
+  animation: modal-overlay-in 150ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-modal-panel-in,
+  .animate-modal-overlay-in {
+    animation: none;
+  }
+}

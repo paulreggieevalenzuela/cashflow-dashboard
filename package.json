@@ -1,0 +1,44 @@
+{
+  "name": "cashflow-ui",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "db:generate": "drizzle-kit generate",
+    "db:push": "drizzle-kit push",
+    "db:studio": "drizzle-kit studio",
+    "db:seed": "tsx scripts/seed-db.ts",
+    "db:seed-admin": "tsx scripts/seed-admin.ts",
+    "db:backfill-links": "tsx scripts/backfill-commission-links.ts",
+    "db:backfill-payments": "tsx scripts/backfill-payments.ts"
+  },
+  "dependencies": {
+    "@neondatabase/serverless": "^0.10.4",
+    "bcryptjs": "^3.0.3",
+    "drizzle-orm": "^0.36.4",
+    "next": "16.3.4",
+    "next-auth": "^5.0.0-beta.32",
+    "nextjs-toploader": "^3.9.17",
+    "papaparse": "^5.4.1",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "zod": "^4.1.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/papaparse": "^5.3.14",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "dotenv": "^16.4.7",
+    "drizzle-kit": "^0.28.1",
+    "eslint": "^9",
+    "eslint-config-next": "16.3.4",
+    "tailwindcss": "^4",
+    "tsx": "^4.19.2",
+    "typescript": "^5"
+  }
+}
