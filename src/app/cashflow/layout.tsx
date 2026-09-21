@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { auth } from "@/auth";
 import { CashflowNav } from "@/components/cashflow/cashflow-nav";
 import { RouteFocusManager } from "@/components/navigation/route-focus-manager";
+import { listBranches } from "@/lib/db/branches";
 
 export const metadata: Metadata = {
   title: {
@@ -12,7 +13,7 @@ export const metadata: Metadata = {
 };
 
 export default async function CashflowLayout({ children }: { children: ReactNode }) {
-  const session = await auth();
+  const [session, branches] = await Promise.all([auth(), listBranches()]);
   const role = session?.user.role ?? "staff";
   const displayName = session?.user.name ?? session?.user.email ?? "";
   const email = session?.user.email ?? undefined;
@@ -32,7 +33,12 @@ export default async function CashflowLayout({ children }: { children: ReactNode
                 brand asset from /public, not worth next/image's overhead here */}
             <img src="/logo-wordmark.png" alt="ADT Dental Clinic" className="h-8 w-auto sm:h-9" />
           </span>
-          <CashflowNav role={role} displayName={displayName || undefined} email={email} />
+          <CashflowNav
+            role={role}
+            displayName={displayName || undefined}
+            email={email}
+            branches={branches}
+          />
         </div>
       </header>
 

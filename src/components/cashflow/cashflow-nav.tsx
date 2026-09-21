@@ -4,8 +4,10 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { AccountAvatar, AccountMenu } from "@/components/cashflow/account-menu";
+import { AddExpenseModal } from "@/components/cashflow/add-expense-modal";
 import { SignOutButton } from "@/components/cashflow/sign-out-button";
 import { USER_ROLE_LABELS, type UserRole } from "@/lib/cashflow/user-schema";
+import type { Branch } from "@/lib/db/branches";
 
 const BASE_LINKS = [
   { href: "/cashflow", label: "Overview" },
@@ -27,23 +29,25 @@ const ADMIN_LINKS = [
 ] as const;
 
 /**
- * The whole right-hand side of the app header: the nav links, the profile
- * link, and the sign-out button. Below `md` the admin link set (6 items
- * total with Overview/Transactions) doesn't come close to fitting a phone
- * screen in one row, so this collapses into a hamburger toggle and a
- * full-width dropdown panel instead of overflowing or wrapping mid-header.
- * Bundled into one client component (rather than nav/profile/sign-out
- * staying separate pieces in the server-rendered layout) so the open/close
- * state can control all three at once.
+ * The whole right-hand side of the app header: the nav links, the "Add
+ * Expenses" CTA, the profile link, and the sign-out button. Below `md` the
+ * admin link set (6 items total with Overview/Transactions) doesn't come
+ * close to fitting a phone screen in one row, so this collapses into a
+ * hamburger toggle and a full-width dropdown panel instead of overflowing
+ * or wrapping mid-header. Bundled into one client component (rather than
+ * nav/profile/sign-out staying separate pieces in the server-rendered
+ * layout) so the open/close state can control all three at once.
  */
 export function CashflowNav({
   role,
   displayName,
   email,
+  branches,
 }: {
   role: UserRole;
   displayName?: string;
   email?: string;
+  branches: Branch[];
 }) {
   const pathname = usePathname();
   const [isOpen, setIsOpen] = useState(false);
@@ -77,7 +81,8 @@ export function CashflowNav({
         ))}
       </nav>
 
-      <div className="hidden items-center md:flex">
+      <div className="hidden items-center gap-3 md:flex">
+        <AddExpenseModal branches={branches} />
         {displayName ? (
           <AccountMenu role={role} displayName={displayName} email={email} />
         ) : (
@@ -107,6 +112,9 @@ export function CashflowNav({
           id="mobile-nav-panel"
           className="absolute inset-x-0 top-full z-40 border-b border-zinc-200 bg-white px-6 py-4 shadow-lg dark:border-zinc-800 dark:bg-zinc-950 md:hidden"
         >
+          <div className="mb-3">
+            <AddExpenseModal branches={branches} />
+          </div>
           <nav className="flex flex-col gap-1">
             {links.map((link) => (
               <Link

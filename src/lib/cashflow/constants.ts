@@ -69,3 +69,21 @@ export type PaymentTypeOption = (typeof PAYMENT_TYPES)[number];
 // clinic's real name — there's no settings page for it yet, so it's a
 // constant for now rather than a database value.
 export const CLINIC_NAME = "ADT Dental Clinic";
+
+// A starting set of common dental-clinic operating expense categories,
+// shown as a dropdown on the Add Expenses form — same convention as
+// TRANSACTION_TYPES/PAYMENT_TYPES above (a plain string list, not a fixed
+// enum, so it's easy to extend later without a schema change).
+export const EXPENSE_CATEGORIES = [
+  "Rent",
+  "Utilities",
+  "Salaries",
+  "Dental supplies",
+  "Equipment",
+  "Marketing",
+  "Maintenance & repairs",
+  "Insurance",
+  "Taxes & licenses",
+  "Other",
+] as const;
+export type ExpenseCategoryOption = (typeof EXPENSE_CATEGORIES)[number];

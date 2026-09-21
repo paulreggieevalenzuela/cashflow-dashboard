@@ -14,11 +14,14 @@ import {
 } from "@/components/cashflow/dashboard/dashboard-cards";
 import { CsvUpload } from "@/components/cashflow/csv-upload";
 import {
+  expenseSeriesByGranularity,
+  filterExpensesToCurrentPeriod,
   filterTransactionsToCurrentPeriod,
   netCollectionSeriesByGranularity,
   GRANULARITY_OPTIONS,
   type Granularity,
 } from "@/lib/cashflow/dashboard-metrics";
+import type { Expense } from "@/lib/cashflow/expense-schema";
 import type { CashflowTransaction } from "@/lib/cashflow/schema";
 
 const currencyFormatter = new Intl.NumberFormat("en-PH", {
@@ -34,11 +37,16 @@ function greetingForHour(hour: number): string {
 
 export function CashflowOverview({
   transactions,
+  expenses,
   userName,
   targets,
   canEditTargets = false,
 }: {
   transactions: CashflowTransaction[];
+  /** Recorded expenses (see the `expenses` table) — feeds the Income &
+   * expense and Expense breakdown cards with real numbers instead of the
+   * sample data they used to show. */
+  expenses: Expense[];
   userName?: string;
   /** This period's admin-set target for month/quarter/year, `null` where
    * none has been set yet — fetched server-side from the `sales_targets`
@@ -75,6 +83,27 @@ export function CashflowOverview({
   const periodTransactions = useMemo(
     () => filterTransactionsToCurrentPeriod(transactions, granularity),
     [transactions, granularity],
+  );
+
+  // Same precompute-once-per-granularity approach as trendSeriesByGranularity
+  // above, just over recorded expenses — feeds the Income & expense card.
+  const expenseSeriesByGranularityMap: Record<Granularity, ReturnType<typeof expenseSeriesByGranularity>> =
+    useMemo(
+      () => ({
+        monthly: expenseSeriesByGranularity(expenses, "monthly"),
+        quarterly: expenseSeriesByGranularity(expenses, "quarterly"),
+        semiAnnual: expenseSeriesByGranularity(expenses, "semiAnnual"),
+        annual: expenseSeriesByGranularity(expenses, "annual"),
+      }),
+      [expenses],
+    );
+
+  // Just this period's expenses, same scoping as periodTransactions — feeds
+  // the Expense breakdown card so it lines up with the payment-methods
+  // card it sits next to.
+  const periodExpenses = useMemo(
+    () => filterExpensesToCurrentPeriod(expenses, granularity),
+    [expenses, granularity],
   );
 
   const totalAmountPaid = periodTransactions.reduce((sum, t) => sum + t.amountPaid, 0);
@@ -166,8 +195,12 @@ export function CashflowOverview({
       </section>
 
       <section className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <IncomeExpenseCard series={trendSeriesByGranularity[granularity]} granularity={granularity} />
-        <ExpenseBreakdownCard />
+        <IncomeExpenseCard
+          series={trendSeriesByGranularity[granularity]}
+          expenseSeries={expenseSeriesByGranularityMap[granularity]}
+          granularity={granularity}
+        />
+        <ExpenseBreakdownCard expenses={periodExpenses} />
       </section>
 
       <section className="grid grid-cols-1 gap-6 lg:grid-cols-2">

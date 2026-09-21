@@ -1,4 +1,5 @@
 import type { CashflowTransaction } from "@/lib/cashflow/schema";
+import type { Expense } from "@/lib/cashflow/expense-schema";
 
 /**
  * Pure, DB-free aggregation over an already-fetched transaction list. The
@@ -110,19 +111,28 @@ export function currentPeriodKeys(referenceDate = new Date()): {
  * for anything that specifically needs that rather than the selected
  * granularity.
  */
-export function netCollectionSeriesByGranularity(
-  transactions: CashflowTransaction[],
+/**
+ * Shared bucketing logic behind `netCollectionSeriesByGranularity` and
+ * `expenseSeriesByGranularity` below — a trailing, zero-filled series at
+ * any granularity, generic over what's being summed (net collection on a
+ * transaction, amount on an expense) so both stay byte-for-byte identical
+ * in how they walk periods instead of drifting apart as two copies.
+ */
+function trailingPeriodTotals<T>(
+  items: T[],
+  getDate: (item: T) => string,
+  getAmount: (item: T) => number,
   granularity: Granularity,
-  referenceDate = new Date(),
+  referenceDate: Date,
 ): PeriodPoint[] {
   const { periodsBack, monthsPerPeriod } = GRANULARITY_CONFIG[granularity];
 
   const totalsByKey = new Map<string, number>();
-  for (const transaction of transactions) {
-    const parsed = new Date(`${transaction.date}T00:00:00`);
+  for (const item of items) {
+    const parsed = new Date(`${getDate(item)}T00:00:00`);
     if (Number.isNaN(parsed.getTime())) continue;
     const { key } = periodKeyAndLabel(parsed.getFullYear(), parsed.getMonth(), granularity);
-    totalsByKey.set(key, (totalsByKey.get(key) ?? 0) + transaction.netCollection);
+    totalsByKey.set(key, (totalsByKey.get(key) ?? 0) + getAmount(item));
   }
 
   // Align the cursor to the start of the reference period, then step back
@@ -139,6 +149,40 @@ export function netCollectionSeriesByGranularity(
   }
 
   return points;
+}
+
+export function netCollectionSeriesByGranularity(
+  transactions: CashflowTransaction[],
+  granularity: Granularity,
+  referenceDate = new Date(),
+): PeriodPoint[] {
+  return trailingPeriodTotals(
+    transactions,
+    (transaction) => transaction.date,
+    (transaction) => transaction.netCollection,
+    granularity,
+    referenceDate,
+  );
+}
+
+/**
+ * Same trailing-series shape as `netCollectionSeriesByGranularity`, over
+ * recorded expenses instead of transactions — feeds the Overview
+ * dashboard's Income & expense card (see IncomeExpenseCard) with real
+ * numbers now that the `expenses` table exists.
+ */
+export function expenseSeriesByGranularity(
+  expenses: Expense[],
+  granularity: Granularity,
+  referenceDate = new Date(),
+): PeriodPoint[] {
+  return trailingPeriodTotals(
+    expenses,
+    (expense) => expense.date,
+    (expense) => expense.amount,
+    granularity,
+    referenceDate,
+  );
 }
 
 /**
@@ -162,6 +206,32 @@ export function filterTransactionsToCurrentPeriod(
 
   return transactions.filter((transaction) => {
     const parsed = new Date(`${transaction.date}T00:00:00`);
+    if (Number.isNaN(parsed.getTime())) return false;
+    return (
+      periodKeyAndLabel(parsed.getFullYear(), parsed.getMonth(), granularity).key === currentKey
+    );
+  });
+}
+
+/**
+ * Same "current period only" scoping as `filterTransactionsToCurrentPeriod`,
+ * over recorded expenses — feeds the Overview dashboard's Expense
+ * breakdown card so it's scoped to the same page-level period picker as
+ * the payment-methods card it sits next to.
+ */
+export function filterExpensesToCurrentPeriod(
+  expenses: Expense[],
+  granularity: Granularity,
+  referenceDate = new Date(),
+): Expense[] {
+  const currentKey = periodKeyAndLabel(
+    referenceDate.getFullYear(),
+    referenceDate.getMonth(),
+    granularity,
+  ).key;
+
+  return expenses.filter((expense) => {
+    const parsed = new Date(`${expense.date}T00:00:00`);
     if (Number.isNaN(parsed.getTime())) return false;
     return (
       periodKeyAndLabel(parsed.getFullYear(), parsed.getMonth(), granularity).key === currentKey
@@ -270,6 +340,36 @@ export function paymentMethodBreakdown(transactions: CashflowTransaction[]): Pay
   return Array.from(byType.entries())
     .map(([paymentType, total]) => ({
       paymentType,
+      total,
+      pct: grandTotal === 0 ? 0 : (total / grandTotal) * 100,
+    }))
+    .sort((a, b) => b.total - a.total);
+}
+
+export type ExpenseCategoryStat = {
+  category: string;
+  total: number;
+  pct: number;
+};
+
+/**
+ * Same shape and logic as `paymentMethodBreakdown`, grouped by expense
+ * category instead of payment type — feeds the Overview dashboard's
+ * Expense breakdown card (see ExpenseBreakdownCard).
+ */
+export function expenseCategoryBreakdown(expenses: Expense[]): ExpenseCategoryStat[] {
+  const byCategory = new Map<string, number>();
+  let grandTotal = 0;
+
+  for (const expense of expenses) {
+    const key = expense.category.trim() || "Unspecified";
+    byCategory.set(key, (byCategory.get(key) ?? 0) + expense.amount);
+    grandTotal += expense.amount;
+  }
+
+  return Array.from(byCategory.entries())
+    .map(([category, total]) => ({
+      category,
       total,
       pct: grandTotal === 0 ? 0 : (total / grandTotal) * 100,
     }))

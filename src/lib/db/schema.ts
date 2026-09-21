@@ -261,3 +261,33 @@ export const salesTargets = pgTable(
 
 export type SalesTargetRow = typeof salesTargets.$inferSelect;
 export type NewSalesTargetRow = typeof salesTargets.$inferInsert;
+
+/**
+ * A clinic operating expense — rent, supplies, salaries, utilities, and so
+ * on. Mirrors the same "record what actually happened" shape as
+ * `transactions`, just on the outflow side, so the same list/filter/modal
+ * UI patterns apply. See `docs/PROPOSAL_GAP_ANALYSIS.md` — before this,
+ * the dashboard's expense cards were 100% sample data (no real tracking
+ * existed anywhere).
+ */
+export const expenses = pgTable("expenses", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  date: text("date").notNull(), // YYYY-MM-DD, same convention as transactions.date
+  category: text("category").notNull(),
+  description: text("description").notNull().default(""),
+  amount: numeric("amount", { precision: 12, scale: 2 }).notNull(),
+  // Reuses the same free-text vocabulary as transactions.paymentType (Cash,
+  // GCash, bank transfer, etc.) — how the expense was actually paid, not
+  // required since it's sometimes recorded after the fact from a receipt.
+  paymentMethod: text("payment_method").notNull().default(""),
+  // Which physical location this expense applies to. Nullable — a
+  // clinic-wide expense (e.g. a shared software subscription) has none.
+  branchId: uuid("branch_id").references(() => branches.id, { onDelete: "set null" }),
+  // Who recorded this row — same audit-trail purpose as
+  // transactions.createdByUserId.
+  createdByUserId: uuid("created_by_user_id").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type ExpenseRow = typeof expenses.$inferSelect;
+export type NewExpenseRow = typeof expenses.$inferInsert;

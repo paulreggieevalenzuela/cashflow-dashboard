@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 
 export function Modal({
   open,
@@ -40,7 +41,16 @@ export function Modal({
     return null;
   }
 
-  return (
+  // Rendered through a portal straight onto `document.body` rather than in
+  // place: this component can be opened from anywhere in the tree,
+  // including inside the site header (see AddExpenseModal in
+  // cashflow-nav.tsx). The header has `backdrop-blur-sm`, and any ancestor
+  // with a `filter`/`backdrop-filter` creates a new containing block for
+  // `position: fixed` descendants per the CSS spec — without the portal,
+  // this modal's "fixed inset-0" overlay would be confined to the
+  // header's own ~72px height instead of the full viewport, which is
+  // exactly the clipped-at-the-top rendering bug this fixes.
+  return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto px-4 py-8 sm:items-center"
       role="presentation"
@@ -93,6 +103,7 @@ export function Modal({
 
         {children}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

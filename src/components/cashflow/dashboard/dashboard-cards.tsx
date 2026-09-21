@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState, type ReactNode } from "react";
 import { setSalesTargetAction } from "@/app/cashflow/targets-actions";
 import {
+  expenseCategoryBreakdown,
   GRANULARITY_OPTIONS,
   patientStats,
   paymentMethodBreakdown,
@@ -17,6 +18,7 @@ import {
   CATEGORICAL_PALETTE,
   CHART_OTHER_COLOR,
 } from "@/lib/cashflow/chart-palette";
+import type { Expense } from "@/lib/cashflow/expense-schema";
 import type { CashflowTransaction } from "@/lib/cashflow/schema";
 import { DonutChart, DonutLegend, GroupedBarChart, TrendLineChart, type DonutSegment } from "./charts";
 
@@ -136,6 +138,7 @@ export function CashflowTrendCard({
           color={BRAND_LINE_COLOR}
           formatValue={formatCompactCurrency}
           ariaLabel={`Net collection by ${option.periodNoun}`}
+          seriesName="Net collection"
         />
       </div>
       <p className="mt-2 text-xs text-zinc-400 dark:text-zinc-500">
@@ -145,39 +148,38 @@ export function CashflowTrendCard({
   );
 }
 
-// Illustrative only — not derived from real amounts, so it can't be
-// mistaken for a computed figure. See ExpenseBreakdownCard for why.
-const SAMPLE_MONTHLY_EXPENSES = [15200, 18400, 14100, 21300, 17600, 19900];
-
 /**
- * Income half is real (the same per-granularity series as the cashflow
- * trend card, sliced to the trailing 6 points); expenses are sample data.
+ * Real on both sides: income is the same per-granularity series as the
+ * cashflow trend card, expenses come from the `expenses` table via
+ * `expenseSeriesByGranularity` — both sliced to the trailing 6 points and
+ * computed at the same granularity/reference date, so their `label`s line
+ * up index-for-index.
  */
 export function IncomeExpenseCard({
   series,
+  expenseSeries,
   granularity,
 }: {
   series: PeriodPoint[];
+  expenseSeries: PeriodPoint[];
   granularity: Granularity;
 }) {
   const option = GRANULARITY_OPTIONS.find((o) => o.value === granularity) ?? GRANULARITY_OPTIONS[0];
   const recent = series.slice(-6);
+  const recentExpenses = expenseSeries.slice(-6);
   const points = recent.map((point, index) => ({
     label: point.label,
-    values: [point.total, SAMPLE_MONTHLY_EXPENSES[index % SAMPLE_MONTHLY_EXPENSES.length]],
+    values: [point.total, recentExpenses[index]?.total ?? 0],
   }));
 
   return (
     <CardShell>
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">Income &amp; expense</h3>
-          <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-            Last {recent.length} {option.periodNoun}
-            {recent.length === 1 ? "" : "s"}
-          </p>
-        </div>
-        <SampleDataBadge label="Expenses are sample data" />
+      <div>
+        <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">Income &amp; expense</h3>
+        <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+          Last {recent.length} {option.periodNoun}
+          {recent.length === 1 ? "" : "s"}
+        </p>
       </div>
       <div className="mt-4">
         <GroupedBarChart
@@ -205,42 +207,55 @@ export function IncomeExpenseCard({
             style={{ backgroundColor: CATEGORICAL_PALETTE[1] }}
             aria-hidden="true"
           />
-          Expenses — sample, not tracked yet
+          Expenses — from your recorded expenses
         </span>
       </div>
     </CardShell>
   );
 }
 
-const SAMPLE_EXPENSE_CATEGORIES: DonutSegment[] = [
-  { label: "Rent", value: 30, color: CATEGORICAL_PALETTE[0] },
-  { label: "Wages", value: 22, color: CATEGORICAL_PALETTE[1] },
-  { label: "Supplies", value: 18, color: CATEGORICAL_PALETTE[2] },
-  { label: "Equipment", value: 20, color: CATEGORICAL_PALETTE[3] },
-  { label: "Marketing", value: 8, color: CATEGORICAL_PALETTE[4] },
-  { label: "Other", value: 2, color: CHART_OTHER_COLOR },
-];
+/**
+ * Real: grouped from the `category` field on your recorded expenses (see
+ * the `expenses` table and the header's "Add Expenses" button), same
+ * top-5-plus-"Other" pattern as PaymentMethodsCard.
+ */
+export function ExpenseBreakdownCard({ expenses }: { expenses: Expense[] }) {
+  const all = expenseCategoryBreakdown(expenses);
+  const top = all.slice(0, 5);
+  const other = all.slice(5);
+  const otherTotal = other.reduce((sum, item) => sum + item.total, 0);
+  const grandTotal = all.reduce((sum, item) => sum + item.total, 0);
 
-/** Fully illustrative — there's no expenses table yet, see the project doc. */
-export function ExpenseBreakdownCard() {
+  const segments: DonutSegment[] = [
+    ...top.map((item, index) => ({
+      label: item.category,
+      value: item.total,
+      color: CATEGORICAL_PALETTE[index % CATEGORICAL_PALETTE.length],
+    })),
+    ...(otherTotal > 0 ? [{ label: "Other", value: otherTotal, color: CHART_OTHER_COLOR }] : []),
+  ];
+
   return (
     <CardShell>
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">Expenses by category</h3>
-          <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">Illustrative breakdown</p>
+      <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">Expenses by category</h3>
+      <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">Share of expenses, this period</p>
+      {segments.length > 0 ? (
+        <div className="mt-4 flex items-center gap-6">
+          <DonutChart
+            segments={segments}
+            centerValue={formatCompactCurrency(grandTotal)}
+            centerLabel="of expenses"
+            formatValue={formatCompactCurrency}
+          />
+          <div className="flex-1">
+            <DonutLegend segments={segments} total={grandTotal} />
+          </div>
         </div>
-        <SampleDataBadge />
-      </div>
-      <div className="mt-4 flex items-center gap-6">
-        <DonutChart segments={SAMPLE_EXPENSE_CATEGORIES} centerValue="100%" centerLabel="of expenses" />
-        <div className="flex-1">
-          <DonutLegend segments={SAMPLE_EXPENSE_CATEGORIES} />
-        </div>
-      </div>
-      <p className="mt-4 text-xs text-zinc-400 dark:text-zinc-500">
-        Not tracked yet — add an expenses table to replace this with real numbers.
-      </p>
+      ) : (
+        <p className="mt-4 text-sm text-zinc-400 dark:text-zinc-500">
+          No expenses recorded yet — add one from the &quot;Add Expenses&quot; button in the header.
+        </p>
+      )}
     </CardShell>
   );
 }
@@ -339,6 +354,7 @@ export function PaymentMethodsCard({
             segments={segments}
             centerValue={formatCompactCurrency(grandTotal)}
             centerLabel="collected"
+            formatValue={formatCompactCurrency}
           />
           <div className="flex-1">
             <DonutLegend segments={segments} total={grandTotal} />
@@ -528,6 +544,7 @@ export function TargetVsActualCard({
               ]}
               centerValue={`${pct}%`}
               centerLabel="of target"
+              formatValue={currencyFormatter.format}
             />
             <div className="flex-1 space-y-1.5 text-sm">
               <div className="flex items-center justify-between">
