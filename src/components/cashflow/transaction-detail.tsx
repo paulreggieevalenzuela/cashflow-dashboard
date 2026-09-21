@@ -76,6 +76,8 @@ export function TransactionDetail({
             dentistOptions={dentistOptions}
             branches={branches}
             procedures={procedures}
+            payments={payments}
+            canDelete={canDelete}
           />
           {canDelete && (
             <button
@@ -133,6 +135,7 @@ export function TransactionDetail({
         totalDue={transaction.amountPaid}
         payments={payments}
         canDelete={canDelete}
+        readOnly
       />
 
       {transaction.remarks && (

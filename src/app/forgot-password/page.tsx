@@ -4,7 +4,7 @@ import { ForgotPasswordForm } from "@/components/auth/forgot-password-form";
 
 export const metadata: Metadata = {
   title: "Reset password | Cashflow",
-  description: "Reset the password for your Cashflow account.",
+  description: "Reset the password for your Financial & Cashflow Management System account.",
 };
 
 export default function ForgotPasswordPage() {

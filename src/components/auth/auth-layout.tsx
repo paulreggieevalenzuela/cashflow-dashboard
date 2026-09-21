@@ -10,7 +10,7 @@ type AuthLayoutProps = {
 };
 
 export function AuthLayout({
-  heroEyebrow = "Cashflow for dental practices",
+  heroEyebrow = "Financial and Cashflow Management",
   heroTitle,
   heroDescription,
   heroHighlights = [],
@@ -45,7 +45,11 @@ export function AuthLayout({
 
         {/* eslint-disable-next-line @next/next/no-img-element -- static
             brand asset from /public, not worth next/image's overhead here */}
-        <img src="/logo-wordmark.png" alt="ADT Dental Clinic" className="h-11 w-auto" />
+        <img
+          src="/logo-wordmark.png"
+          alt="ADT Dental Clinic"
+          className="h-11 w-auto"
+        />
 
         <div className="max-w-md">
           <p className="text-sm font-medium uppercase tracking-wide text-amber-600">
@@ -61,7 +65,10 @@ export function AuthLayout({
           {heroHighlights.length > 0 && (
             <ul className="mt-8 space-y-3">
               {heroHighlights.map((highlight) => (
-                <li key={highlight} className="flex items-start gap-3 text-sm text-zinc-700">
+                <li
+                  key={highlight}
+                  className="flex items-start gap-3 text-sm text-zinc-700"
+                >
                   <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-700">
                     <svg
                       viewBox="0 0 20 20"
@@ -103,7 +110,8 @@ export function AuthLayout({
         </div>
 
         <p className="text-xs text-zinc-400">
-          &copy; {new Date().getFullYear()} Cashflow. Built for modern dental practices.
+          &copy; {new Date().getFullYear()} Financial and Cashflow. Built for
+          modern dental practices.
         </p>
       </section>
 
@@ -125,7 +133,11 @@ export function AuthLayout({
             <span className="inline-flex items-center rounded-lg bg-white px-2.5 py-1.5 shadow-sm ring-1 ring-zinc-200">
               {/* eslint-disable-next-line @next/next/no-img-element -- static
                   brand asset from /public, not worth next/image's overhead here */}
-              <img src="/logo-wordmark.png" alt="ADT Dental Clinic" className="h-8 w-auto" />
+              <img
+                src="/logo-wordmark.png"
+                alt="ADT Dental Clinic"
+                className="h-8 w-auto"
+              />
             </span>
           </div>
 

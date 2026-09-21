@@ -1,10 +1,12 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
+import { PaymentsManager } from "@/components/cashflow/payments-manager";
 import { TransactionForm } from "@/components/cashflow/transaction-form";
 import { Modal } from "@/components/ui/modal";
 import type { CashflowTransaction } from "@/lib/cashflow/schema";
 import type { Branch } from "@/lib/db/branches";
+import type { Payment } from "@/lib/db/payments";
 
 /**
  * "Edit transaction" as a pop-up (like AddTransactionModal) instead of a
@@ -19,12 +21,19 @@ export function EditTransactionModal({
   dentistOptions,
   branches,
   procedures,
+  payments,
+  canDelete = false,
   trigger,
 }: {
   transaction: CashflowTransaction;
   dentistOptions: string[];
   branches: Branch[];
   procedures: string[];
+  /** When provided, an editable Payments section (record/remove a payment)
+   * is shown below the transaction form — payments are only ever
+   * updatable from here, never from the read-only detail page view. */
+  payments?: Payment[];
+  canDelete?: boolean;
   /** Custom trigger; receives an onClick to open the modal. Defaults to a
    * bordered "Edit transaction" button matching the detail page's other
    * action buttons. */
@@ -52,14 +61,24 @@ export function EditTransactionModal({
         title="Edit transaction"
         description={`${transaction.patientName} · ${transaction.date}`}
       >
-        <TransactionForm
-          mode="edit"
-          transaction={transaction}
-          dentistOptions={dentistOptions}
-          branches={branches}
-          procedures={procedures}
-          onSuccess={() => setOpen(false)}
-        />
+        <div className="space-y-6">
+          <TransactionForm
+            mode="edit"
+            transaction={transaction}
+            dentistOptions={dentistOptions}
+            branches={branches}
+            procedures={procedures}
+            onSuccess={() => setOpen(false)}
+          />
+          {payments && (
+            <PaymentsManager
+              transactionId={transaction.id}
+              totalDue={transaction.amountPaid}
+              payments={payments}
+              canDelete={canDelete}
+            />
+          )}
+        </div>
       </Modal>
     </>
   );

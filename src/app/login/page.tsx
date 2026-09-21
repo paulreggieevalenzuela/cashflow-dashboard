@@ -4,13 +4,14 @@ import { LoginForm } from "@/components/auth/login-form";
 
 export const metadata: Metadata = {
   title: "Sign in | ADT Dental Clinic",
-  description: "Sign in to your ADT Dental Clinic account to manage your practice's finances.",
+  description:
+    "Sign in to your ADT Dental Clinic account to manage your practice's finances.",
 };
 
 export default function LoginPage() {
   return (
     <AuthLayout
-      heroTitle="The cash flow platform built for dental practices"
+      heroTitle="The Financial and Cashflow Management platform built for dental practices"
       heroDescription="Track patient billing, insurance reimbursements, and day-to-day expenses in one place, so you always know where your practice stands."
       heroHighlights={[
         "See real-time cash flow across every chair and provider",

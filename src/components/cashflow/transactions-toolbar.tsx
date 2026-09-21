@@ -96,7 +96,7 @@ export function TransactionsToolbar({
         value={query.type ?? ""}
         onChange={(event) => navigate({ type: event.target.value || undefined })}
         aria-label="Filter by transaction type"
-        className={FIELD_CLASSES}
+        className={`${FIELD_CLASSES} select-chevron`}
       >
         <option value="">All types</option>
         {TRANSACTION_TYPES.map((option) => (
@@ -110,7 +110,7 @@ export function TransactionsToolbar({
         value={query.payment ?? ""}
         onChange={(event) => navigate({ payment: event.target.value || undefined })}
         aria-label="Filter by payment method"
-        className={FIELD_CLASSES}
+        className={`${FIELD_CLASSES} select-chevron`}
       >
         <option value="">All payment methods</option>
         {PAYMENT_TYPES.map((option) => (
@@ -125,7 +125,7 @@ export function TransactionsToolbar({
           value={query.dentist ?? ""}
           onChange={(event) => navigate({ dentist: event.target.value || undefined })}
           aria-label="Filter by dentist"
-          className={FIELD_CLASSES}
+          className={`${FIELD_CLASSES} select-chevron`}
         >
           <option value="">All dentists</option>
           {dentistOptions.map((option) => (

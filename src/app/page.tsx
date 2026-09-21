@@ -15,19 +15,22 @@ export default function Home() {
       <main className="relative flex w-full max-w-xl flex-col items-center gap-6 text-center">
         {/* eslint-disable-next-line @next/next/no-img-element -- static
             brand asset from /public, not worth next/image's overhead here */}
-        <img src="/logo-wordmark.png" alt="ADT Dental Clinic" className="h-16 w-auto" />
+        <img
+          src="/logo-wordmark.png"
+          alt="ADT Dental Clinic"
+          className="h-16 w-auto"
+        />
         <div>
           <p className="text-sm font-medium uppercase tracking-wide text-amber-600">
-            Cashflow for dental practices
+            Financial and Cashflow Management for dental practices
           </p>
           <h1 className="mt-3 text-4xl font-semibold tracking-tight text-zinc-900">
-            Track your practice&apos;s cashflow in one place
+            Track your practice&apos;s Financials and Cashflow in one place
           </h1>
         </div>
         <p className="max-w-md text-base leading-7 text-zinc-600">
-          Record patient payments, import CSV batches, and see income trends
-          at a glance — with role-based access for admins, dentists, and
-          staff.
+          Record patient payments, import CSV batches, and see income trends at
+          a glance — with role-based access for admins, dentists, and staff.
         </p>
         <Link
           href="/login"

@@ -38,11 +38,17 @@ export function PaymentsManager({
   totalDue,
   payments,
   canDelete = false,
+  readOnly = false,
 }: {
   transactionId: string;
   totalDue: number;
   payments: Payment[];
   canDelete?: boolean;
+  /** Viewing a transaction shows payments as read-only — no "Record a
+   * payment" form, no "Remove" buttons. Recording or removing a payment is
+   * only available from the edit flow, where this is rendered without
+   * `readOnly`. */
+  readOnly?: boolean;
 }) {
   const router = useRouter();
   const [form, setForm] = useState<FormState>(emptyForm);
@@ -99,7 +105,14 @@ export function PaymentsManager({
   return (
     <div className="space-y-6 rounded-xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-950">
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
-        <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">Payments</h3>
+        <div>
+          <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">Payments</h3>
+          {readOnly && (
+            <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
+              Read-only — edit the transaction to record or remove a payment.
+            </p>
+          )}
+        </div>
         <span
           className={`inline-flex w-fit items-center rounded-full px-2.5 py-1 text-xs font-medium ${
             isFullyPaid
@@ -142,7 +155,7 @@ export function PaymentsManager({
                   {payment.notes ? ` · ${payment.notes}` : ""}
                 </p>
               </div>
-              {canDelete && (
+              {!readOnly && canDelete && (
                 <button
                   type="button"
                   onClick={() => handleDelete(payment.id)}
@@ -157,61 +170,63 @@ export function PaymentsManager({
         </ul>
       )}
 
-      <div>
-        <h4 className="mb-3 text-xs font-medium uppercase tracking-wide text-zinc-400 dark:text-zinc-500">
-          Record a payment
-        </h4>
+      {!readOnly && (
+        <div>
+          <h4 className="mb-3 text-xs font-medium uppercase tracking-wide text-zinc-400 dark:text-zinc-500">
+            Record a payment
+          </h4>
 
-        {formError && (
-          <div
-            role="alert"
-            className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300"
-          >
-            {formError}
-          </div>
-        )}
-
-        <form onSubmit={handleSubmit} noValidate className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <FormField
-            label="Amount"
-            type="number"
-            min="0"
-            step="0.01"
-            placeholder="0.00"
-            value={form.amount}
-            onChange={(event) => updateField("amount", event.target.value)}
-          />
-          <SelectField
-            label="Payment type"
-            placeholder="Select payment type"
-            options={PAYMENT_TYPES}
-            value={form.paymentType}
-            onChange={(event) => updateField("paymentType", event.target.value)}
-          />
-          <FormField
-            label="Date"
-            type="date"
-            value={form.paidAt}
-            onChange={(event) => updateField("paidAt", event.target.value)}
-          />
-          <FormField
-            label="Notes"
-            type="text"
-            placeholder="Optional"
-            value={form.notes}
-            onChange={(event) => updateField("notes", event.target.value)}
-          />
-          <div className="sm:col-span-2">
-            <button
-              type="submit"
-              disabled={status === "submitting"}
-              className="rounded-lg bg-amber-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-70"
+          {formError && (
+            <div
+              role="alert"
+              className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300"
             >
-              {status === "submitting" ? "Recording..." : "Record payment"}
-            </button>
-          </div>
-        </form>
-      </div>
+              {formError}
+            </div>
+          )}
+
+          <form onSubmit={handleSubmit} noValidate className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <FormField
+              label="Amount"
+              type="number"
+              min="0"
+              step="0.01"
+              placeholder="0.00"
+              value={form.amount}
+              onChange={(event) => updateField("amount", event.target.value)}
+            />
+            <SelectField
+              label="Payment type"
+              placeholder="Select payment type"
+              options={PAYMENT_TYPES}
+              value={form.paymentType}
+              onChange={(event) => updateField("paymentType", event.target.value)}
+            />
+            <FormField
+              label="Date"
+              type="date"
+              value={form.paidAt}
+              onChange={(event) => updateField("paidAt", event.target.value)}
+            />
+            <FormField
+              label="Notes"
+              type="text"
+              placeholder="Optional"
+              value={form.notes}
+              onChange={(event) => updateField("notes", event.target.value)}
+            />
+            <div className="sm:col-span-2">
+              <button
+                type="submit"
+                disabled={status === "submitting"}
+                className="rounded-lg bg-amber-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-70"
+              >
+                {status === "submitting" ? "Recording..." : "Record payment"}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
     </div>
   );
 }

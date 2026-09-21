@@ -65,7 +65,7 @@ export function LoginForm() {
           Welcome back
         </h2>
         <p className="mt-2 text-sm text-zinc-500 dark:text-zinc-400">
-          Sign in to manage appointments, billing, and cash flow for your
+          Sign in to manage financials, billing, and cash flow for your
           practice.
         </p>
       </div>

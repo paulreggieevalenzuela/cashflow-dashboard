@@ -137,7 +137,7 @@ export function CashflowOverview({
             id="overview-granularity"
             value={granularity}
             onChange={(event) => setGranularity(event.target.value as Granularity)}
-            className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none transition-colors focus:border-amber-500 focus:ring-2 focus:ring-amber-100 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50 dark:focus:ring-amber-900/40"
+            className="select-chevron rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none transition-colors focus:border-amber-500 focus:ring-2 focus:ring-amber-100 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50 dark:focus:ring-amber-900/40"
           >
             {GRANULARITY_OPTIONS.map((opt) => (
               <option key={opt.value} value={opt.value}>

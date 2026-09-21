@@ -6,7 +6,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "ADT Dental Clinic",
-  description: "Cashflow application for ADT Dental Clinic",
+  description: "Financial & Cashflow Management System for ADT Dental Clinic",
 };
 
 export default async function RootLayout({ children }: LayoutProps<"/">) {

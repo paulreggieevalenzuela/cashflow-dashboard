@@ -169,7 +169,7 @@ export function UsersManager({
               <select
                 value={form.role}
                 onChange={(event) => updateField("role", event.target.value as UserRole)}
-                className="w-full rounded-lg border border-zinc-300 bg-white px-3.5 py-2.5 text-sm text-zinc-900 shadow-sm outline-none transition-colors focus:border-amber-500 focus:ring-2 focus:ring-amber-100 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50 dark:focus:ring-amber-900/40"
+                className="select-chevron w-full rounded-lg border border-zinc-300 bg-white px-3.5 py-2.5 text-sm text-zinc-900 shadow-sm outline-none transition-colors focus:border-amber-500 focus:ring-2 focus:ring-amber-100 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50 dark:focus:ring-amber-900/40"
               >
                 {USER_ROLES.map((role) => (
                   <option key={role} value={role}>
@@ -188,7 +188,7 @@ export function UsersManager({
               <select
                 value={form.branchId}
                 onChange={(event) => updateField("branchId", event.target.value)}
-                className="w-full rounded-lg border border-zinc-300 bg-white px-3.5 py-2.5 text-sm text-zinc-900 shadow-sm outline-none transition-colors focus:border-amber-500 focus:ring-2 focus:ring-amber-100 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50 dark:focus:ring-amber-900/40"
+                className="select-chevron w-full rounded-lg border border-zinc-300 bg-white px-3.5 py-2.5 text-sm text-zinc-900 shadow-sm outline-none transition-colors focus:border-amber-500 focus:ring-2 focus:ring-amber-100 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50 dark:focus:ring-amber-900/40"
               >
                 <option value="">No branch</option>
                 {branches.map((branch) => (
@@ -243,7 +243,7 @@ export function UsersManager({
                       onChange={(event) =>
                         handleRoleChange(user.id, event.target.value as UserRole)
                       }
-                      className="rounded-md border border-zinc-300 bg-white px-2 py-1 text-xs text-zinc-900 outline-none disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+                      className="select-chevron-sm rounded-md border border-zinc-300 bg-white px-2 py-1 text-xs text-zinc-900 outline-none disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
                     >
                       {USER_ROLES.map((role) => (
                         <option key={role} value={role}>
@@ -258,7 +258,7 @@ export function UsersManager({
                         value={user.branchId ?? ""}
                         disabled={isBusy}
                         onChange={(event) => handleBranchChange(user.id, event.target.value)}
-                        className="rounded-md border border-zinc-300 bg-white px-2 py-1 text-xs text-zinc-900 outline-none disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+                        className="select-chevron-sm rounded-md border border-zinc-300 bg-white px-2 py-1 text-xs text-zinc-900 outline-none disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
                       >
                         <option value="">No branch</option>
                         {branches.map((branch) => (
