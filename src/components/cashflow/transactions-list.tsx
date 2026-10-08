@@ -4,11 +4,15 @@ import { TransactionsPagination } from "@/components/cashflow/transactions-pagin
 import { TransactionsToolbar } from "@/components/cashflow/transactions-toolbar";
 import {
   TransactionsTable,
-  type CollectedTotals,
+  type InvoiceSummaries,
 } from "@/components/cashflow/transactions-table";
-import { hasActiveTransactionFilters, type TransactionsQueryParams } from "@/lib/cashflow/transactions-query";
+import {
+  hasActiveTransactionFilters,
+  type TransactionsQueryParams,
+} from "@/lib/cashflow/transactions-query";
 import type { CashflowTransaction } from "@/lib/cashflow/schema";
 import type { Branch } from "@/lib/db/branches";
+import type { ProcedureOption } from "@/lib/db/procedures";
 
 export function TransactionsList({
   transactions,
@@ -19,7 +23,7 @@ export function TransactionsList({
   dentistOptions,
   branches,
   procedures,
-  collectedTotals,
+  invoiceSummaries,
 }: {
   transactions: CashflowTransaction[];
   canDelete?: boolean;
@@ -28,8 +32,8 @@ export function TransactionsList({
   totalPages: number;
   dentistOptions: string[];
   branches: Branch[];
-  procedures: string[];
-  collectedTotals: CollectedTotals;
+  procedures: ProcedureOption[];
+  invoiceSummaries: InvoiceSummaries;
 }) {
   const filtered = hasActiveTransactionFilters(query);
 
@@ -41,7 +45,8 @@ export function TransactionsList({
             All transactions
           </h2>
           <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-            {total} {filtered ? "matching" : "recorded"}. Click a patient name to see the full detail.
+            {total} {filtered ? "matching" : "recorded"}. Click a patient name
+            to see the full detail.
           </p>
         </div>
         <AddTransactionModal
@@ -54,7 +59,7 @@ export function TransactionsList({
       <TransactionsTable
         transactions={transactions}
         canDelete={canDelete}
-        collectedTotals={collectedTotals}
+        invoiceSummaries={invoiceSummaries}
         query={query}
         hasActiveFilters={filtered}
         dentistOptions={dentistOptions}

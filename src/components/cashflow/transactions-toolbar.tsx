@@ -3,7 +3,10 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { PAYMENT_TYPES, TRANSACTION_TYPES } from "@/lib/cashflow/constants";
-import { buildTransactionsSearch, type TransactionsQueryParams } from "@/lib/cashflow/transactions-query";
+import {
+  buildTransactionsSearch,
+  type TransactionsQueryParams,
+} from "@/lib/cashflow/transactions-query";
 
 const FIELD_CLASSES =
   "rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none transition-colors focus:border-amber-500 focus:ring-2 focus:ring-amber-100 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50 dark:focus:ring-amber-900/40";
@@ -57,13 +60,25 @@ export function TransactionsToolbar({
   }
 
   const hasActiveFilters = Boolean(
-    query.q || query.type || query.payment || query.dentist || query.from || query.to,
+    query.q ||
+    query.type ||
+    query.payment ||
+    query.dentist ||
+    query.from ||
+    query.to,
   );
 
   function clearFilters() {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     setSearchInput("");
-    navigate({ q: undefined, type: undefined, payment: undefined, dentist: undefined, from: undefined, to: undefined });
+    navigate({
+      q: undefined,
+      type: undefined,
+      payment: undefined,
+      dentist: undefined,
+      from: undefined,
+      to: undefined,
+    });
   }
 
   return (
@@ -94,7 +109,9 @@ export function TransactionsToolbar({
 
       <select
         value={query.type ?? ""}
-        onChange={(event) => navigate({ type: event.target.value || undefined })}
+        onChange={(event) =>
+          navigate({ type: event.target.value || undefined })
+        }
         aria-label="Filter by transaction type"
         className={`${FIELD_CLASSES} select-chevron`}
       >
@@ -108,7 +125,9 @@ export function TransactionsToolbar({
 
       <select
         value={query.payment ?? ""}
-        onChange={(event) => navigate({ payment: event.target.value || undefined })}
+        onChange={(event) =>
+          navigate({ payment: event.target.value || undefined })
+        }
         aria-label="Filter by payment method"
         className={`${FIELD_CLASSES} select-chevron`}
       >
@@ -123,7 +142,9 @@ export function TransactionsToolbar({
       {dentistOptions.length > 0 && (
         <select
           value={query.dentist ?? ""}
-          onChange={(event) => navigate({ dentist: event.target.value || undefined })}
+          onChange={(event) =>
+            navigate({ dentist: event.target.value || undefined })
+          }
           aria-label="Filter by dentist"
           className={`${FIELD_CLASSES} select-chevron`}
         >
@@ -140,7 +161,9 @@ export function TransactionsToolbar({
         <input
           type="date"
           value={query.from ?? ""}
-          onChange={(event) => navigate({ from: event.target.value || undefined })}
+          onChange={(event) =>
+            navigate({ from: event.target.value || undefined })
+          }
           aria-label="From date"
           className={FIELD_CLASSES}
         />
@@ -150,7 +173,9 @@ export function TransactionsToolbar({
         <input
           type="date"
           value={query.to ?? ""}
-          onChange={(event) => navigate({ to: event.target.value || undefined })}
+          onChange={(event) =>
+            navigate({ to: event.target.value || undefined })
+          }
           aria-label="To date"
           className={FIELD_CLASSES}
         />

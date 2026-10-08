@@ -4,10 +4,15 @@ config({ path: ".env.local" });
 
 async function main() {
   const { SEED_TRANSACTIONS } = await import("../src/lib/cashflow/seed-data");
-  const { upsertTransactions } = await import("../src/lib/db/transactions");
+  const { importTransactionsWithInvoices } = await import("../src/lib/db/invoices");
 
-  await upsertTransactions(SEED_TRANSACTIONS);
-  console.log(`Seeded ${SEED_TRANSACTIONS.length} transactions.`);
+  const summary = await importTransactionsWithInvoices(SEED_TRANSACTIONS, {
+    branchId: null,
+    userId: null,
+  });
+  console.log(
+    `Seeded ${summary.lineCount} transactions across ${summary.invoiceCount} invoices (${summary.paymentCount} payments).`,
+  );
 }
 
 main()

@@ -18,11 +18,13 @@ import {
   filterExpensesToCurrentPeriod,
   filterTransactionsToCurrentPeriod,
   netCollectionSeriesByGranularity,
+  visitCountOf,
   GRANULARITY_OPTIONS,
   type Granularity,
 } from "@/lib/cashflow/dashboard-metrics";
 import type { Expense } from "@/lib/cashflow/expense-schema";
 import type { CashflowTransaction } from "@/lib/cashflow/schema";
+import type { Branch } from "@/lib/db/branches";
 
 const currencyFormatter = new Intl.NumberFormat("en-PH", {
   style: "currency",
@@ -41,6 +43,7 @@ export function CashflowOverview({
   userName,
   targets,
   canEditTargets = false,
+  branches = [],
 }: {
   transactions: CashflowTransaction[];
   /** Recorded expenses (see the `expenses` table) — feeds the Income &
@@ -53,6 +56,8 @@ export function CashflowOverview({
    * table (see targets.ts) since it's not derivable from `transactions`. */
   targets?: Record<TargetPeriodType, number | null>;
   canEditTargets?: boolean;
+  /** Branches offered when importing a CSV. */
+  branches?: Branch[];
 }) {
   // The single page-wide period picker, next to the greeting — every card
   // below (besides the CSV importer and the target-vs-actual card, which
@@ -63,16 +68,18 @@ export function CashflowOverview({
   // Precomputed once per load for every granularity, so switching the
   // picker is an instant client-side recompute — no refetch, and only the
   // already-fetched `transactions` (not additional data) is used.
-  const trendSeriesByGranularity: Record<Granularity, ReturnType<typeof netCollectionSeriesByGranularity>> =
-    useMemo(
-      () => ({
-        monthly: netCollectionSeriesByGranularity(transactions, "monthly"),
-        quarterly: netCollectionSeriesByGranularity(transactions, "quarterly"),
-        semiAnnual: netCollectionSeriesByGranularity(transactions, "semiAnnual"),
-        annual: netCollectionSeriesByGranularity(transactions, "annual"),
-      }),
-      [transactions],
-    );
+  const trendSeriesByGranularity: Record<
+    Granularity,
+    ReturnType<typeof netCollectionSeriesByGranularity>
+  > = useMemo(
+    () => ({
+      monthly: netCollectionSeriesByGranularity(transactions, "monthly"),
+      quarterly: netCollectionSeriesByGranularity(transactions, "quarterly"),
+      semiAnnual: netCollectionSeriesByGranularity(transactions, "semiAnnual"),
+      annual: netCollectionSeriesByGranularity(transactions, "annual"),
+    }),
+    [transactions],
+  );
 
   // Just the transactions inside the *current* period at the selected
   // granularity (e.g. this month, this quarter) — feeds the stat cards and
@@ -87,16 +94,18 @@ export function CashflowOverview({
 
   // Same precompute-once-per-granularity approach as trendSeriesByGranularity
   // above, just over recorded expenses — feeds the Income & expense card.
-  const expenseSeriesByGranularityMap: Record<Granularity, ReturnType<typeof expenseSeriesByGranularity>> =
-    useMemo(
-      () => ({
-        monthly: expenseSeriesByGranularity(expenses, "monthly"),
-        quarterly: expenseSeriesByGranularity(expenses, "quarterly"),
-        semiAnnual: expenseSeriesByGranularity(expenses, "semiAnnual"),
-        annual: expenseSeriesByGranularity(expenses, "annual"),
-      }),
-      [expenses],
-    );
+  const expenseSeriesByGranularityMap: Record<
+    Granularity,
+    ReturnType<typeof expenseSeriesByGranularity>
+  > = useMemo(
+    () => ({
+      monthly: expenseSeriesByGranularity(expenses, "monthly"),
+      quarterly: expenseSeriesByGranularity(expenses, "quarterly"),
+      semiAnnual: expenseSeriesByGranularity(expenses, "semiAnnual"),
+      annual: expenseSeriesByGranularity(expenses, "annual"),
+    }),
+    [expenses],
+  );
 
   // Just this period's expenses, same scoping as periodTransactions — feeds
   // the Expense breakdown card so it lines up with the payment-methods
@@ -106,8 +115,14 @@ export function CashflowOverview({
     [expenses, granularity],
   );
 
-  const totalAmountPaid = periodTransactions.reduce((sum, t) => sum + t.amountPaid, 0);
-  const totalNetCollection = periodTransactions.reduce((sum, t) => sum + t.netCollection, 0);
+  const totalAmountPaid = periodTransactions.reduce(
+    (sum, t) => sum + t.amountPaid,
+    0,
+  );
+  const totalNetCollection = periodTransactions.reduce(
+    (sum, t) => sum + t.netCollection,
+    0,
+  );
 
   // "This period"'s actual is just the last point of each trailing
   // series above (it already ends at "now") — no separate computation
@@ -153,7 +168,9 @@ export function CashflowOverview({
             {greetingForHour(now.getHours())}
             {userName ? `, ${userName.split(" ")[0]}!` : "!"}
           </h2>
-          <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">{dateLabel}</p>
+          <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+            {dateLabel}
+          </p>
         </div>
         <div className="flex flex-col items-start gap-1.5 sm:items-end">
           <label
@@ -165,7 +182,9 @@ export function CashflowOverview({
           <select
             id="overview-granularity"
             value={granularity}
-            onChange={(event) => setGranularity(event.target.value as Granularity)}
+            onChange={(event) =>
+              setGranularity(event.target.value as Granularity)
+            }
             className="select-chevron rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none transition-colors focus:border-amber-500 focus:ring-2 focus:ring-amber-100 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50 dark:focus:ring-amber-900/40"
           >
             {GRANULARITY_OPTIONS.map((opt) => (
@@ -178,9 +197,18 @@ export function CashflowOverview({
       </div>
 
       <section className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <StatCard label="Transactions" value={periodTransactions.length.toString()} />
-        <StatCard label="Amount paid" value={currencyFormatter.format(totalAmountPaid)} />
-        <StatCard label="Net collection" value={currencyFormatter.format(totalNetCollection)} />
+        <StatCard
+          label="Transactions"
+          value={visitCountOf(periodTransactions).toString()}
+        />
+        <StatCard
+          label="Amount paid"
+          value={currencyFormatter.format(totalAmountPaid)}
+        />
+        <StatCard
+          label="Net collection"
+          value={currencyFormatter.format(totalNetCollection)}
+        />
       </section>
 
       <section className="grid grid-cols-1">
@@ -189,9 +217,15 @@ export function CashflowOverview({
 
       <section className="grid grid-cols-1 gap-6 xl:grid-cols-3">
         <div className="xl:col-span-2">
-          <CashflowTrendCard seriesByGranularity={trendSeriesByGranularity} granularity={granularity} />
+          <CashflowTrendCard
+            seriesByGranularity={trendSeriesByGranularity}
+            granularity={granularity}
+          />
         </div>
-        <PaymentMethodsCard transactions={periodTransactions} granularity={granularity} />
+        <PaymentMethodsCard
+          transactions={periodTransactions}
+          granularity={granularity}
+        />
       </section>
 
       <section className="grid grid-cols-1 gap-6 lg:grid-cols-2">
@@ -205,14 +239,17 @@ export function CashflowOverview({
 
       <section className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <PatientsCard transactions={transactions} granularity={granularity} />
-        <PopularProceduresCard transactions={periodTransactions} granularity={granularity} />
+        <PopularProceduresCard
+          transactions={periodTransactions}
+          granularity={granularity}
+        />
       </section>
 
       <section className="rounded-xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-950">
         <h2 className="mb-4 text-base font-semibold text-zinc-900 dark:text-zinc-50">
           Import CSV
         </h2>
-        <CsvUpload />
+        <CsvUpload branches={branches} />
       </section>
     </div>
   );

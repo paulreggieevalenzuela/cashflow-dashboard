@@ -13,7 +13,8 @@
     "db:seed": "tsx scripts/seed-db.ts",
     "db:seed-admin": "tsx scripts/seed-admin.ts",
     "db:backfill-links": "tsx scripts/backfill-commission-links.ts",
-    "db:backfill-payments": "tsx scripts/backfill-payments.ts"
+    "db:backfill-payments": "tsx scripts/backfill-payments.ts",
+    "db:recompute-fees": "tsx scripts/recompute-merchant-fees.ts"
   },
   "dependencies": {
     "@neondatabase/serverless": "^0.10.4",

@@ -1,35 +1,32 @@
 "use server";
 
-import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/auth";
-import { computeNetCollection, deriveMonthYear } from "@/lib/cashflow/normalize";
+import { InvoiceInputSchema, type InvoiceInput } from "@/lib/cashflow/invoice-schema";
 import { parseCashflowCsv, type CsvRowError } from "@/lib/cashflow/parse-csv";
+import { listBranches } from "@/lib/db/branches";
 import {
-  CashflowTransactionSchema,
-  ManualTransactionInputSchema,
-  type ManualTransactionInput,
-} from "@/lib/cashflow/schema";
-import {
-  deleteTransaction,
-  generateInvoiceNumber,
-  generateTransactionNumber,
-  generateVisitId,
-  getTransactionById,
-  upsertTransactions,
-} from "@/lib/db/transactions";
+  createInvoice,
+  deleteInvoice,
+  findInvoiceByNumber,
+  getInvoiceById,
+  importTransactionsWithInvoices,
+  listLinesForInvoice,
+  updateInvoice,
+  type Invoice,
+} from "@/lib/db/invoices";
+import type { CashflowTransaction } from "@/lib/cashflow/schema";
+import { deleteTransaction } from "@/lib/db/transactions";
 
 type ActionResult<T> =
   | { ok: true; data: T }
   | { ok: false; message: string; fieldErrors?: Record<string, string> };
 
-function revalidateCashflowPaths(id?: string) {
+function revalidateCashflowPaths() {
   revalidatePath("/cashflow");
-  revalidatePath("/cashflow/transactions");
-  if (id) {
-    revalidatePath(`/cashflow/transactions/${id}`);
-    revalidatePath(`/cashflow/transactions/${id}/edit`);
-  }
+  // "layout" covers the list and every transaction's detail/edit/invoice
+  // page under it, so nothing keeps showing stale totals.
+  revalidatePath("/cashflow/transactions", "layout");
 }
 
 /**
@@ -47,15 +44,15 @@ async function requireSession() {
   return session;
 }
 
-function parseManualInput(
-  input: ManualTransactionInput,
-): { ok: true; data: ManualTransactionInput } | { ok: false; result: ActionResult<null> } {
-  const parsedInput = ManualTransactionInputSchema.safeParse(input);
-  if (!parsedInput.success) {
+function parseInvoiceInput(
+  input: InvoiceInput,
+): { ok: true; data: InvoiceInput } | { ok: false; result: ActionResult<never> } {
+  const parsed = InvoiceInputSchema.safeParse(input);
+  if (!parsed.success) {
     const fieldErrors: Record<string, string> = {};
-    for (const issue of parsedInput.error.issues) {
-      const key = issue.path[0];
-      if (typeof key === "string" && !fieldErrors[key]) {
+    for (const issue of parsed.error.issues) {
+      const key = issue.path.join(".");
+      if (key && !fieldErrors[key]) {
         fieldErrors[key] = issue.message;
       }
     }
@@ -64,155 +61,169 @@ function parseManualInput(
       result: { ok: false, message: "Please fix the highlighted fields.", fieldErrors },
     };
   }
-  return { ok: true, data: parsedInput.data };
+  return { ok: true, data: parsed.data };
 }
 
-export async function addTransactionAction(
-  input: ManualTransactionInput,
-): Promise<ActionResult<null>> {
+type SavedInvoice = { invoiceId: string; firstLineId: string };
+
+export async function createInvoiceAction(
+  input: InvoiceInput,
+): Promise<ActionResult<SavedInvoice>> {
   const session = await requireSession();
   if (!session) {
     return { ok: false, message: "You must be signed in to add a transaction." };
   }
 
-  const parsed = parseManualInput(input);
+  const parsed = parseInvoiceInput(input);
   if (!parsed.ok) {
     return parsed.result;
   }
 
-  const monthYear = deriveMonthYear(parsed.data.date);
-  const netCollection = computeNetCollection(
-    parsed.data.amountPaid,
-    parsed.data.merchantFee,
-    parsed.data.withholdingTax,
-  );
-  const now = new Date();
-  const [transactionNumber, visitId, invoiceNumber] = await Promise.all([
-    generateTransactionNumber(now),
-    generateVisitId(parsed.data.date),
-    generateInvoiceNumber(now),
-  ]);
-
-  const candidate = {
-    id: randomUUID(),
-    ...parsed.data,
-    visitId,
-    invoiceNumber,
-    branchId: parsed.data.branchId || null,
-    createdByUserId: session.user.id,
-    transactionNumber,
-    month: monthYear?.month ?? "",
-    year: monthYear?.year ?? 0,
-    netCollection,
-  };
-
-  const result = CashflowTransactionSchema.safeParse(candidate);
-  if (!result.success) {
-    return {
-      ok: false,
-      message: result.error.issues.map((issue) => issue.message).join(" "),
-    };
+  const result = await createInvoice(parsed.data, { userId: session.user.id });
+  if (!result.ok) {
+    return result;
   }
-
-  await upsertTransactions([result.data]);
   revalidateCashflowPaths();
-
-  return { ok: true, data: null };
+  return { ok: true, data: { invoiceId: result.invoiceId, firstLineId: result.firstLineId } };
 }
 
-/**
- * Edits an existing transaction. The manual form only covers the fields in
- * `ManualTransactionInputSchema` — notably not `vatExclusive`/`vatAmount`,
- * which CSV-imported rows can have — so this starts from the existing row
- * and overlays the edited fields, rather than reconstructing the whole
- * record from the form (which would silently zero out anything the form
- * doesn't collect).
- */
-export async function updateTransactionAction(
-  id: string,
-  input: ManualTransactionInput,
-): Promise<ActionResult<null>> {
+export async function updateInvoiceAction(
+  invoiceId: string,
+  input: InvoiceInput,
+): Promise<ActionResult<SavedInvoice>> {
   const session = await requireSession();
   if (!session) {
     return { ok: false, message: "You must be signed in to edit a transaction." };
   }
 
-  const existing = await getTransactionById(id);
-  if (!existing) {
-    return { ok: false, message: "That transaction no longer exists." };
-  }
-
-  const parsed = parseManualInput(input);
+  const parsed = parseInvoiceInput(input);
   if (!parsed.ok) {
     return parsed.result;
   }
 
-  const monthYear = deriveMonthYear(parsed.data.date);
-  const netCollection = computeNetCollection(
-    parsed.data.amountPaid,
-    parsed.data.merchantFee,
-    parsed.data.withholdingTax,
-  );
-
-  const candidate = {
-    ...existing,
-    ...parsed.data,
-    // The manual form's `branchId` defaults to "" (unset) rather than
-    // omitting the field, so an explicit fallback to the existing value is
-    // needed here — otherwise editing any other field would silently clear
-    // the branch whenever the form didn't include a branch selector.
-    branchId: parsed.data.branchId || existing.branchId,
-    // Visit ID is server-generated once, at creation, and never collected
-    // by the edit form — always keep whatever the row already has.
-    visitId: existing.visitId,
-    id,
-    month: monthYear?.month ?? existing.month,
-    year: monthYear?.year ?? existing.year,
-    netCollection,
-  };
-
-  const result = CashflowTransactionSchema.safeParse(candidate);
-  if (!result.success) {
-    return {
-      ok: false,
-      message: result.error.issues.map((issue) => issue.message).join(" "),
-    };
+  const result = await updateInvoice(invoiceId, parsed.data, { userId: session.user.id });
+  if (!result.ok) {
+    return result;
   }
-
-  await upsertTransactions([result.data]);
-  revalidateCashflowPaths(encodeURIComponent(id));
-
-  return { ok: true, data: null };
+  revalidateCashflowPaths();
+  return { ok: true, data: { invoiceId: result.invoiceId, firstLineId: result.firstLineId } };
 }
 
+/**
+ * Loads one visit's header and lines for the edit pop-up opened from the
+ * transactions table (which only holds the rows on the current page, so
+ * the other lines of a multi-procedure visit have to be fetched).
+ */
+export async function getInvoiceForEditAction(
+  invoiceId: string,
+): Promise<ActionResult<{ invoice: Invoice; lines: CashflowTransaction[] }>> {
+  const session = await requireSession();
+  if (!session) {
+    return { ok: false, message: "You must be signed in to edit a transaction." };
+  }
+  const invoice = await getInvoiceById(invoiceId);
+  if (!invoice) {
+    return { ok: false, message: "That transaction no longer exists." };
+  }
+  const lines = await listLinesForInvoice(invoiceId);
+  return { ok: true, data: { invoice, lines } };
+}
+
+/**
+ * Lets the form warn about a reused booklet number as soon as staff tab out
+ * of the field, instead of only when they press Save. Returns the problem
+ * text, or null when the number is free (or blank).
+ */
+export async function checkInvoiceNumberAction(
+  invoiceNumber: string,
+  branchId: string,
+  excludeInvoiceId?: string,
+): Promise<{ ok: true; problem: string | null } | { ok: false; message: string }> {
+  const session = await requireSession();
+  if (!session) {
+    return { ok: false, message: "You must be signed in." };
+  }
+  const clash = await findInvoiceByNumber(invoiceNumber, branchId || null, excludeInvoiceId);
+  if (!clash) {
+    return { ok: true, problem: null };
+  }
+  const who = clash.patientName ? ` for ${clash.patientName}` : "";
+  return {
+    ok: true,
+    problem: `Invoice number ${invoiceNumber.trim()} is already used${who} on ${clash.visitDate}.`,
+  };
+}
+
+export type ImportCsvData = {
+  /** Procedure lines imported. */
+  importedCount: number;
+  invoiceCount: number;
+  paymentCount: number;
+  errors: CsvRowError[];
+  /** Branch the rows were filed under, if one was chosen or matched. */
+  branchName: string | null;
+  /** Set when "auto-detect" found nothing, so the screen can say so. */
+  branchNote: string | null;
+};
+
+/**
+ * `branchId` empty means "work it out from the report title" (e.g. a file
+ * headed "MARIKINA DAY END REPORT" goes to the branch named Marikina).
+ */
 export async function importCsvAction(
   csvText: string,
   branchId?: string,
-): Promise<ActionResult<{ importedCount: number; errors: CsvRowError[] }>> {
+): Promise<ActionResult<ImportCsvData>> {
   const session = await requireSession();
   if (!session) {
     return { ok: false, message: "You must be signed in to import transactions." };
   }
 
-  const { transactions, errors } = parseCashflowCsv(csvText);
+  const { transactions, errors, branchName: detectedName } = parseCashflowCsv(csvText);
 
+  let resolvedBranchId: string | null = branchId || null;
+  let branchName: string | null = null;
+  let branchNote: string | null = null;
+  if (transactions.length > 0 || resolvedBranchId) {
+    const branches = await listBranches();
+    if (resolvedBranchId) {
+      branchName = branches.find((branch) => branch.id === resolvedBranchId)?.name ?? null;
+    } else if (detectedName) {
+      const wanted = detectedName.trim().toLowerCase();
+      const match =
+        branches.find((branch) => branch.name.trim().toLowerCase() === wanted) ??
+        branches.find((branch) => branch.name.toLowerCase().includes(wanted)) ??
+        branches.find((branch) => wanted.includes(branch.name.trim().toLowerCase()));
+      if (match) {
+        resolvedBranchId = match.id;
+        branchName = match.name;
+      } else {
+        branchNote = `The file is titled "${detectedName}", but no branch with that name exists, so the rows were saved without a branch.`;
+      }
+    } else {
+      branchNote = "The file has no branch in its title, so the rows were saved without a branch.";
+    }
+  }
+
+  let summary = { lineCount: 0, invoiceCount: 0, paymentCount: 0 };
   if (transactions.length > 0) {
-    // The CSV itself has no branch/importer columns, so every row in this
-    // import is stamped with the branch picked in the upload form (if any)
-    // and the signed-in user, after parsing rather than as part of it —
-    // keeps parseCashflowCsv focused on the clinic's actual export format.
-    const stamped = transactions.map((transaction) => ({
-      ...transaction,
-      branchId: branchId || null,
-      createdByUserId: session.user.id,
-    }));
-    await upsertTransactions(stamped);
+    summary = await importTransactionsWithInvoices(transactions, {
+      branchId: resolvedBranchId,
+      userId: session.user.id,
+    });
     revalidateCashflowPaths();
   }
 
   return {
     ok: true,
-    data: { importedCount: transactions.length, errors },
+    data: {
+      importedCount: summary.lineCount,
+      invoiceCount: summary.invoiceCount,
+      paymentCount: summary.paymentCount,
+      errors,
+      branchName,
+      branchNote,
+    },
   };
 }
 
@@ -226,6 +237,22 @@ export async function removeTransactionAction(id: string): Promise<ActionResult<
   }
 
   await deleteTransaction(id);
+  revalidateCashflowPaths();
+  return { ok: true, data: null };
+}
+
+/** Removes a whole visit — all its procedure lines, the invoice and its
+ * payments. Admin-only, like removing a single transaction. */
+export async function removeInvoiceAction(invoiceId: string): Promise<ActionResult<null>> {
+  const session = await requireSession();
+  if (!session) {
+    return { ok: false, message: "You must be signed in to remove a transaction." };
+  }
+  if (session.user.role !== "admin") {
+    return { ok: false, message: "Only admins can remove transactions." };
+  }
+
+  await deleteInvoice(invoiceId);
   revalidateCashflowPaths();
   return { ok: true, data: null };
 }

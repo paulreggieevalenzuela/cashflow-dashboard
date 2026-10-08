@@ -10,7 +10,11 @@ import {
 } from "@/app/cashflow/users/actions";
 import { FormField } from "@/components/auth/form-field";
 import { PasswordField } from "@/components/auth/password-field";
-import { USER_ROLES, USER_ROLE_LABELS, type UserRole } from "@/lib/cashflow/user-schema";
+import {
+  USER_ROLES,
+  USER_ROLE_LABELS,
+  type UserRole,
+} from "@/lib/cashflow/user-schema";
 import type { Branch } from "@/lib/db/branches";
 import type { PublicUser } from "@/lib/db/users";
 
@@ -103,7 +107,11 @@ export function UsersManager({
   }
 
   async function handleDelete(user: PublicUser) {
-    if (!window.confirm(`Remove ${user.name} (${user.email})? They will no longer be able to sign in.`)) {
+    if (
+      !window.confirm(
+        `Remove ${user.name} (${user.email})? They will no longer be able to sign in.`,
+      )
+    ) {
       return;
     }
     setRowBusyId(user.id);
@@ -168,7 +176,9 @@ export function UsersManager({
               </label>
               <select
                 value={form.role}
-                onChange={(event) => updateField("role", event.target.value as UserRole)}
+                onChange={(event) =>
+                  updateField("role", event.target.value as UserRole)
+                }
                 className="select-chevron w-full rounded-lg border border-zinc-300 bg-white px-3.5 py-2.5 text-sm text-zinc-900 shadow-sm outline-none transition-colors focus:border-amber-500 focus:ring-2 focus:ring-amber-100 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50 dark:focus:ring-amber-900/40"
               >
                 {USER_ROLES.map((role) => (
@@ -187,7 +197,9 @@ export function UsersManager({
               </label>
               <select
                 value={form.branchId}
-                onChange={(event) => updateField("branchId", event.target.value)}
+                onChange={(event) =>
+                  updateField("branchId", event.target.value)
+                }
                 className="select-chevron w-full rounded-lg border border-zinc-300 bg-white px-3.5 py-2.5 text-sm text-zinc-900 shadow-sm outline-none transition-colors focus:border-amber-500 focus:ring-2 focus:ring-amber-100 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50 dark:focus:ring-amber-900/40"
               >
                 <option value="">No branch</option>
@@ -217,7 +229,9 @@ export function UsersManager({
               <th className="px-4 py-3 font-medium">Name</th>
               <th className="px-4 py-3 font-medium">Email</th>
               <th className="px-4 py-3 font-medium">Role</th>
-              {branches.length > 0 && <th className="px-4 py-3 font-medium">Branch</th>}
+              {branches.length > 0 && (
+                <th className="px-4 py-3 font-medium">Branch</th>
+              )}
               <th className="px-4 py-3 font-medium">Added</th>
               <th className="px-4 py-3" />
             </tr>
@@ -232,7 +246,9 @@ export function UsersManager({
                   <td className="px-4 py-3 font-medium text-zinc-900 dark:text-zinc-50">
                     {user.name}
                     {isSelf && (
-                      <span className="ml-2 text-xs font-normal text-zinc-400">(you)</span>
+                      <span className="ml-2 text-xs font-normal text-zinc-400">
+                        (you)
+                      </span>
                     )}
                   </td>
                   <td className="px-4 py-3">{user.email}</td>
@@ -241,7 +257,10 @@ export function UsersManager({
                       value={user.role}
                       disabled={isBusy || isSelf}
                       onChange={(event) =>
-                        handleRoleChange(user.id, event.target.value as UserRole)
+                        handleRoleChange(
+                          user.id,
+                          event.target.value as UserRole,
+                        )
                       }
                       className="select-chevron-sm rounded-md border border-zinc-300 bg-white px-2 py-1 text-xs text-zinc-900 outline-none disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
                     >
@@ -257,7 +276,9 @@ export function UsersManager({
                       <select
                         value={user.branchId ?? ""}
                         disabled={isBusy}
-                        onChange={(event) => handleBranchChange(user.id, event.target.value)}
+                        onChange={(event) =>
+                          handleBranchChange(user.id, event.target.value)
+                        }
                         className="select-chevron-sm rounded-md border border-zinc-300 bg-white px-2 py-1 text-xs text-zinc-900 outline-none disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
                       >
                         <option value="">No branch</option>

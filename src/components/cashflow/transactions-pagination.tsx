@@ -1,7 +1,10 @@
 "use client";
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { PAGE_SIZE_OPTIONS, type PageSizeOption } from "@/lib/cashflow/pagination";
+import {
+  PAGE_SIZE_OPTIONS,
+  type PageSizeOption,
+} from "@/lib/cashflow/pagination";
 
 const NAV_BUTTON_CLASSES =
   "inline-flex items-center justify-center rounded-md border border-zinc-300 px-2.5 py-1.5 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-40 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-900";
@@ -12,7 +15,11 @@ const NAV_BUTTON_CLASSES =
  * page number would overflow. Always includes the first and last page and a
  * `siblingCount`-wide band around the current page.
  */
-function getPageWindow(current: number, total: number, siblingCount = 1): (number | "ellipsis")[] {
+function getPageWindow(
+  current: number,
+  total: number,
+  siblingCount = 1,
+): (number | "ellipsis")[] {
   const totalSlots = siblingCount * 2 + 5;
   if (total <= totalSlots) {
     return Array.from({ length: total }, (_, i) => i + 1);
@@ -25,7 +32,11 @@ function getPageWindow(current: number, total: number, siblingCount = 1): (numbe
 
   const pages: (number | "ellipsis")[] = [1];
   if (showLeftEllipsis) pages.push("ellipsis");
-  for (let p = Math.max(leftSibling, 2); p <= Math.min(rightSibling, total - 1); p++) {
+  for (
+    let p = Math.max(leftSibling, 2);
+    p <= Math.min(rightSibling, total - 1);
+    p++
+  ) {
     pages.push(p);
   }
   if (showRightEllipsis) pages.push("ellipsis");
@@ -70,15 +81,23 @@ export function TransactionsPagination({
     <div className="flex flex-col gap-4 border-t border-zinc-200 pt-4 dark:border-zinc-800 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex items-center gap-3 text-sm text-zinc-500 dark:text-zinc-400">
         <span>
-          Showing <span className="font-medium text-zinc-700 dark:text-zinc-300">{start}–{end}</span>{" "}
-          of <span className="font-medium text-zinc-700 dark:text-zinc-300">{total}</span>
+          Showing{" "}
+          <span className="font-medium text-zinc-700 dark:text-zinc-300">
+            {start}–{end}
+          </span>{" "}
+          of{" "}
+          <span className="font-medium text-zinc-700 dark:text-zinc-300">
+            {total}
+          </span>
         </span>
 
         <label className="flex items-center gap-2">
           <span className="hidden sm:inline">Rows per page</span>
           <select
             value={pageSize}
-            onChange={(event) => navigate(1, Number(event.target.value) as PageSizeOption)}
+            onChange={(event) =>
+              navigate(1, Number(event.target.value) as PageSizeOption)
+            }
             className="select-chevron-sm rounded-md border border-zinc-300 bg-white px-2 py-1.5 text-sm text-zinc-900 shadow-sm outline-none transition-colors focus:border-amber-500 focus:ring-2 focus:ring-amber-100 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50 dark:focus:ring-amber-900/40"
             aria-label="Rows per page"
           >
@@ -100,7 +119,13 @@ export function TransactionsPagination({
           title="First page"
           className={NAV_BUTTON_CLASSES}
         >
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4" aria-hidden="true">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 20 20"
+            fill="currentColor"
+            className="h-4 w-4"
+            aria-hidden="true"
+          >
             <path
               fillRule="evenodd"
               d="M11.03 4.72a.75.75 0 0 1 0 1.06L6.81 10l4.22 4.22a.75.75 0 1 1-1.06 1.06l-4.75-4.75a.75.75 0 0 1 0-1.06l4.75-4.75a.75.75 0 0 1 1.06 0Z"
@@ -169,7 +194,13 @@ export function TransactionsPagination({
           title="Last page"
           className={NAV_BUTTON_CLASSES}
         >
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4" aria-hidden="true">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 20 20"
+            fill="currentColor"
+            className="h-4 w-4"
+            aria-hidden="true"
+          >
             <path
               fillRule="evenodd"
               d="M8.97 4.72a.75.75 0 0 1 1.06 0l4.75 4.75a.75.75 0 0 1 0 1.06l-4.75 4.75a.75.75 0 1 1-1.06-1.06L13.19 10 8.97 5.78a.75.75 0 0 1 0-1.06Z"

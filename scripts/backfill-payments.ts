@@ -3,53 +3,73 @@ import { config } from "dotenv";
 config({ path: ".env.local" });
 
 /**
- * One-time backfill for the "payments" table, added alongside the
- * staggered-payments feature. Before this table existed, `amountPaid` on a
- * transaction WAS the collected amount; it's now reinterpreted as the
- * total amount due, with `payments` rows as the source of truth for what's
- * actually been collected (see the architecture note in schema.ts, on the
- * `payments` table's doc comment). Every transaction saved before this
- * migration has zero payment rows, which would make it read as "fully
- * unpaid" everywhere balance-due is shown — this backfills one payment row
- * per such transaction, equal to its existing `amountPaid`, so historical
- * transactions still read as fully paid.
+ * Backfill for visits that have NO payment record at all.
  *
- * Safe to run more than once: it only inserts for transactions that don't
- * already have at least one payment row, so a manually-recorded partial
- * payment (or a previous backfill run) is never touched or duplicated.
- * Transactions with `amountPaid` of exactly 0 are skipped — there's
- * nothing to record.
+ * Payments belong to an invoice, and "collected" is the sum of its payment
+ * rows. Visits entered through the app before the Add Transaction form
+ * started recording its first payment (and some old imports) have none, so
+ * they read as "not paid" everywhere balance due is shown. This records one
+ * payment per such invoice, equal to its total due, dated on the visit — so
+ * historical visits read as fully paid.
+ *
+ * Only run it if those older visits really were paid in full. Visits that
+ * already have any payment (typed in, imported, or from an earlier run) are
+ * never touched, so it is safe to run more than once. Invoices with a total
+ * of exactly 0 are skipped — nothing to record.
  */
 async function main() {
   const { listTransactions } = await import("../src/lib/db/transactions");
-  const { bulkInsertPayments, listTransactionIdsWithPayments } = await import(
-    "../src/lib/db/payments"
-  );
+  const { bulkInsertPayments, listInvoiceIdsWithPayments } =
+    await import("../src/lib/db/payments");
+  const { receivedForBill, round2 } =
+    await import("../src/lib/cashflow/pricing");
 
   const [transactions, alreadyCovered] = await Promise.all([
     listTransactions(),
-    listTransactionIdsWithPayments(),
+    listInvoiceIdsWithPayments(),
   ]);
 
-  const toBackfill = transactions.filter(
-    (transaction) => transaction.amountPaid > 0 && !alreadyCovered.has(transaction.id),
+  const byInvoice = new Map<
+    string,
+    { amount: number; paymentType: string; date: string }
+  >();
+  for (const transaction of transactions) {
+    if (!transaction.invoiceId || alreadyCovered.has(transaction.invoiceId)) {
+      continue;
+    }
+    const entry = byInvoice.get(transaction.invoiceId) ?? {
+      amount: 0,
+      paymentType: "",
+      date: transaction.date,
+    };
+    entry.amount = round2(entry.amount + transaction.amountPaid);
+    entry.paymentType = entry.paymentType || transaction.paymentType || "";
+    entry.date = transaction.date < entry.date ? transaction.date : entry.date;
+    byInvoice.set(transaction.invoiceId, entry);
+  }
+
+  const toBackfill = [...byInvoice.entries()].filter(
+    ([, entry]) => entry.amount > 0,
   );
 
   if (toBackfill.length === 0) {
-    console.log("Nothing to backfill — every transaction already has a payment record.");
+    console.log(
+      "Nothing to backfill — every visit already has a payment record.",
+    );
     return;
   }
 
   await bulkInsertPayments(
-    toBackfill.map((transaction) => ({
-      transactionId: transaction.id,
-      amount: transaction.amountPaid,
-      paymentType: transaction.paymentType || "",
-      // The transaction's own recorded date, not "now" — this is
-      // historical data, so the payment should read as having happened
-      // when the visit did.
-      paidAt: new Date(`${transaction.date}T00:00:00Z`),
-      notes: "Backfilled from the transaction's original amount paid.",
+    toBackfill.map(([invoiceId, entry]) => ({
+      invoiceId,
+      // A card payment carries its merchant fee on top of the bill, so the
+      // visit still reads as fully paid.
+      amount: receivedForBill(entry.amount, entry.paymentType),
+      paymentType: entry.paymentType,
+      // The visit's own date, not "now" — this is historical data, so the
+      // payment should read as having happened when the visit did.
+      paidAt: new Date(`${entry.date}T00:00:00Z`),
+      notes: "Backfilled from the visit's total amount due.",
     })),
   );
 

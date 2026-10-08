@@ -4,6 +4,7 @@ import { useState } from "react";
 import { ExpenseForm } from "@/components/cashflow/expense-form";
 import { Modal } from "@/components/ui/modal";
 import type { Branch } from "@/lib/db/branches";
+import type { Supplier } from "@/lib/db/suppliers";
 
 /**
  * The header's "Add Expenses" CTA (see cashflow-nav.tsx) — same
@@ -12,7 +13,13 @@ import type { Branch } from "@/lib/db/branches";
  * every page, not just a dedicated expenses page (which doesn't exist
  * yet — see docs/PROPOSAL_GAP_ANALYSIS.md, "Expense Management").
  */
-export function AddExpenseModal({ branches }: { branches: Branch[] }) {
+export function AddExpenseModal({
+  branches,
+  suppliers,
+}: {
+  branches: Branch[];
+  suppliers: Supplier[];
+}) {
   const [open, setOpen] = useState(false);
 
   return (
@@ -41,7 +48,11 @@ export function AddExpenseModal({ branches }: { branches: Branch[] }) {
         title="Add expense"
         description="Record a clinic expense. It will be reflected in reporting once saved."
       >
-        <ExpenseForm branches={branches} onSuccess={() => setOpen(false)} />
+        <ExpenseForm
+          branches={branches}
+          suppliers={suppliers}
+          onSuccess={() => setOpen(false)}
+        />
       </Modal>
     </>
   );

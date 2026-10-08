@@ -4,19 +4,26 @@ import { useRouter } from "next/navigation";
 import { useRef, useState, type ChangeEvent } from "react";
 import { importCsvAction } from "@/app/cashflow/actions";
 import type { CsvRowError } from "@/lib/cashflow/parse-csv";
+import type { Branch } from "@/lib/db/branches";
 
 type ImportSummary = {
   fileName: string;
   importedCount: number;
+  invoiceCount: number;
+  paymentCount: number;
+  branchName: string | null;
+  branchNote: string | null;
   errors: CsvRowError[];
 };
 
-export function CsvUpload() {
+export function CsvUpload({ branches = [] }: { branches?: Branch[] }) {
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const [isParsing, setIsParsing] = useState(false);
   const [summary, setSummary] = useState<ImportSummary | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
+  // "" = work the branch out from the report's own title.
+  const [branchId, setBranchId] = useState("");
 
   async function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -30,7 +37,7 @@ export function CsvUpload() {
 
     try {
       const text = await file.text();
-      const result = await importCsvAction(text);
+      const result = await importCsvAction(text, branchId);
 
       if (!result.ok) {
         setFormError(result.message);
@@ -40,6 +47,10 @@ export function CsvUpload() {
       setSummary({
         fileName: file.name,
         importedCount: result.data.importedCount,
+        invoiceCount: result.data.invoiceCount,
+        paymentCount: result.data.paymentCount,
+        branchName: result.data.branchName,
+        branchNote: result.data.branchNote,
         errors: result.data.errors,
       });
 
@@ -47,7 +58,9 @@ export function CsvUpload() {
         router.refresh();
       }
     } catch {
-      setFormError("Something went wrong while importing this file. Please try again.");
+      setFormError(
+        "Something went wrong while importing this file. Please try again.",
+      );
     } finally {
       setIsParsing(false);
       if (inputRef.current) {
@@ -58,6 +71,31 @@ export function CsvUpload() {
 
   return (
     <div className="space-y-4">
+      {branches.length > 0 && (
+        <div className="flex flex-col gap-1.5 sm:w-1/2">
+          <label
+            htmlFor="cashflow-csv-branch"
+            className="text-sm font-medium text-zinc-700 dark:text-zinc-300"
+          >
+            Branch for this file
+          </label>
+          <select
+            id="cashflow-csv-branch"
+            value={branchId}
+            disabled={isParsing}
+            onChange={(event) => setBranchId(event.target.value)}
+            className="select-chevron w-full rounded-lg border border-zinc-300 bg-white px-3.5 py-2.5 text-sm text-zinc-900 shadow-sm outline-none transition-colors focus:border-amber-500 focus:ring-2 focus:ring-amber-100 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50 dark:focus:ring-amber-900/40"
+          >
+            <option value="">Auto-detect from the file title</option>
+            {branches.map((branch) => (
+              <option key={branch.id} value={branch.id}>
+                {branch.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+
       <label
         htmlFor="cashflow-csv-input"
         className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-zinc-300 bg-zinc-50 px-6 py-10 text-center transition-colors hover:border-amber-400 hover:bg-amber-50/50 dark:border-zinc-700 dark:bg-zinc-900 dark:hover:border-amber-700"
@@ -77,7 +115,9 @@ export function CsvUpload() {
           />
         </svg>
         <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-          {isParsing ? "Importing..." : "Click to upload a cashflow CSV export"}
+          {isParsing
+            ? "Importing..."
+            : "Click to upload a Day End report or cashflow CSV"}
         </span>
         <span className="text-xs text-zinc-500 dark:text-zinc-400">
           Expects the clinic export format (Date, Visit ID, Patient Name, ...)
@@ -104,14 +144,27 @@ export function CsvUpload() {
 
       {summary && (
         <div className="rounded-lg border border-zinc-200 bg-white p-4 text-sm dark:border-zinc-800 dark:bg-zinc-950">
-          <p className="font-medium text-zinc-900 dark:text-zinc-50">{summary.fileName}</p>
-          <p className="mt-1 text-amber-700 dark:text-amber-400">
-            {summary.importedCount} transaction{summary.importedCount === 1 ? "" : "s"} imported.
+          <p className="font-medium text-zinc-900 dark:text-zinc-50">
+            {summary.fileName}
           </p>
+          <p className="mt-1 text-amber-700 dark:text-amber-400">
+            {summary.importedCount} procedure line
+            {summary.importedCount === 1 ? "" : "s"} imported
+            {summary.invoiceCount > 0
+              ? ` across ${summary.invoiceCount} visit${summary.invoiceCount === 1 ? "" : "s"}, with ${summary.paymentCount} payment${summary.paymentCount === 1 ? "" : "s"} recorded`
+              : ""}
+            {summary.branchName ? ` for ${summary.branchName}` : ""}.
+          </p>
+          {summary.branchNote && (
+            <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+              {summary.branchNote}
+            </p>
+          )}
           {summary.errors.length > 0 && (
             <div className="mt-3">
               <p className="font-medium text-red-700 dark:text-red-400">
-                {summary.errors.length} row{summary.errors.length === 1 ? "" : "s"} skipped:
+                {summary.errors.length} row
+                {summary.errors.length === 1 ? "" : "s"} skipped:
               </p>
               <ul className="mt-1 max-h-40 space-y-1 overflow-y-auto text-xs text-red-600 dark:text-red-400">
                 {summary.errors.map((error, index) => (

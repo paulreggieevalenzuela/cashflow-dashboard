@@ -3,8 +3,8 @@ import { auth } from "@/auth";
 import { TransactionsList } from "@/components/cashflow/transactions-list";
 import { listBranches } from "@/lib/db/branches";
 import { listDentistUsers } from "@/lib/db/dentists";
-import { getCollectedTotals } from "@/lib/db/payments";
-import { listProcedures } from "@/lib/db/procedures";
+import { getInvoiceSummaries } from "@/lib/db/invoices";
+import { listProcedureOptions } from "@/lib/db/procedures";
 import { listTransactionsPage } from "@/lib/db/transactions";
 import { buildTransactionsSearch, parseTransactionsQuery } from "@/lib/cashflow/transactions-query";
 
@@ -44,10 +44,11 @@ export default async function TransactionsPage({
     }),
     listDentistUsers(),
     listBranches(),
-    listProcedures(),
+    listProcedureOptions(),
   ]);
-  const collectedTotalsMap = await getCollectedTotals(rows.map((row) => row.id));
-  const collectedTotals = Object.fromEntries(collectedTotalsMap);
+  const invoiceSummaries = await getInvoiceSummaries(
+    rows.flatMap((row) => (row.invoiceId ? [row.invoiceId] : [])),
+  );
 
   const totalPages = Math.max(1, Math.ceil(total / query.pageSize));
 
@@ -71,8 +72,8 @@ export default async function TransactionsPage({
       totalPages={totalPages}
       dentistOptions={dentists.map((dentist) => dentist.name)}
       branches={branches}
-      procedures={procedures.map((procedure) => procedure.name)}
-      collectedTotals={collectedTotals}
+      procedures={procedures}
+      invoiceSummaries={invoiceSummaries}
     />
   );
 }

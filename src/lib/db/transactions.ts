@@ -5,13 +5,18 @@ import { findDentistUserByName } from "@/lib/db/dentists";
 import { getOrCreateProcedureByName } from "@/lib/db/procedures";
 import {
   dentistCommissionRates,
+  invoices,
   transactions,
   users,
   type NewTransactionRow,
   type TransactionRow,
 } from "@/lib/db/schema";
+import { computeCommission, round2 } from "@/lib/cashflow/pricing";
 import type { CashflowTransaction } from "@/lib/cashflow/schema";
-import type { TransactionSortKey, TransactionsQueryParams } from "@/lib/cashflow/transactions-query";
+import type {
+  TransactionSortKey,
+  TransactionsQueryParams,
+} from "@/lib/cashflow/transactions-query";
 
 /**
  * `numeric` columns round-trip as strings through the Postgres driver (see
@@ -19,7 +24,7 @@ import type { TransactionSortKey, TransactionsQueryParams } from "@/lib/cashflow
  * `CashflowTransactionSchema`. These two helpers are the only place that
  * conversion happens.
  */
-function toAppTransaction(row: TransactionRow): CashflowTransaction {
+export function toAppTransaction(row: TransactionRow): CashflowTransaction {
   return {
     ...row,
     amountPaid: Number(row.amountPaid),
@@ -28,9 +33,22 @@ function toAppTransaction(row: TransactionRow): CashflowTransaction {
     merchantFee: Number(row.merchantFee),
     withholdingTax: Number(row.withholdingTax),
     netCollection: Number(row.netCollection),
-    commissionAmount: row.commissionAmount === null ? undefined : Number(row.commissionAmount),
+    commissionAmount:
+      row.commissionAmount === null ? undefined : Number(row.commissionAmount),
+    listPrice: Number(row.listPrice),
+    discountValue: Number(row.discountValue),
+    discountAmount: Number(row.discountAmount),
   };
 }
+
+/**
+ * One visit = one transaction. A visit with several procedures is stored as
+ * several rows (one per procedure) that share an invoice; this expression
+ * is the same for all of them, so grouping or counting by it treats the
+ * visit as a single transaction. Old rows with no invoice count as one each.
+ */
+const visitKey = sql<string>`coalesce(${transactions.invoiceId}::text, ${transactions.id}::text)`;
+const visitCount = sql<number>`count(distinct ${visitKey})::int`;
 
 function toDbRow(transaction: CashflowTransaction): NewTransactionRow {
   return {
@@ -42,11 +60,17 @@ function toDbRow(transaction: CashflowTransaction): NewTransactionRow {
     withholdingTax: transaction.withholdingTax.toString(),
     netCollection: transaction.netCollection.toString(),
     commissionAmount: transaction.commissionAmount?.toString(),
+    listPrice: transaction.listPrice?.toString(),
+    discountValue: transaction.discountValue?.toString(),
+    discountAmount: transaction.discountAmount?.toString(),
   };
 }
 
 export async function listTransactions(): Promise<CashflowTransaction[]> {
-  const rows = await db.select().from(transactions).orderBy(asc(transactions.date));
+  const rows = await db
+    .select()
+    .from(transactions)
+    .orderBy(asc(transactions.date));
   return rows.map(toAppTransaction);
 }
 
@@ -68,17 +92,6 @@ export type TransactionsPage = {
  * API) — there's only one `transactions` table, so pagination is agnostic
  * to the source.
  */
-// Columns the transactions table can be sorted by — `date`/`createdAt` stays
-// the tiebreaker underneath whichever one is active, so LIMIT/OFFSET
-// pagination is always fully deterministic regardless of sort column.
-const SORT_COLUMNS = {
-  date: transactions.date,
-  patientName: transactions.patientName,
-  dentist: transactions.dentist,
-  amountPaid: transactions.amountPaid,
-  netCollection: transactions.netCollection,
-} as const satisfies Record<TransactionSortKey, unknown>;
-
 export type TransactionsPageQuery = Pick<
   TransactionsQueryParams,
   "q" | "type" | "payment" | "dentist" | "from" | "to" | "sort" | "dir"
@@ -123,33 +136,102 @@ export async function listTransactionsPage({
   const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
   const orderFn = dir === "desc" ? desc : asc;
-  const sortColumn = SORT_COLUMNS[sort] ?? transactions.date;
+
+  // The table lists VISITS, not procedure rows: group the matching rows by
+  // visit, sort/paginate those groups, then load every procedure row of the
+  // visits on this page so each visit shows as ONE row.
+  const groupSort = {
+    date: sql`max(${transactions.date})`,
+    patientName: sql`max(${transactions.patientName})`,
+    dentist: sql`max(${transactions.dentist})`,
+    amountPaid: sql`sum(${transactions.amountPaid})`,
+    netCollection: sql`sum(${transactions.netCollection})`,
+  } as const satisfies Record<TransactionSortKey, unknown>;
+  const latestDate = sql`max(${transactions.date})`;
+  const latestCreated = sql`max(${transactions.createdAt})`;
+  const sortExpr = groupSort[sort] ?? groupSort.date;
   const orderBy =
     sort === "date"
-      ? [orderFn(sortColumn), orderFn(transactions.createdAt)]
-      : [orderFn(sortColumn), asc(transactions.date), asc(transactions.createdAt)];
+      ? [orderFn(latestDate), orderFn(latestCreated), asc(visitKey)]
+      : [orderFn(sortExpr), asc(latestDate), asc(latestCreated), asc(visitKey)];
 
-  const [rows, totalResult] = await Promise.all([
+  const [groups, totalResult] = await Promise.all([
     db
-      .select()
+      .select({ key: visitKey })
       .from(transactions)
       .where(whereClause)
+      .groupBy(visitKey)
       .orderBy(...orderBy)
       .limit(limit)
       .offset(offset),
-    db.select({ count: sql<number>`count(*)::int` }).from(transactions).where(whereClause),
+    db.select({ count: visitCount }).from(transactions).where(whereClause),
   ]);
 
+  const keys = groups.map((group) => group.key);
+  if (keys.length === 0) {
+    return { rows: [], total: totalResult[0]?.count ?? 0 };
+  }
+
+  const lineRows = await db
+    .select()
+    .from(transactions)
+    .where(
+      sql`${visitKey} in (${sql.join(
+        keys.map((key) => sql`${key}`),
+        sql`, `,
+      )})`,
+    )
+    .orderBy(asc(transactions.lineNumber), asc(transactions.createdAt));
+
+  const byVisit = new Map<string, CashflowTransaction[]>();
+  for (const row of lineRows) {
+    const key = row.invoiceId ?? row.id;
+    const list = byVisit.get(key) ?? [];
+    list.push(toAppTransaction(row));
+    byVisit.set(key, list);
+  }
+
+  const rows = keys.flatMap((key) => {
+    const lines = byVisit.get(key);
+    return lines && lines.length > 0 ? [combineVisitLines(lines)] : [];
+  });
+
+  return { rows, total: totalResult[0]?.count ?? 0 };
+}
+
+/**
+ * Collapses a visit's procedure rows into the single row the transactions
+ * table shows: the first row's identity, the procedures joined together and
+ * the money added up. Edit / remove / detail all work on the whole visit
+ * (through its invoice), so nothing else needs the separate rows.
+ */
+function combineVisitLines(lines: CashflowTransaction[]): CashflowTransaction {
+  const [first, ...rest] = lines;
+  if (rest.length === 0) {
+    return first;
+  }
+  const sum = (pick: (line: CashflowTransaction) => number) =>
+    round2(lines.reduce((total, line) => total + pick(line), 0));
   return {
-    rows: rows.map(toAppTransaction),
-    total: totalResult[0]?.count ?? 0,
+    ...first,
+    procedure: lines.map((line) => line.procedure).join(" + "),
+    amountPaid: sum((line) => line.amountPaid),
+    vatExclusive: sum((line) => line.vatExclusive),
+    vatAmount: sum((line) => line.vatAmount),
+    merchantFee: sum((line) => line.merchantFee),
+    withholdingTax: sum((line) => line.withholdingTax),
+    netCollection: sum((line) => line.netCollection),
   };
 }
 
 export async function getTransactionById(
   id: string,
 ): Promise<CashflowTransaction | undefined> {
-  const [row] = await db.select().from(transactions).where(eq(transactions.id, id)).limit(1);
+  const [row] = await db
+    .select()
+    .from(transactions)
+    .where(eq(transactions.id, id))
+    .limit(1);
   return row ? toAppTransaction(row) : undefined;
 }
 
@@ -165,15 +247,23 @@ export async function getTransactionById(
  */
 async function resolveCommissionLinks(rows: CashflowTransaction[]) {
   const distinctDentistNames = [
-    ...new Set(rows.map((row) => row.dentist?.trim()).filter((name): name is string => Boolean(name))),
+    ...new Set(
+      rows
+        .map((row) => row.dentist?.trim())
+        .filter((name): name is string => Boolean(name)),
+    ),
   ];
   const distinctProcedureNames = [
     ...new Set(rows.map((row) => row.procedure.trim()).filter(Boolean)),
   ];
 
   const [dentistMatches, procedureMatches, rateMap] = await Promise.all([
-    Promise.all(distinctDentistNames.map((name) => findDentistUserByName(name))),
-    Promise.all(distinctProcedureNames.map((name) => getOrCreateProcedureByName(name))),
+    Promise.all(
+      distinctDentistNames.map((name) => findDentistUserByName(name)),
+    ),
+    Promise.all(
+      distinctProcedureNames.map((name) => getOrCreateProcedureByName(name)),
+    ),
     getCommissionRateMap(),
   ]);
 
@@ -194,16 +284,22 @@ async function resolveCommissionLinks(rows: CashflowTransaction[]) {
   });
 
   return rows.map((row) => {
-    const dentistUserId = dentistIdByName.get((row.dentist ?? "").trim().toLowerCase()) ?? null;
-    const procedureId = procedureIdByName.get(row.procedure.trim().toLowerCase()) ?? null;
+    const dentistUserId =
+      dentistIdByName.get((row.dentist ?? "").trim().toLowerCase()) ?? null;
+    const procedureId =
+      procedureIdByName.get(row.procedure.trim().toLowerCase()) ?? null;
 
-    let commissionAmount = 0;
-    if (dentistUserId && procedureId) {
-      const rate = rateMap.get(`${dentistUserId}:${procedureId}`);
-      if (rate) {
-        commissionAmount = Math.round(row.netCollection * (rate / 100) * 100) / 100;
-      }
-    }
+    // Commission is on (total - discount - fees): the line total after any
+    // discount, less card fees and withholding tax (= net collection). Cash
+    // visits use the cash-paying %; HMO visits use the HMO % / peso value.
+    const commissionAmount =
+      dentistUserId && procedureId
+        ? computeCommission(
+            row.netCollection,
+            row.paymentType,
+            rateMap.get(`${dentistUserId}:${procedureId}`),
+          )
+        : 0;
 
     return { dentistUserId, procedureId, commissionAmount };
   });
@@ -226,7 +322,9 @@ async function resolveCommissionLinks(rows: CashflowTransaction[]) {
 // no effect on correctness, since each chunk is its own complete upsert.
 const UPSERT_CHUNK_SIZE = 200;
 
-export async function upsertTransactions(rows: CashflowTransaction[]): Promise<void> {
+export async function upsertTransactions(
+  rows: CashflowTransaction[],
+): Promise<void> {
   if (rows.length === 0) {
     return;
   }
@@ -272,6 +370,17 @@ export async function upsertTransactions(rows: CashflowTransaction[]): Promise<v
           branchId: sql`excluded.branch_id`,
           createdByUserId: sql`excluded.created_by_user_id`,
           transactionNumber: sql`excluded.transaction_number`,
+          // Never unlink a line from its invoice or patient just because a
+          // later save didn't carry the link.
+          invoiceId: sql`coalesce(excluded.invoice_id, ${transactions.invoiceId})`,
+          patientId: sql`coalesce(excluded.patient_id, ${transactions.patientId})`,
+          lineNumber: sql`excluded.line_number`,
+          listPrice: sql`excluded.list_price`,
+          discountMode: sql`excluded.discount_mode`,
+          discountValue: sql`excluded.discount_value`,
+          discountAmount: sql`excluded.discount_amount`,
+          discountReason: sql`excluded.discount_reason`,
+          vatType: sql`excluded.vat_type`,
         },
       });
   }
@@ -297,7 +406,10 @@ export async function upsertTransactions(rows: CashflowTransaction[]): Promise<v
  * app — revisit with a Postgres sequence per day if that ever becomes a
  * problem.
  */
-export async function generateTransactionNumber(recordDate: Date = new Date()): Promise<string> {
+export async function generateTransactionNumbers(
+  count: number,
+  recordDate: Date = new Date(),
+): Promise<string[]> {
   const mm = String(recordDate.getMonth() + 1).padStart(2, "0");
   const dd = String(recordDate.getDate()).padStart(2, "0");
   const yy = String(recordDate.getFullYear() % 100).padStart(2, "0");
@@ -308,8 +420,21 @@ export async function generateTransactionNumber(recordDate: Date = new Date()): 
     .from(transactions)
     .where(sql`${transactions.transactionNumber} like ${prefix + "-%"}`);
 
-  const nextSeq = (row?.count ?? 0) + 1;
-  return `${prefix}-${String(nextSeq).padStart(4, "0")}`;
+  const firstSeq = (row?.count ?? 0) + 1;
+  return Array.from(
+    { length: count },
+    (_, index) => `${prefix}-${String(firstSeq + index).padStart(4, "0")}`,
+  );
+}
+
+/** One number, for callers that only ever record a single row. A visit
+ * with several procedure lines asks for all its numbers at once with
+ * `generateTransactionNumbers` so they stay distinct. */
+export async function generateTransactionNumber(
+  recordDate: Date = new Date(),
+): Promise<string> {
+  const [number] = await generateTransactionNumbers(1, recordDate);
+  return number;
 }
 
 /**
@@ -320,7 +445,8 @@ export async function generateTransactionNumber(recordDate: Date = new Date()): 
  * manual "Add transaction" form, which no longer collects a Visit ID from
  * staff at all.
  *
- * Implemented as a count of same-day-prefix rows, same tradeoff as
+ * Implemented as a count of distinct same-day Visit IDs (a visit with
+ * several procedure lines shares one), same tradeoff as
  * `generateTransactionNumber` — fine at this clinic's volume, revisit with
  * a real sequence if that ever changes.
  */
@@ -328,7 +454,9 @@ export async function generateVisitId(visitDate: string): Promise<string> {
   const prefix = visitDate.replaceAll("-", "");
 
   const [row] = await db
-    .select({ count: sql<number>`count(*)::int` })
+    .select({
+      count: sql<number>`count(distinct ${transactions.visitId})::int`,
+    })
     .from(transactions)
     .where(sql`${transactions.visitId} like ${prefix + "-%"}`);
 
@@ -336,35 +464,24 @@ export async function generateVisitId(visitDate: string): Promise<string> {
   return `${prefix}-${String(nextSeq).padStart(3, "0")}`;
 }
 
-/**
- * Generates the next invoice number, in "YYYYMMDD-####-HHmmss" format
- * (e.g. "20260921-0007-143522") — today's date, a same-day running
- * sequence, and the time of creation. The manual form no longer collects
- * this from staff at all (shown as a disabled field instead); it's
- * generated once here on create and preserved as-is on edit, same pattern
- * as `generateVisitId`/`generateTransactionNumber` above.
- */
-export async function generateInvoiceNumber(recordDate: Date = new Date()): Promise<string> {
-  const yyyy = recordDate.getFullYear();
-  const mm = String(recordDate.getMonth() + 1).padStart(2, "0");
-  const dd = String(recordDate.getDate()).padStart(2, "0");
-  const prefix = `${yyyy}${mm}${dd}`;
-
-  const [row] = await db
-    .select({ count: sql<number>`count(*)::int` })
-    .from(transactions)
-    .where(sql`${transactions.invoiceNumber} like ${prefix + "-%"}`);
-
-  const nextSeq = (row?.count ?? 0) + 1;
-  const hh = String(recordDate.getHours()).padStart(2, "0");
-  const min = String(recordDate.getMinutes()).padStart(2, "0");
-  const ss = String(recordDate.getSeconds()).padStart(2, "0");
-
-  return `${prefix}-${String(nextSeq).padStart(4, "0")}-${hh}${min}${ss}`;
-}
-
 export async function deleteTransaction(id: string): Promise<void> {
+  const [row] = await db
+    .select({ invoiceId: transactions.invoiceId })
+    .from(transactions)
+    .where(eq(transactions.id, id))
+    .limit(1);
+
   await db.delete(transactions).where(eq(transactions.id, id));
+
+  // An invoice with no lines left is just an empty shell (and would keep
+  // its payments alive) — remove it, which also removes its payments.
+  if (row?.invoiceId) {
+    await db
+      .delete(invoices)
+      .where(
+        sql`${invoices.id} = ${row.invoiceId} and not exists (select 1 from ${transactions} where ${transactions.invoiceId} = ${row.invoiceId})`,
+      );
+  }
 }
 
 export type DentistSalesRow = {
@@ -399,7 +516,7 @@ export async function getDentistLeaderboard({
       dentistName: users.name,
       netCollection: sql<string>`coalesce(sum(${transactions.netCollection}), 0)`,
       commissionAmount: sql<string>`coalesce(sum(${transactions.commissionAmount}), 0)`,
-      transactionCount: sql<number>`count(*)::int`,
+      transactionCount: visitCount,
     })
     .from(transactions)
     .innerJoin(users, eq(users.id, transactions.dentistUserId))
@@ -447,14 +564,16 @@ export async function getSalesByPeriod({
         ? sql<string>`substring(${transactions.date}, 1, 4) || '-Q' || ceil(substring(${transactions.date}, 6, 2)::int / 3.0)::int`
         : sql<string>`substring(${transactions.date}, 1, 7)`;
 
-  const whereClause = dentistUserId ? eq(transactions.dentistUserId, dentistUserId) : undefined;
+  const whereClause = dentistUserId
+    ? eq(transactions.dentistUserId, dentistUserId)
+    : undefined;
 
   const rows = await db
     .select({
       periodLabel: periodExpr,
       netCollection: sql<string>`coalesce(sum(${transactions.netCollection}), 0)`,
       commissionAmount: sql<string>`coalesce(sum(${transactions.commissionAmount}), 0)`,
-      transactionCount: sql<number>`count(*)::int`,
+      transactionCount: visitCount,
     })
     .from(transactions)
     .where(whereClause)
@@ -520,7 +639,9 @@ export type DentistPatientRow = {
  * limitation rather than a bug, consistent with how the rest of the app
  * treats patient identity.
  */
-export async function getDentistPatients(dentistUserId: string): Promise<DentistPatientRow[]> {
+export async function getDentistPatients(
+  dentistUserId: string,
+): Promise<DentistPatientRow[]> {
   const rows = await db
     .select({
       patientName: transactions.patientName,
@@ -569,7 +690,7 @@ export async function getStaffBonusLeaderboard(): Promise<StaffBonusRow[]> {
       staffName: users.name,
       netCollection: sql<string>`coalesce(sum(${transactions.netCollection}), 0)`,
       bonusAmount: sql<string>`coalesce(sum(${transactions.netCollection} * ${dentistCommissionRates.ratePercent} / 100), 0)`,
-      transactionCount: sql<number>`count(*)::int`,
+      transactionCount: visitCount,
     })
     .from(transactions)
     .innerJoin(users, eq(users.id, transactions.createdByUserId))
@@ -581,7 +702,11 @@ export async function getStaffBonusLeaderboard(): Promise<StaffBonusRow[]> {
       ),
     )
     .groupBy(transactions.createdByUserId, users.name)
-    .orderBy(desc(sql`sum(${transactions.netCollection} * ${dentistCommissionRates.ratePercent} / 100)`));
+    .orderBy(
+      desc(
+        sql`sum(${transactions.netCollection} * ${dentistCommissionRates.ratePercent} / 100)`,
+      ),
+    );
 
   return rows.map((row) => ({
     staffUserId: row.staffUserId as string,
@@ -618,7 +743,7 @@ export async function getStaffBonusByPeriod({
       periodLabel: periodExpr,
       netCollection: sql<string>`coalesce(sum(${transactions.netCollection}), 0)`,
       commissionAmount: sql<string>`coalesce(sum(${transactions.netCollection} * ${dentistCommissionRates.ratePercent} / 100), 0)`,
-      transactionCount: sql<number>`count(*)::int`,
+      transactionCount: visitCount,
     })
     .from(transactions)
     .innerJoin(

@@ -3,7 +3,10 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { removeTransactionAction } from "@/app/cashflow/actions";
+import {
+  getInvoiceForEditAction,
+  removeInvoiceAction,
+} from "@/app/cashflow/actions";
 import { TransactionForm } from "@/components/cashflow/transaction-form";
 import {
   buildTransactionsSearch,
@@ -13,14 +16,17 @@ import {
 import { Modal } from "@/components/ui/modal";
 import type { CashflowTransaction } from "@/lib/cashflow/schema";
 import type { Branch } from "@/lib/db/branches";
+import type { Invoice, InvoiceSummary } from "@/lib/db/invoices";
+import type { ProcedureOption } from "@/lib/db/procedures";
 
 /**
- * Keyed by transaction id, in the whole-cents-safe plain-number form a
- * Server Component can pass a Client Component (a `Map` doesn't survive
- * that boundary as cleanly as a plain object). A missing key means "no
- * payments recorded yet" — same as an explicit 0.
+ * Keyed by invoice id, as a plain object (a `Map` doesn't survive the
+ * Server -> Client Component boundary as cleanly). Carries what the table
+ * needs per visit without loading every line: the invoice number, how many
+ * procedures it has, what is due and what has been collected. A transaction
+ * whose invoice is missing from here is shown as "not paid".
  */
-export type CollectedTotals = Record<string, number>;
+export type InvoiceSummaries = Record<string, InvoiceSummary>;
 
 const currencyFormatter = new Intl.NumberFormat("en-PH", {
   style: "currency",
@@ -39,7 +45,8 @@ function SortableHeader({
   align?: "left" | "right";
 }) {
   const isActive = query.sort === column;
-  const nextDir: "asc" | "desc" = isActive && query.dir === "asc" ? "desc" : "asc";
+  const nextDir: "asc" | "desc" =
+    isActive && query.dir === "asc" ? "desc" : "asc";
   const href = `/cashflow/transactions${buildTransactionsSearch(query, {
     sort: column,
     dir: nextDir,
@@ -47,7 +54,9 @@ function SortableHeader({
   })}`;
 
   return (
-    <th className={`px-4 py-3 font-medium ${align === "right" ? "text-right" : ""}`}>
+    <th
+      className={`px-4 py-3 font-medium ${align === "right" ? "text-right" : ""}`}
+    >
       <Link
         href={href}
         className={`inline-flex items-center gap-1 transition-colors hover:text-zinc-900 dark:hover:text-zinc-100 ${
@@ -63,7 +72,13 @@ function SortableHeader({
   );
 }
 
-function BalanceBadge({ amountPaid, collected }: { amountPaid: number; collected: number }) {
+function BalanceBadge({
+  amountPaid,
+  collected,
+}: {
+  amountPaid: number;
+  collected: number;
+}) {
   const balanceDue = Math.max(amountPaid - collected, 0);
 
   if (balanceDue < 0.01) {
@@ -112,7 +127,10 @@ function RowActionsMenu({
     if (!isOpen) return;
 
     function handlePointerDown(event: MouseEvent) {
-      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+      if (
+        containerRef.current &&
+        !containerRef.current.contains(event.target as Node)
+      ) {
         setIsOpen(false);
       }
     }
@@ -138,7 +156,13 @@ function RowActionsMenu({
         aria-label={`Actions for ${transaction.patientName}`}
         className="inline-flex items-center justify-center rounded-md p-1.5 text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-zinc-700 dark:hover:bg-zinc-800 dark:hover:text-zinc-200"
       >
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4.5 w-4.5" aria-hidden="true">
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          viewBox="0 0 20 20"
+          fill="currentColor"
+          className="h-4.5 w-4.5"
+          aria-hidden="true"
+        >
           <path d="M10 4.5a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3ZM10 11.5a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3ZM10 18.5a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3Z" />
         </svg>
       </button>
@@ -154,7 +178,13 @@ function RowActionsMenu({
             onClick={() => setIsOpen(false)}
             className="flex items-center gap-2 px-3 py-2 text-sm text-zinc-700 transition-colors hover:bg-amber-50 hover:text-amber-700 dark:text-zinc-300 dark:hover:bg-amber-950/40 dark:hover:text-amber-300"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4 text-zinc-400" aria-hidden="true">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 20 20"
+              fill="currentColor"
+              className="h-4 w-4 text-zinc-400"
+              aria-hidden="true"
+            >
               <path d="M10 12.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z" />
               <path
                 fillRule="evenodd"
@@ -173,7 +203,13 @@ function RowActionsMenu({
             }}
             className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-zinc-700 transition-colors hover:bg-amber-50 hover:text-amber-700 dark:text-zinc-300 dark:hover:bg-amber-950/40 dark:hover:text-amber-300"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4 text-zinc-400" aria-hidden="true">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 20 20"
+              fill="currentColor"
+              className="h-4 w-4 text-zinc-400"
+              aria-hidden="true"
+            >
               <path d="M13.586 3.586a2 2 0 1 1 2.828 2.828l-.793.793-2.828-2.828.793-.793ZM11.379 5.793 3 14.172V17h2.828l8.38-8.379-2.83-2.828Z" />
             </svg>
             Edit
@@ -189,7 +225,13 @@ function RowActionsMenu({
               disabled={isRemoving}
               className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-red-600 transition-colors hover:bg-red-50 disabled:opacity-50 dark:text-red-400 dark:hover:bg-red-950/40"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4" aria-hidden="true">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 20 20"
+                fill="currentColor"
+                className="h-4 w-4"
+                aria-hidden="true"
+              >
                 <path
                   fillRule="evenodd"
                   d="M8.75 1A2.75 2.75 0 0 0 6 3.75v.443c-.795.077-1.584.176-2.365.298a.75.75 0 1 0 .23 1.482l.149-.022.841 10.518A2.75 2.75 0 0 0 7.596 19h4.807a2.75 2.75 0 0 0 2.742-2.53l.841-10.52.149.023a.75.75 0 0 0 .23-1.482 41.03 41.03 0 0 0-2.365-.298V3.75A2.75 2.75 0 0 0 11.25 1h-2.5ZM10 4c.84 0 1.673.025 2.5.075V3.75c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.325C8.327 4.025 9.16 4 10 4ZM8.58 7.72a.75.75 0 0 0-1.5.06l.3 7.5a.75.75 0 1 0 1.5-.06l-.3-7.5Zm4.34.06a.75.75 0 1 0-1.5-.06l-.3 7.5a.75.75 0 1 0 1.5.06l.3-7.5Z"
@@ -208,7 +250,7 @@ function RowActionsMenu({
 export function TransactionsTable({
   transactions,
   canDelete = false,
-  collectedTotals = {},
+  invoiceSummaries = {},
   query,
   hasActiveFilters = false,
   dentistOptions,
@@ -217,26 +259,60 @@ export function TransactionsTable({
 }: {
   transactions: CashflowTransaction[];
   canDelete?: boolean;
-  collectedTotals?: CollectedTotals;
+  invoiceSummaries?: InvoiceSummaries;
   query: TransactionsQueryParams;
   hasActiveFilters?: boolean;
   dentistOptions: string[];
   branches: Branch[];
-  procedures: string[];
+  procedures: ProcedureOption[];
 }) {
   const router = useRouter();
   const [removingId, setRemovingId] = useState<string | null>(null);
   // One shared modal for the whole table rather than one per row — opened
-  // by whichever row's action menu was used to edit.
-  const [editingTransaction, setEditingTransaction] = useState<CashflowTransaction | null>(null);
+  // by whichever row's action menu was used to edit. The visit's full set of
+  // lines is fetched when it opens (the table only holds this page's rows).
+  const [editing, setEditing] = useState<{
+    transaction: CashflowTransaction;
+    data: { invoice: Invoice; lines: CashflowTransaction[] } | null;
+    error: string | null;
+  } | null>(null);
 
-  async function handleRemove(id: string, patientName: string) {
-    if (!window.confirm(`Remove the transaction for ${patientName}?`)) {
+  async function openEditor(transaction: CashflowTransaction) {
+    if (!transaction.invoiceId) {
+      window.alert(
+        "This transaction isn't linked to an invoice yet, so it can't be edited here.",
+      );
       return;
     }
-    setRemovingId(id);
+    setEditing({ transaction, data: null, error: null });
+    const result = await getInvoiceForEditAction(transaction.invoiceId);
+    setEditing((current) =>
+      current && current.transaction.id === transaction.id
+        ? result.ok
+          ? { ...current, data: result.data }
+          : { ...current, error: result.message }
+        : current,
+    );
+  }
+
+  async function handleRemove(transaction: CashflowTransaction) {
+    if (!transaction.invoiceId) {
+      window.alert(
+        "This transaction isn't linked to an invoice, so it can't be removed here.",
+      );
+      return;
+    }
+    const lineCount = invoiceSummaries[transaction.invoiceId]?.lineCount ?? 1;
+    const what =
+      lineCount > 1
+        ? `this visit (${lineCount} procedures)`
+        : "this transaction";
+    if (!window.confirm(`Remove ${what} for ${transaction.patientName}?`)) {
+      return;
+    }
+    setRemovingId(transaction.id);
     try {
-      await removeTransactionAction(id);
+      await removeInvoiceAction(transaction.invoiceId);
       router.refresh();
     } finally {
       setRemovingId(null);
@@ -245,20 +321,38 @@ export function TransactionsTable({
 
   const editModal = (
     <Modal
-      open={editingTransaction !== null}
-      onClose={() => setEditingTransaction(null)}
+      open={editing !== null}
+      onClose={() => setEditing(null)}
       title="Edit transaction"
-      description={editingTransaction ? `${editingTransaction.patientName} · ${editingTransaction.date}` : undefined}
+      description={
+        editing
+          ? `${editing.transaction.patientName} · ${editing.transaction.date}`
+          : undefined
+      }
     >
-      {editingTransaction && (
+      {editing?.data && (
         <TransactionForm
           mode="edit"
-          transaction={editingTransaction}
+          invoice={editing.data.invoice}
+          lines={editing.data.lines}
           dentistOptions={dentistOptions}
           branches={branches}
           procedures={procedures}
-          onSuccess={() => setEditingTransaction(null)}
+          onSuccess={() => setEditing(null)}
         />
+      )}
+      {editing && !editing.data && !editing.error && (
+        <p className="py-6 text-center text-sm text-zinc-500 dark:text-zinc-400">
+          Loading...
+        </p>
+      )}
+      {editing?.error && (
+        <p
+          role="alert"
+          className="py-6 text-center text-sm text-red-600 dark:text-red-400"
+        >
+          {editing.error}
+        </p>
       )}
     </Modal>
   );
@@ -282,55 +376,99 @@ export function TransactionsTable({
         <thead className="bg-zinc-50 text-xs uppercase tracking-wide text-zinc-500 dark:bg-zinc-900 dark:text-zinc-400">
           <tr>
             <SortableHeader label="Date" column="date" query={query} />
-            <SortableHeader label="Patient" column="patientName" query={query} />
+            <SortableHeader
+              label="Patient"
+              column="patientName"
+              query={query}
+            />
             <SortableHeader label="Dentist" column="dentist" query={query} />
             <th className="px-4 py-3 font-medium">Procedure</th>
             <th className="px-4 py-3 font-medium">Payment</th>
-            <SortableHeader label="Amount paid" column="amountPaid" query={query} align="right" />
-            <SortableHeader label="Net collection" column="netCollection" query={query} align="right" />
+            <SortableHeader
+              label="Amount paid"
+              column="amountPaid"
+              query={query}
+              align="right"
+            />
+            <SortableHeader
+              label="Net collection"
+              column="netCollection"
+              query={query}
+              align="right"
+            />
             <th className="px-4 py-3 font-medium">Balance</th>
             <th className="px-4 py-3" />
           </tr>
         </thead>
         <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
           {transactions.map((transaction) => {
-            const collected = collectedTotals[transaction.id] ?? 0;
+            const summary = transaction.invoiceId
+              ? invoiceSummaries[transaction.invoiceId]
+              : undefined;
 
             return (
-            <tr key={transaction.id} className="text-zinc-700 dark:text-zinc-300">
-              <td className="whitespace-nowrap px-4 py-3">{transaction.date}</td>
-              <td className="px-4 py-3">
-                <Link
-                  href={`/cashflow/transactions/${encodeURIComponent(transaction.id)}`}
-                  className="font-medium text-amber-700 hover:underline dark:text-amber-400"
-                >
-                  {transaction.patientName}
-                </Link>
-              </td>
-              <td className="whitespace-nowrap px-4 py-3">{transaction.dentist || "—"}</td>
-              <td className="px-4 py-3">{transaction.procedure}</td>
-              <td className="whitespace-nowrap px-4 py-3">{transaction.paymentType || "—"}</td>
-              <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums">
-                {currencyFormatter.format(transaction.amountPaid)}
-              </td>
-              <td className="whitespace-nowrap px-4 py-3 text-right font-semibold tabular-nums text-zinc-900 dark:text-zinc-50">
-                {currencyFormatter.format(transaction.netCollection)}
-              </td>
-              <td className="whitespace-nowrap px-4 py-3">
-                <BalanceBadge amountPaid={transaction.amountPaid} collected={collected} />
-              </td>
-              <td className="whitespace-nowrap px-4 py-3 text-right">
-                <div className="flex items-center justify-end">
-                  <RowActionsMenu
-                    transaction={transaction}
-                    canDelete={canDelete}
-                    isRemoving={removingId === transaction.id}
-                    onRemove={() => handleRemove(transaction.id, transaction.patientName)}
-                    onEdit={() => setEditingTransaction(transaction)}
+              <tr
+                key={transaction.id}
+                className="text-zinc-700 dark:text-zinc-300"
+              >
+                <td className="whitespace-nowrap px-4 py-3">
+                  {transaction.date}
+                </td>
+                <td className="px-4 py-3">
+                  <Link
+                    href={`/cashflow/transactions/${encodeURIComponent(transaction.id)}`}
+                    className="font-medium text-amber-700 hover:underline dark:text-amber-400"
+                  >
+                    {transaction.patientName}
+                  </Link>
+                  {summary &&
+                    (summary.invoiceNumber || summary.lineCount > 1) && (
+                      <span className="block text-xs text-zinc-500 dark:text-zinc-400">
+                        {summary.invoiceNumber
+                          ? `Inv. ${summary.invoiceNumber}`
+                          : ""}
+                        {summary.invoiceNumber && summary.lineCount > 1
+                          ? " · "
+                          : ""}
+                        {summary.lineCount > 1
+                          ? `${summary.lineCount} procedures`
+                          : ""}
+                      </span>
+                    )}
+                </td>
+                <td className="whitespace-nowrap px-4 py-3">
+                  {transaction.dentist || "—"}
+                </td>
+                <td className="px-4 py-3">{transaction.procedure}</td>
+                <td className="whitespace-nowrap px-4 py-3">
+                  {transaction.paymentType || "—"}
+                </td>
+                <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums">
+                  {currencyFormatter.format(transaction.amountPaid)}
+                </td>
+                <td className="whitespace-nowrap px-4 py-3 text-right font-semibold tabular-nums text-zinc-900 dark:text-zinc-50">
+                  {currencyFormatter.format(transaction.netCollection)}
+                </td>
+                <td className="whitespace-nowrap px-4 py-3">
+                  <BalanceBadge
+                    amountPaid={
+                      summary ? summary.totalDue : transaction.amountPaid
+                    }
+                    collected={summary ? summary.collected : 0}
                   />
-                </div>
-              </td>
-            </tr>
+                </td>
+                <td className="whitespace-nowrap px-4 py-3 text-right">
+                  <div className="flex items-center justify-end">
+                    <RowActionsMenu
+                      transaction={transaction}
+                      canDelete={canDelete}
+                      isRemoving={removingId === transaction.id}
+                      onRemove={() => handleRemove(transaction)}
+                      onEdit={() => openEditor(transaction)}
+                    />
+                  </div>
+                </td>
+              </tr>
             );
           })}
         </tbody>

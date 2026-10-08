@@ -6,7 +6,9 @@ import { TransactionForm } from "@/components/cashflow/transaction-form";
 import { Modal } from "@/components/ui/modal";
 import type { CashflowTransaction } from "@/lib/cashflow/schema";
 import type { Branch } from "@/lib/db/branches";
+import type { Invoice } from "@/lib/db/invoices";
 import type { Payment } from "@/lib/db/payments";
+import type { ProcedureOption } from "@/lib/db/procedures";
 
 /**
  * "Edit transaction" as a pop-up (like AddTransactionModal) instead of a
@@ -17,22 +19,27 @@ import type { Payment } from "@/lib/db/payments";
  * component's built-in trigger button.
  */
 export function EditTransactionModal({
-  transaction,
+  invoice,
+  lines,
   dentistOptions,
   branches,
   procedures,
   payments,
+  totalDue,
   canDelete = false,
   trigger,
 }: {
-  transaction: CashflowTransaction;
+  invoice: Invoice;
+  lines: CashflowTransaction[];
   dentistOptions: string[];
   branches: Branch[];
-  procedures: string[];
+  procedures: ProcedureOption[];
   /** When provided, an editable Payments section (record/remove a payment)
    * is shown below the transaction form — payments are only ever
    * updatable from here, never from the read-only detail page view. */
   payments?: Payment[];
+  /** What the visit currently costs, for the Payments section's balance. */
+  totalDue?: number;
   canDelete?: boolean;
   /** Custom trigger; receives an onClick to open the modal. Defaults to a
    * bordered "Edit transaction" button matching the detail page's other
@@ -40,6 +47,7 @@ export function EditTransactionModal({
   trigger?: (props: { onClick: () => void }) => ReactNode;
 }) {
   const [open, setOpen] = useState(false);
+  const patientName = lines[0]?.patientName ?? "";
 
   return (
     <>
@@ -59,12 +67,13 @@ export function EditTransactionModal({
         open={open}
         onClose={() => setOpen(false)}
         title="Edit transaction"
-        description={`${transaction.patientName} · ${transaction.date}`}
+        description={`${patientName} · ${invoice.visitDate}`}
       >
         <div className="space-y-6">
           <TransactionForm
             mode="edit"
-            transaction={transaction}
+            invoice={invoice}
+            lines={lines}
             dentistOptions={dentistOptions}
             branches={branches}
             procedures={procedures}
@@ -72,8 +81,11 @@ export function EditTransactionModal({
           />
           {payments && (
             <PaymentsManager
-              transactionId={transaction.id}
-              totalDue={transaction.amountPaid}
+              invoiceId={invoice.id}
+              totalDue={
+                totalDue ??
+                lines.reduce((sum, line) => sum + line.amountPaid, 0)
+              }
               payments={payments}
               canDelete={canDelete}
             />

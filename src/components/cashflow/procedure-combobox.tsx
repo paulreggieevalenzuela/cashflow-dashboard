@@ -1,6 +1,13 @@
 "use client";
 
-import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import {
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+} from "react";
 
 /**
  * A searchable Procedure field: type to filter the known procedure list,
@@ -10,6 +17,9 @@ import { useEffect, useId, useMemo, useRef, useState, type KeyboardEvent } from 
  * saved — see `getOrCreateProcedureByName` in `db/procedures.ts`). Replaces
  * the previous plain `<select>` + separate "add new" text-input toggle
  * with one control that does both.
+ *
+ * `label` / `entityName` let the same control serve other short lists that
+ * work the same way (the Add Expenses form uses it for suppliers).
  */
 export function ProcedureCombobox({
   value,
@@ -17,12 +27,16 @@ export function ProcedureCombobox({
   onChange,
   error,
   required,
+  label = "Procedure",
+  entityName = "procedure",
 }: {
   value: string;
   options: string[];
   onChange: (value: string) => void;
   error?: string | null;
   required?: boolean;
+  label?: string;
+  entityName?: string;
 }) {
   const inputId = useId();
   const listboxId = `${inputId}-listbox`;
@@ -59,7 +73,9 @@ export function ProcedureCombobox({
   }, [query, options]);
 
   const trimmed = query.trim();
-  const hasExactMatch = options.some((option) => option.toLowerCase() === trimmed.toLowerCase());
+  const hasExactMatch = options.some(
+    (option) => option.toLowerCase() === trimmed.toLowerCase(),
+  );
   const showCreateOption = trimmed.length > 0 && !hasExactMatch;
   const optionCount = filtered.length + (showCreateOption ? 1 : 0);
 
@@ -67,7 +83,10 @@ export function ProcedureCombobox({
     if (!isOpen) return;
 
     function handlePointerDown(event: MouseEvent) {
-      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+      if (
+        containerRef.current &&
+        !containerRef.current.contains(event.target as Node)
+      ) {
         setIsOpen(false);
         // Clicking away commits whatever was typed (free text is allowed),
         // same as a plain text field would on blur.
@@ -90,7 +109,9 @@ export function ProcedureCombobox({
     if (event.key === "ArrowDown") {
       event.preventDefault();
       setIsOpen(true);
-      setHighlightedIndex((index) => Math.min(index + 1, Math.max(optionCount - 1, 0)));
+      setHighlightedIndex((index) =>
+        Math.min(index + 1, Math.max(optionCount - 1, 0)),
+      );
     } else if (event.key === "ArrowUp") {
       event.preventDefault();
       setHighlightedIndex((index) => Math.max(index - 1, 0));
@@ -110,8 +131,11 @@ export function ProcedureCombobox({
 
   return (
     <div className="flex flex-col gap-1.5">
-      <label htmlFor={inputId} className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-        Procedure
+      <label
+        htmlFor={inputId}
+        className="text-sm font-medium text-zinc-700 dark:text-zinc-300"
+      >
+        {label}
         {required && (
           <span className="ml-0.5 text-red-500" aria-hidden="true">
             *
@@ -136,7 +160,11 @@ export function ProcedureCombobox({
           }}
           onFocus={() => setIsOpen(true)}
           onKeyDown={handleKeyDown}
-          placeholder={options.length > 0 ? "Search or type a procedure" : "Type a procedure name"}
+          placeholder={
+            options.length > 0
+              ? `Search or type a ${entityName}`
+              : `Type a ${entityName} name`
+          }
           className={`w-full rounded-lg border bg-white px-3.5 py-2.5 text-sm text-zinc-900 shadow-sm outline-none transition-colors placeholder:text-zinc-400 focus:ring-2 focus:ring-offset-0 dark:bg-zinc-900 dark:text-zinc-50 ${
             error
               ? "border-red-400 focus:border-red-500 focus:ring-red-100 dark:focus:ring-red-900/40"
@@ -182,7 +210,7 @@ export function ProcedureCombobox({
                       : "hover:bg-amber-50 dark:hover:bg-amber-950/30"
                   }`}
                 >
-                  + Add “{trimmed}” as a new procedure
+                  + Add “{trimmed}” as a new {entityName}
                 </button>
               </li>
             )}
@@ -191,8 +219,8 @@ export function ProcedureCombobox({
       </div>
       <p className="text-xs text-zinc-500 dark:text-zinc-400">
         {options.length === 0
-          ? "No procedures yet — type a name to add the first one."
-          : "Type to search, or add a new procedure if it isn't listed."}
+          ? `No ${entityName}s yet — type a name to add the first one.`
+          : `Type to search, or add a new ${entityName} if it isn't listed.`}
       </p>
       {error && (
         <p role="alert" className="text-sm text-red-600 dark:text-red-400">

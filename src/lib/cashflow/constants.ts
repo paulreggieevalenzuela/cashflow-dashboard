@@ -61,6 +61,8 @@ export const PAYMENT_TYPES = [
   "POS (BDO) - DEBIT",
   "POS (GHL) - CREDIT",
   "POS (GHL) - DEBIT",
+  "POS (MAYA) - CREDIT",
+  "POS (MAYA) - DEBIT",
   "Valucare",
 ] as const;
 export type PaymentTypeOption = (typeof PAYMENT_TYPES)[number];
@@ -70,20 +72,50 @@ export type PaymentTypeOption = (typeof PAYMENT_TYPES)[number];
 // constant for now rather than a database value.
 export const CLINIC_NAME = "ADT Dental Clinic";
 
-// A starting set of common dental-clinic operating expense categories,
-// shown as a dropdown on the Add Expenses form — same convention as
-// TRANSACTION_TYPES/PAYMENT_TYPES above (a plain string list, not a fixed
-// enum, so it's easy to extend later without a schema change).
+/**
+ * Discount presets offered on the transaction form. The rates are the
+ * usual statutory/clinic ones but are starting points to confirm with the
+ * clinic's accountant, not law baked into the app — staff can always type a
+ * different percentage or a peso amount, and "Other" asks for a reason.
+ */
+export const DISCOUNT_PRESETS = [
+  { reason: "PWD", mode: "percent", value: 20 },
+  { reason: "Senior citizen", mode: "percent", value: 20 },
+  { reason: "Dental Network Member", mode: "percent", value: 5 },
+  { reason: "Promo", mode: "percent", value: 0 },
+  { reason: "Other", mode: "percent", value: 0 },
+] as const;
+
+// The clinic's own "Particulars" list from its Operating Expenses sheet,
+// plus a few common ones (utilities, salaries, taxes, marketing,
+// insurance) the dashboard has always grouped by. A plain string list, not
+// a fixed enum, so it's easy to extend without a schema change.
 export const EXPENSE_CATEGORIES = [
   "Rent",
+  "Dental Supplies",
+  "Office Supplies & equipment",
+  "Repairs",
+  "Events",
+  "Miscellaneous",
   "Utilities",
   "Salaries",
-  "Dental supplies",
-  "Equipment",
-  "Marketing",
-  "Maintenance & repairs",
-  "Insurance",
   "Taxes & licenses",
-  "Other",
+  "Marketing",
+  "Insurance",
 ] as const;
 export type ExpenseCategoryOption = (typeof EXPENSE_CATEGORIES)[number];
+
+// How an expense was paid — the sheet's "Source of fund".
+export const EXPENSE_SOURCES = [
+  "Cash",
+  "GCash",
+  "Credit Card",
+  "BDO Check",
+  "Bank Transfer",
+] as const;
+export type ExpenseSourceOption = (typeof EXPENSE_SOURCES)[number];
+
+export const EXPENSE_NATURES = [
+  { value: "services", label: "Services" },
+  { value: "goods", label: "Goods" },
+] as const;

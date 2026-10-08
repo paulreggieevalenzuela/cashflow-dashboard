@@ -2,7 +2,10 @@
 
 import { useId, type SelectHTMLAttributes } from "react";
 
-type SelectFieldProps = Omit<SelectHTMLAttributes<HTMLSelectElement>, "children"> & {
+type SelectFieldProps = Omit<
+  SelectHTMLAttributes<HTMLSelectElement>,
+  "children"
+> & {
   label: string;
   error?: string | null;
   placeholder: string;
@@ -59,7 +62,11 @@ export function SelectField({
         ))}
       </select>
       {error && (
-        <p id={errorId} role="alert" className="text-sm text-red-600 dark:text-red-400">
+        <p
+          id={errorId}
+          role="alert"
+          className="text-sm text-red-600 dark:text-red-400"
+        >
           {error}
         </p>
       )}

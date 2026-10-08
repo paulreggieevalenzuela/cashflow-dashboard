@@ -8,6 +8,7 @@ import { AddExpenseModal } from "@/components/cashflow/add-expense-modal";
 import { SignOutButton } from "@/components/cashflow/sign-out-button";
 import { USER_ROLE_LABELS, type UserRole } from "@/lib/cashflow/user-schema";
 import type { Branch } from "@/lib/db/branches";
+import type { Supplier } from "@/lib/db/suppliers";
 
 const BASE_LINKS = [
   { href: "/cashflow", label: "Overview" },
@@ -18,8 +19,12 @@ const BASE_LINKS = [
 // their own bonus (see the Performance page's own role-based sectioning) —
 // each role only ever sees its own numbers, never a ranked comparison
 // against colleagues, so both get the same nav entry.
-const DENTIST_LINKS = [{ href: "/cashflow/performance", label: "Performance" }] as const;
-const STAFF_LINKS = [{ href: "/cashflow/performance", label: "Performance" }] as const;
+const DENTIST_LINKS = [
+  { href: "/cashflow/performance", label: "Performance" },
+] as const;
+const STAFF_LINKS = [
+  { href: "/cashflow/performance", label: "Performance" },
+] as const;
 
 const ADMIN_LINKS = [
   { href: "/cashflow/performance", label: "Performance" },
@@ -43,11 +48,13 @@ export function CashflowNav({
   displayName,
   email,
   branches,
+  suppliers,
 }: {
   role: UserRole;
   displayName?: string;
   email?: string;
   branches: Branch[];
+  suppliers: Supplier[];
 }) {
   const pathname = usePathname();
   const [isOpen, setIsOpen] = useState(false);
@@ -82,7 +89,7 @@ export function CashflowNav({
       </nav>
 
       <div className="hidden items-center gap-3 md:flex">
-        <AddExpenseModal branches={branches} />
+        <AddExpenseModal branches={branches} suppliers={suppliers} />
         {displayName ? (
           <AccountMenu role={role} displayName={displayName} email={email} />
         ) : (
@@ -98,11 +105,26 @@ export function CashflowNav({
         aria-label={isOpen ? "Close menu" : "Open menu"}
         className="inline-flex items-center justify-center rounded-lg p-2 text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100 md:hidden"
       >
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} className="h-6 w-6" aria-hidden="true">
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={1.75}
+          className="h-6 w-6"
+          aria-hidden="true"
+        >
           {isOpen ? (
-            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M6 18 18 6M6 6l12 12"
+            />
           ) : (
-            <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5M3.75 17.25h16.5" />
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M3.75 6.75h16.5M3.75 12h16.5M3.75 17.25h16.5"
+            />
           )}
         </svg>
       </button>
@@ -113,7 +135,7 @@ export function CashflowNav({
           className="absolute inset-x-0 top-full z-40 border-b border-zinc-200 bg-white px-6 py-4 shadow-lg dark:border-zinc-800 dark:bg-zinc-950 md:hidden"
         >
           <div className="mb-3">
-            <AddExpenseModal branches={branches} />
+            <AddExpenseModal branches={branches} suppliers={suppliers} />
           </div>
           <nav className="flex flex-col gap-1">
             {links.map((link) => (
@@ -136,8 +158,12 @@ export function CashflowNav({
               <div className="mb-3 flex items-center gap-3 px-1">
                 <AccountAvatar displayName={displayName} />
                 <div className="min-w-0 leading-tight">
-                  <p className="truncate text-sm font-medium text-zinc-900 dark:text-zinc-50">{displayName}</p>
-                  <p className="text-xs text-zinc-500 dark:text-zinc-400">{USER_ROLE_LABELS[role]}</p>
+                  <p className="truncate text-sm font-medium text-zinc-900 dark:text-zinc-50">
+                    {displayName}
+                  </p>
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                    {USER_ROLE_LABELS[role]}
+                  </p>
                 </div>
               </div>
             )}

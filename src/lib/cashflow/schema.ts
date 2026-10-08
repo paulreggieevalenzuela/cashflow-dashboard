@@ -57,40 +57,20 @@ export const CashflowTransactionSchema = z.object({
   branchId: z.string().nullable().optional(),
   createdByUserId: z.string().nullable().optional(),
   transactionNumber: z.string().nullable().optional(),
+
+  // Invoice grouping, patient link and per-line pricing. All optional so a
+  // plain CSV row (and seed-data.ts) still validates; the data layer fills
+  // them in. `amountPaid` above is the line total due AFTER discount;
+  // `listPrice` is the price before it.
+  invoiceId: z.string().nullable().optional(),
+  patientId: z.string().nullable().optional(),
+  lineNumber: z.number().int().positive().optional(),
+  listPrice: z.number().nonnegative().optional(),
+  discountMode: z.string().optional(),
+  discountValue: z.number().nonnegative().optional(),
+  discountAmount: z.number().nonnegative().optional(),
+  discountReason: z.string().optional(),
+  vatType: z.string().optional(),
 });
 
 export type CashflowTransaction = z.infer<typeof CashflowTransactionSchema>;
-
-/**
- * Input schema for the manual "Add transaction" form, before the
- * derived/synthesized fields (id, month, year, netCollection) are filled
- * in. See `transaction-form.tsx` for how this is combined with
- * `CashflowTransactionSchema`.
- */
-export const ManualTransactionInputSchema = z.object({
-  date: z.string().min(1, "Date is required."),
-  // No visitId here: it's server-generated (see generateVisitId in
-  // transactions.ts) on create, and preserved as-is on edit — the manual
-  // form never collects it. CSV-imported rows still carry their own
-  // visitId straight from the source data (see parse-csv.ts).
-  patientName: z.string().min(1, "Patient name is required."),
-  transactionType: z.string().min(1, "Select a transaction type."),
-  visitType: z.string().optional().default(""),
-  dentist: z.string().optional().default(""),
-  procedure: z.string().min(1, "Procedure is required."),
-  paymentType: z.string().optional().default(""),
-  amountPaid: z.number().nonnegative("Amount paid can't be negative."),
-  merchantFee: z.number().nonnegative().default(0),
-  withholdingTax: z.number().nonnegative().default(0),
-  // No invoiceNumber here either: same reasoning as visitId above — it's
-  // server-generated (see generateInvoiceNumber) on create and preserved
-  // as-is on edit, shown in the form as a disabled/display-only field.
-  remarks: z.string().optional().default(""),
-  // Empty string means "no branch selected" — normalized to null before
-  // hitting the DB (see actions.ts). Optional because branches are opt-in:
-  // a clinic with a single location has none, and the picker just won't
-  // render (see transaction-form.tsx).
-  branchId: z.string().optional().default(""),
-});
-
-export type ManualTransactionInput = z.infer<typeof ManualTransactionInputSchema>;

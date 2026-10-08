@@ -23,6 +23,8 @@ export function CommissionRatesManager({
   const [dentistUserId, setDentistUserId] = useState("");
   const [procedureId, setProcedureId] = useState("");
   const [ratePercent, setRatePercent] = useState("");
+  const [hmoRatePercent, setHmoRatePercent] = useState("");
+  const [hmoPesoValue, setHmoPesoValue] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
   const [status, setStatus] = useState<"idle" | "submitting">("idle");
   const [rowBusyId, setRowBusyId] = useState<string | null>(null);
@@ -32,10 +34,18 @@ export function CommissionRatesManager({
     setFormError(null);
     setStatus("submitting");
 
+    if (!ratePercent && !hmoRatePercent && !hmoPesoValue) {
+      setFormError("Enter a cash rate, an HMO rate, or an HMO peso value.");
+      setStatus("idle");
+      return;
+    }
+
     const result = await setCommissionRateAction({
       dentistUserId,
       procedureId,
-      ratePercent: Number(ratePercent),
+      ratePercent: ratePercent ? Number(ratePercent) : 0,
+      hmoRatePercent: hmoRatePercent ? Number(hmoRatePercent) : null,
+      hmoPesoValue: hmoPesoValue ? Number(hmoPesoValue) : null,
     });
 
     setStatus("idle");
@@ -47,6 +57,8 @@ export function CommissionRatesManager({
     setDentistUserId("");
     setProcedureId("");
     setRatePercent("");
+    setHmoRatePercent("");
+    setHmoPesoValue("");
     router.refresh();
   }
 
@@ -86,7 +98,10 @@ export function CommissionRatesManager({
               : "No procedures recorded yet — add or import a transaction first, then come back to set its rate."}
           </p>
         ) : (
-          <form onSubmit={handleSubmit} className="grid grid-cols-1 gap-4 sm:grid-cols-4 sm:items-end">
+          <form
+            onSubmit={handleSubmit}
+            className="grid grid-cols-1 gap-4 sm:grid-cols-3 sm:items-end"
+          >
             <div className="flex flex-col gap-1.5">
               <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
                 Dentist / staff
@@ -107,7 +122,9 @@ export function CommissionRatesManager({
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Procedure</label>
+              <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                Procedure
+              </label>
               <select
                 required
                 value={procedureId}
@@ -124,9 +141,10 @@ export function CommissionRatesManager({
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Rate (%)</label>
+              <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                Cash-paying rate (%)
+              </label>
               <input
-                required
                 type="number"
                 min="0"
                 max="100"
@@ -134,6 +152,37 @@ export function CommissionRatesManager({
                 placeholder="e.g. 12.5"
                 value={ratePercent}
                 onChange={(event) => setRatePercent(event.target.value)}
+                className="w-full rounded-lg border border-zinc-300 bg-white px-3.5 py-2.5 text-sm text-zinc-900 shadow-sm outline-none transition-colors focus:border-amber-500 focus:ring-2 focus:ring-amber-100 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50 dark:focus:ring-amber-900/40"
+              />
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                HMO rate (%)
+              </label>
+              <input
+                type="number"
+                min="0"
+                max="100"
+                step="0.01"
+                placeholder="e.g. 10"
+                value={hmoRatePercent}
+                onChange={(event) => setHmoRatePercent(event.target.value)}
+                className="w-full rounded-lg border border-zinc-300 bg-white px-3.5 py-2.5 text-sm text-zinc-900 shadow-sm outline-none transition-colors focus:border-amber-500 focus:ring-2 focus:ring-amber-100 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50 dark:focus:ring-amber-900/40"
+              />
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                HMO peso value (₱)
+              </label>
+              <input
+                type="number"
+                min="0"
+                step="0.01"
+                placeholder="e.g. 50 per X-ray"
+                value={hmoPesoValue}
+                onChange={(event) => setHmoPesoValue(event.target.value)}
                 className="w-full rounded-lg border border-zinc-300 bg-white px-3.5 py-2.5 text-sm text-zinc-900 shadow-sm outline-none transition-colors focus:border-amber-500 focus:ring-2 focus:ring-amber-100 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50 dark:focus:ring-amber-900/40"
               />
             </div>
@@ -150,19 +199,23 @@ export function CommissionRatesManager({
       </div>
 
       <div className="overflow-x-auto rounded-lg border border-zinc-200 dark:border-zinc-800">
-        <table className="w-full min-w-[560px] text-left text-sm">
+        <table className="w-full min-w-[640px] text-left text-sm">
           <thead className="bg-zinc-50 text-xs uppercase tracking-wide text-zinc-500 dark:bg-zinc-900 dark:text-zinc-400">
             <tr>
               <th className="px-4 py-3 font-medium">Dentist / staff</th>
               <th className="px-4 py-3 font-medium">Procedure</th>
-              <th className="px-4 py-3 text-right font-medium">Rate</th>
+              <th className="px-4 py-3 text-right font-medium">Cash-paying</th>
+              <th className="px-4 py-3 text-right font-medium">HMO</th>
               <th className="px-4 py-3" />
             </tr>
           </thead>
           <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
             {rates.length === 0 ? (
               <tr>
-                <td colSpan={4} className="px-4 py-6 text-center text-sm text-zinc-500 dark:text-zinc-400">
+                <td
+                  colSpan={5}
+                  className="px-4 py-6 text-center text-sm text-zinc-500 dark:text-zinc-400"
+                >
                   No commission or bonus rates set yet.
                 </td>
               </tr>
@@ -175,6 +228,13 @@ export function CommissionRatesManager({
                   <td className="px-4 py-3">{rate.procedureName}</td>
                   <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums">
                     {rate.ratePercent.toFixed(2)}%
+                  </td>
+                  <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums">
+                    {rate.hmoPesoValue !== null
+                      ? `₱${rate.hmoPesoValue.toFixed(2)}`
+                      : rate.hmoRatePercent !== null
+                        ? `${rate.hmoRatePercent.toFixed(2)}%`
+                        : "—"}
                   </td>
                   <td className="whitespace-nowrap px-4 py-3 text-right">
                     <button

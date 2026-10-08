@@ -281,7 +281,7 @@ export function PopularProceduresCard({
     <CardShell>
       <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">Popular procedures</h3>
       <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-        By number of transactions, this {option.periodNoun}
+        By number of times performed, this {option.periodNoun}
       </p>
       <ul className="mt-4 space-y-3">
         {top.map((item, index) => (

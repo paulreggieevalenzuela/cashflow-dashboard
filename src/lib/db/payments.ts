@@ -1,43 +1,68 @@
-import { desc, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { payments, type PaymentRow } from "@/lib/db/schema";
+import { appliedToBill, round2 } from "@/lib/cashflow/pricing";
 
+/**
+ * Payments belong to an INVOICE: one payment (say, one card swipe) can pay
+ * for several procedure lines at once. `invoices` + its lines hold what is
+ * due; the rows here are what was actually received, and "balance due" is
+ * always total due minus the sum of these — never stored, so it can't drift.
+ */
 export type Payment = {
   id: string;
-  transactionId: string;
+  invoiceId: string | null;
   amount: number;
   paymentType: string;
+  referenceNo: string;
   paidAt: Date;
   notes: string;
   createdAt: Date;
 };
 
+/** Marks payment rows created by a CSV import, so re-importing a corrected
+ * file replaces exactly those and never touches ones staff typed in. */
+export const IMPORT_PAYMENT_NOTE = "Imported from Day End report";
+
 function toAppPayment(row: PaymentRow): Payment {
-  return { ...row, amount: Number(row.amount) };
+  return {
+    id: row.id,
+    invoiceId: row.invoiceId,
+    amount: Number(row.amount),
+    paymentType: row.paymentType,
+    referenceNo: row.referenceNo,
+    paidAt: row.paidAt,
+    notes: row.notes,
+    createdAt: row.createdAt,
+  };
 }
 
-export async function listPaymentsForTransaction(transactionId: string): Promise<Payment[]> {
+export async function listPaymentsForInvoice(
+  invoiceId: string,
+): Promise<Payment[]> {
   const rows = await db
     .select()
     .from(payments)
-    .where(eq(payments.transactionId, transactionId))
+    .where(eq(payments.invoiceId, invoiceId))
     .orderBy(desc(payments.paidAt), desc(payments.createdAt));
   return rows.map(toAppPayment);
 }
 
 export async function addPayment(input: {
-  transactionId: string;
+  invoiceId: string;
   amount: number;
   paymentType: string;
+  referenceNo?: string;
   paidAt?: Date;
   notes?: string;
 }): Promise<Payment> {
   const [row] = await db
     .insert(payments)
     .values({
-      transactionId: input.transactionId,
+      invoiceId: input.invoiceId,
       amount: input.amount.toString(),
       paymentType: input.paymentType,
+      referenceNo: input.referenceNo ?? "",
       paidAt: input.paidAt ?? new Date(),
       notes: input.notes ?? "",
     })
@@ -45,93 +70,122 @@ export async function addPayment(input: {
   return toAppPayment(row);
 }
 
-export async function deletePayment(id: string): Promise<void> {
+/** Removes a payment and returns the invoice it belonged to (so the
+ * caller can refresh that visit's merchant fee). */
+export async function deletePayment(id: string): Promise<string | null> {
+  const [row] = await db
+    .select({ invoiceId: payments.invoiceId })
+    .from(payments)
+    .where(eq(payments.id, id))
+    .limit(1);
   await db.delete(payments).where(eq(payments.id, id));
+  return row?.invoiceId ?? null;
 }
 
-/**
- * All payment rows for a transaction, gone with it — called from
- * `deleteTransaction` (see transactions.ts) since there's no DB-level
- * cascade configured beyond the FK itself... actually there is
- * (`onDelete: "cascade"` on `payments.transactionId`), so this is here as
- * an explicit, readable step for callers that need payments gone before
- * the transaction row disappears (none currently do) — kept for symmetry
- * with the rest of this module rather than relied upon for cleanup.
- */
-export async function deletePaymentsForTransaction(transactionId: string): Promise<void> {
-  await db.delete(payments).where(eq(payments.transactionId, transactionId));
-}
+const CHUNK = 200;
 
-const BULK_INSERT_CHUNK_SIZE = 200;
+type BulkPaymentRow = {
+  invoiceId: string;
+  amount: number;
+  paymentType: string;
+  paidAt: Date;
+  referenceNo?: string;
+  notes?: string;
+};
 
 /**
- * Inserts many payment rows in one go, chunked the same way
- * `upsertTransactions` chunks its inserts (see the note there) — the
- * neon-http driver's per-request size limit applies here too, and a
- * backfill can easily mean one row per existing transaction. Used by
- * `scripts/backfill-payments.ts`; not used by the single-payment UI flow
- * (`addPayment` above), which never needs to batch.
+ * Inserts many payment rows in one go, chunked like `upsertTransactions`
+ * (the neon-http driver has a per-request size limit). Used by the CSV
+ * import and by `scripts/backfill-payments.ts`.
  */
 export async function bulkInsertPayments(
-  rows: Array<{
-    transactionId: string;
-    amount: number;
-    paymentType: string;
-    paidAt: Date;
-    notes?: string;
-  }>,
+  rows: BulkPaymentRow[],
 ): Promise<void> {
   if (rows.length === 0) {
     return;
   }
 
   const values = rows.map((row) => ({
-    transactionId: row.transactionId,
+    invoiceId: row.invoiceId,
     amount: row.amount.toString(),
     paymentType: row.paymentType,
     paidAt: row.paidAt,
+    referenceNo: row.referenceNo ?? "",
     notes: row.notes ?? "",
   }));
 
-  for (let i = 0; i < values.length; i += BULK_INSERT_CHUNK_SIZE) {
-    await db.insert(payments).values(values.slice(i, i + BULK_INSERT_CHUNK_SIZE));
+  for (let i = 0; i < values.length; i += CHUNK) {
+    await db.insert(payments).values(values.slice(i, i + CHUNK));
   }
 }
 
 /**
- * Distinct transaction ids that already have at least one payment row —
- * used by the backfill script to skip transactions that were entered
- * through the app after payments existed (or were already backfilled),
- * so re-running the backfill never double-records a payment.
+ * Re-importing a Day End file: drops the payments an earlier import made
+ * for these invoices (identified by `IMPORT_PAYMENT_NOTE`) and writes the
+ * fresh ones. Payments typed in by hand are left alone.
  */
-export async function listTransactionIdsWithPayments(): Promise<Set<string>> {
-  const rows = await db.selectDistinct({ transactionId: payments.transactionId }).from(payments);
-  return new Set(rows.map((row) => row.transactionId));
+export async function replaceImportedPayments(
+  invoiceIds: string[],
+  rows: BulkPaymentRow[],
+): Promise<void> {
+  for (let i = 0; i < invoiceIds.length; i += CHUNK) {
+    await db
+      .delete(payments)
+      .where(
+        and(
+          inArray(payments.invoiceId, invoiceIds.slice(i, i + CHUNK)),
+          eq(payments.notes, IMPORT_PAYMENT_NOTE),
+        ),
+      );
+  }
+  await bulkInsertPayments(
+    rows.map((row) => ({ ...row, notes: IMPORT_PAYMENT_NOTE })),
+  );
 }
 
 /**
- * Total collected per transaction, for a whole batch of transaction ids in
- * one query — used by the transactions table/list to show a "balance due"
- * flag without an N+1 query per row. Transactions with no payment rows at
- * all simply don't appear in the returned map (treat a missing key as 0
- * collected), which normally only happens right after a transaction is
- * created and before its first payment is recorded.
+ * Invoice ids that already have at least one payment row — used by the
+ * backfill script to skip invoices that already have payments, so
+ * re-running it never double-records.
  */
-export async function getCollectedTotals(
-  transactionIds: string[],
-): Promise<Map<string, number>> {
-  if (transactionIds.length === 0) {
-    return new Map();
-  }
-
+export async function listInvoiceIdsWithPayments(): Promise<Set<string>> {
   const rows = await db
-    .select({
-      transactionId: payments.transactionId,
-      total: sql<string>`sum(${payments.amount})`,
-    })
-    .from(payments)
-    .where(inArray(payments.transactionId, transactionIds))
-    .groupBy(payments.transactionId);
+    .selectDistinct({ invoiceId: payments.invoiceId })
+    .from(payments);
+  return new Set(rows.flatMap((row) => (row.invoiceId ? [row.invoiceId] : [])));
+}
 
-  return new Map(rows.map((row) => [row.transactionId, Number(row.total)]));
+/**
+ * Total collected per invoice for a batch of invoice ids, in one query per
+ * chunk. "Collected" is what counts towards the BILL: card payments include
+ * their merchant fee, which is taken out here (see `splitReceived`). An
+ * invoice with no payments simply isn't in the map (treat as 0).
+ */
+export async function getCollectedTotalsByInvoice(
+  invoiceIds: string[],
+): Promise<Map<string, number>> {
+  const result = new Map<string, number>();
+  for (let i = 0; i < invoiceIds.length; i += CHUNK) {
+    const rows = await db
+      .select({
+        invoiceId: payments.invoiceId,
+        paymentType: payments.paymentType,
+        total: sql<string>`sum(${payments.amount})`,
+      })
+      .from(payments)
+      .where(inArray(payments.invoiceId, invoiceIds.slice(i, i + CHUNK)))
+      .groupBy(payments.invoiceId, payments.paymentType);
+    for (const row of rows) {
+      if (row.invoiceId) {
+        result.set(
+          row.invoiceId,
+          round2(
+            (result.get(row.invoiceId) ?? 0) +
+              appliedToBill(Number(row.total), row.paymentType),
+          ),
+        );
+      }
+    }
+  }
+  return result;
 }

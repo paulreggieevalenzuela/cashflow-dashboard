@@ -20,7 +20,13 @@ export function getInitials(name: string): string {
   return `${first}.${last}.`;
 }
 
-export function AccountAvatar({ displayName, className = "h-9 w-9 text-xs" }: { displayName: string; className?: string }) {
+export function AccountAvatar({
+  displayName,
+  className = "h-9 w-9 text-xs",
+}: {
+  displayName: string;
+  className?: string;
+}) {
   return (
     <span
       className={`flex shrink-0 items-center justify-center rounded-full bg-amber-600 font-semibold text-white ${className}`}
@@ -66,7 +72,10 @@ export function AccountMenu({
     if (!isOpen) return;
 
     function handlePointerDown(event: MouseEvent) {
-      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+      if (
+        containerRef.current &&
+        !containerRef.current.contains(event.target as Node)
+      ) {
         setIsOpen(false);
       }
     }
@@ -101,7 +110,9 @@ export function AccountMenu({
           <span className="block max-w-[140px] truncate text-sm font-medium text-zinc-900 dark:text-zinc-50">
             {displayName}
           </span>
-          <span className="block text-xs text-zinc-500 dark:text-zinc-400">{USER_ROLE_LABELS[role]}</span>
+          <span className="block text-xs text-zinc-500 dark:text-zinc-400">
+            {USER_ROLE_LABELS[role]}
+          </span>
         </span>
         <svg
           xmlns="http://www.w3.org/2000/svg"
@@ -124,8 +135,14 @@ export function AccountMenu({
           className="animate-modal-panel-in absolute right-0 top-full z-50 mt-2 w-60 overflow-hidden rounded-lg border border-zinc-200 bg-white py-1.5 shadow-lg dark:border-zinc-800 dark:bg-zinc-900"
         >
           <div className="border-b border-zinc-100 px-3.5 py-2.5 dark:border-zinc-800">
-            <p className="truncate text-sm font-medium text-zinc-900 dark:text-zinc-50">{displayName}</p>
-            {email && <p className="truncate text-xs text-zinc-500 dark:text-zinc-400">{email}</p>}
+            <p className="truncate text-sm font-medium text-zinc-900 dark:text-zinc-50">
+              {displayName}
+            </p>
+            {email && (
+              <p className="truncate text-xs text-zinc-500 dark:text-zinc-400">
+                {email}
+              </p>
+            )}
           </div>
           <Link
             href="/cashflow/profile"
@@ -133,7 +150,13 @@ export function AccountMenu({
             onClick={() => setIsOpen(false)}
             className="flex items-center gap-2.5 px-3.5 py-2 text-sm text-zinc-700 transition-colors hover:bg-zinc-50 dark:text-zinc-300 dark:hover:bg-zinc-800"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4 text-zinc-400" aria-hidden="true">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 20 20"
+              fill="currentColor"
+              className="h-4 w-4 text-zinc-400"
+              aria-hidden="true"
+            >
               <path
                 fillRule="evenodd"
                 d="M10 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM3.465 14.493a1.23 1.23 0 0 0 .41 1.412A9.957 9.957 0 0 0 10 18c2.31 0 4.438-.784 6.131-2.1.43-.333.604-.903.408-1.41a7.002 7.002 0 0 0-13.074.003Z"
@@ -149,7 +172,13 @@ export function AccountMenu({
             disabled={isSigningOut}
             className="flex w-full items-center gap-2.5 px-3.5 py-2 text-left text-sm text-red-600 transition-colors hover:bg-red-50 disabled:opacity-60 dark:text-red-400 dark:hover:bg-red-950/40"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4" aria-hidden="true">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 20 20"
+              fill="currentColor"
+              className="h-4 w-4"
+              aria-hidden="true"
+            >
               <path
                 fillRule="evenodd"
                 d="M3 4.25A2.25 2.25 0 0 1 5.25 2h5.5A2.25 2.25 0 0 1 13 4.25v2a.75.75 0 0 1-1.5 0v-2a.75.75 0 0 0-.75-.75h-5.5a.75.75 0 0 0-.75.75v11.5c0 .414.336.75.75.75h5.5a.75.75 0 0 0 .75-.75v-2a.75.75 0 0 1 1.5 0v2A2.25 2.25 0 0 1 10.75 18h-5.5A2.25 2.25 0 0 1 3 15.75V4.25Z"

@@ -89,6 +89,27 @@ export const transactions = pgTable("transactions", {
   // the migration; unique once set (Postgres allows more than one NULL
   // under a unique constraint).
   transactionNumber: text("transaction_number").unique(),
+  // One row here is still one procedure line. `invoiceId` groups the lines
+  // of one visit (see `invoices` below); `patientId` links to the patients
+  // table (the free-text `patientName` above stays as what is displayed and
+  // exported). Both nullable + set null so removing either never deletes
+  // history.
+  invoiceId: uuid("invoice_id").references(() => invoices.id, { onDelete: "set null" }),
+  patientId: uuid("patient_id").references(() => patients.id, { onDelete: "set null" }),
+  lineNumber: integer("line_number").notNull().default(1),
+  // Price before any discount. `amountPaid` above stays "line total due
+  // after discount" (list price - discountAmount), which is what
+  // commission, net collection and the dashboards are all built on.
+  listPrice: numeric("list_price", { precision: 12, scale: 2 }).notNull().default("0"),
+  // "" (none), "percent" or "amount"; `discountValue` is the percentage or
+  // the peso figure as typed, `discountAmount` the computed peso value.
+  discountMode: text("discount_mode").notNull().default(""),
+  discountValue: numeric("discount_value", { precision: 12, scale: 2 }).notNull().default("0"),
+  discountAmount: numeric("discount_amount", { precision: 12, scale: 2 }).notNull().default("0"),
+  discountReason: text("discount_reason").notNull().default(""),
+  // "vat" | "non_vat" | "vat_exempt". `vatExclusive`/`vatAmount` above are
+  // derived from this and the line total.
+  vatType: text("vat_type").notNull().default("non_vat"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -161,6 +182,11 @@ export type NewUserPreferencesRow = typeof userPreferences.$inferInsert;
 export const procedures = pgTable("procedures", {
   id: uuid("id").defaultRandom().primaryKey(),
   name: text("name").notNull().unique(),
+  // Remembered from the last time this procedure was sold, to pre-fill the
+  // price and VAT type on the transaction form. Nullable price: a procedure
+  // that has never been priced has no default.
+  defaultVatType: text("default_vat_type").notNull().default("non_vat"),
+  defaultPrice: numeric("default_price", { precision: 12, scale: 2 }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -197,6 +223,12 @@ export const dentistCommissionRates = pgTable(
       .references(() => procedures.id, { onDelete: "cascade" }),
     // Percent, e.g. "12.50" for 12.5%.
     ratePercent: numeric("rate_percent", { precision: 5, scale: 2 }).notNull(),
+    // What the same procedure earns when the visit is paid by an HMO
+    // (Maxicare, Medicard, ...): a percent of net collection (e.g. OP 10%)
+    // and/or a fixed peso amount (X-rays). Null = not set. An HMO visit for
+    // a procedure with neither set earns no commission.
+    hmoRatePercent: numeric("hmo_rate_percent", { precision: 5, scale: 2 }),
+    hmoPesoValue: numeric("hmo_peso_value", { precision: 12, scale: 2 }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -219,15 +251,19 @@ export type NewDentistCommissionRateRow = typeof dentistCommissionRates.$inferIn
  */
 export const payments = pgTable("payments", {
   id: uuid("id").defaultRandom().primaryKey(),
-  transactionId: text("transaction_id")
-    .notNull()
-    .references(() => transactions.id, { onDelete: "cascade" }),
+  // Legacy link, kept for history. Payments now belong to an invoice (one
+  // payment can cover several procedure lines), so this is no longer
+  // required.
+  transactionId: text("transaction_id").references(() => transactions.id, { onDelete: "cascade" }),
+  invoiceId: uuid("invoice_id").references(() => invoices.id, { onDelete: "cascade" }),
   amount: numeric("amount", { precision: 12, scale: 2 }).notNull(),
   // Reuses the same free-text vocabulary as transactions.paymentType (Cash,
   // GCash, a specific HMO, etc.) — one installment can be paid a different
   // way than another.
   paymentType: text("payment_type").notNull().default(""),
   paidAt: timestamp("paid_at", { withTimezone: true }).notNull().defaultNow(),
+  // Card slip / GCash / bank transfer reference, for proof of payment.
+  referenceNo: text("reference_no").notNull().default(""),
   notes: text("notes").notNull().default(""),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
@@ -286,8 +322,73 @@ export const expenses = pgTable("expenses", {
   // Who recorded this row — same audit-trail purpose as
   // transactions.createdByUserId.
   createdByUserId: uuid("created_by_user_id").references(() => users.id, { onDelete: "set null" }),
+  supplierId: uuid("supplier_id").references(() => suppliers.id, { onDelete: "set null" }),
+  referenceNo: text("reference_no").notNull().default(""),
+  remarks: text("remarks").notNull().default(""),
+  // "" | "services" | "goods"
+  nature: text("nature").notNull().default(""),
+  vatType: text("vat_type").notNull().default("non_vat"),
+  vatableAmount: numeric("vatable_amount", { precision: 12, scale: 2 }).notNull().default("0"),
+  vatAmount: numeric("vat_amount", { precision: 12, scale: 2 }).notNull().default("0"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
 export type ExpenseRow = typeof expenses.$inferSelect;
 export type NewExpenseRow = typeof expenses.$inferInsert;
+
+/**
+ * One row per real patient. Matched by name only (trimmed, single spaces,
+ * lower-cased -> `nameKey`), so "Maria  Santos" and "maria santos" are the
+ * same patient. Created automatically the first time a name is saved, the
+ * same way procedures are; the transaction form's typeahead searches this
+ * table.
+ */
+export const patients = pgTable("patients", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  fullName: text("full_name").notNull(),
+  nameKey: text("name_key").notNull().unique(),
+  contactNumber: text("contact_number").notNull().default(""),
+  notes: text("notes").notNull().default(""),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type PatientRow = typeof patients.$inferSelect;
+export type NewPatientRow = typeof patients.$inferInsert;
+
+/**
+ * Who an expense was paid to. Same auto-create-by-name approach as
+ * patients; name, address and TIN are what the clinic's books need for a
+ * VAT purchase.
+ */
+export const suppliers = pgTable("suppliers", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  name: text("name").notNull(),
+  nameKey: text("name_key").notNull().unique(),
+  address: text("address").notNull().default(""),
+  tin: text("tin").notNull().default(""),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type SupplierRow = typeof suppliers.$inferSelect;
+export type NewSupplierRow = typeof suppliers.$inferInsert;
+
+/**
+ * One visit's bill: the header that groups one or more procedure lines
+ * (rows in `transactions`) and the payments taken against them.
+ * `invoiceNumber` is typed in by staff from the paper invoice booklet and
+ * may be blank (some transactions have no invoice or receipt).
+ */
+export const invoices = pgTable("invoices", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  invoiceNumber: text("invoice_number").notNull().default(""),
+  visitDate: text("visit_date").notNull(), // YYYY-MM-DD
+  patientId: uuid("patient_id").references(() => patients.id, { onDelete: "set null" }),
+  branchId: uuid("branch_id").references(() => branches.id, { onDelete: "set null" }),
+  transactionType: text("transaction_type").notNull().default("Visit"),
+  visitType: text("visit_type").notNull().default(""),
+  createdByUserId: uuid("created_by_user_id").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type InvoiceRow = typeof invoices.$inferSelect;
+export type NewInvoiceRow = typeof invoices.$inferInsert;

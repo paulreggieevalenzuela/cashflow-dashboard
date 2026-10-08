@@ -30,16 +30,23 @@ export default async function CommissionsPage() {
           Commission &amp; bonus rates
         </h2>
         <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-          Set what percentage of net collection each dentist or staff
-          member earns per procedure. For a dentist this is their
-          commission (linked to transactions performed by them); for staff
-          it&apos;s a bonus (linked to transactions they recorded). A
-          dentist&apos;s rate applies to transactions saved after
-          it&apos;s set &mdash; a staff bonus is computed live, so changing
-          their rate updates past periods too.
+          Set what percentage of net collection each dentist or staff member
+          earns per procedure. For a dentist this is their commission (linked to
+          transactions performed by them); for staff it&apos;s a bonus (linked
+          to transactions they recorded). A dentist&apos;s rate applies to
+          transactions saved after it&apos;s set &mdash; a staff bonus is
+          computed live, so changing their rate updates past periods too. Visits
+          paid through an HMO (Maxicare, Medicard, Intellicare, Avega, Valucare,
+          Elite Dental Network) use the HMO column instead: a percentage (e.g.
+          OP) or a fixed peso value per procedure (X-rays). An HMO visit for a
+          procedure with no HMO rate earns no commission.
         </p>
       </div>
-      <CommissionRatesManager dentists={dentists} procedures={procedures} rates={rates} />
+      <CommissionRatesManager
+        dentists={dentists}
+        procedures={procedures}
+        rates={rates}
+      />
     </div>
   );
 }

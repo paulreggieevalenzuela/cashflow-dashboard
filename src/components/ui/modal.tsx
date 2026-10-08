@@ -50,9 +50,14 @@ export function Modal({
   // this modal's "fixed inset-0" overlay would be confined to the
   // header's own ~72px height instead of the full viewport, which is
   // exactly the clipped-at-the-top rendering bug this fixes.
+  // The panel is centered with `my-auto` (not `items-center` on this flex
+  // container): a panel taller than the screen with `items-center` is pushed
+  // above the top edge where it can't be scrolled to, which cut off the top
+  // of tall forms. `my-auto` centers short panels the same way but lets tall
+  // ones start at the top and scroll normally.
   return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto px-4 py-8 sm:items-center"
+      className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto px-4 py-8"
       role="presentation"
       onClick={(event) => {
         if (event.target === event.currentTarget) {
@@ -70,7 +75,7 @@ export function Modal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="modal-title"
-        className="animate-modal-panel-in relative w-full max-w-2xl rounded-2xl border border-zinc-200/80 bg-white p-6 shadow-xl dark:border-zinc-800 dark:bg-zinc-950 sm:p-8"
+        className="animate-modal-panel-in relative my-auto w-full max-w-2xl rounded-2xl border border-zinc-200/80 bg-white p-6 shadow-xl dark:border-zinc-800 dark:bg-zinc-950 sm:p-8"
       >
         <div className="mb-6 flex items-start justify-between gap-4">
           <div>
@@ -81,7 +86,9 @@ export function Modal({
               {title}
             </h2>
             {description && (
-              <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">{description}</p>
+              <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+                {description}
+              </p>
             )}
           </div>
           <button

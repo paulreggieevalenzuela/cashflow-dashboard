@@ -19,9 +19,19 @@ export type CsvRowError = {
 export type CsvParseResult = {
   transactions: CashflowTransaction[];
   errors: CsvRowError[];
+  /** Branch named in the report's title row ("MARIKINA DAY END REPORT" →
+   * "MARIKINA"), when there is one. Used to pre-select the branch. */
+  branchName?: string;
 };
 
 const EXPECTED_HEADER_CELLS = ["Date", "Visit ID"];
+
+/** The Day End report ends its table with a "Breakdown" block (totals by
+ * payment method) and a "Total" row. Everything from the first such row on
+ * is a summary, not data. */
+const END_OF_TABLE_MARKER = /^(breakdown|total|grand total|summary)\b/i;
+
+const TITLE_PATTERN = /^(.+?)\s+day\s*end\s*report\b/i;
 
 function cleanHeaderCell(cell: string): string {
   return cell.replace(/\s+/g, " ").trim();
@@ -42,7 +52,37 @@ function isPlaceholderRow(raw: Record<string, string>): boolean {
   return !raw["Date"]?.trim() && !raw["Visit ID"]?.trim();
 }
 
-function normalizeRow(raw: Record<string, string>, lineNumber: number) {
+/**
+ * The newer Day End report has no "Transaction Type" column, so work it out:
+ * a Visit ID starting with `RES`, or a "Reservation Fee" procedure, is a
+ * reservation; everything else is a visit. A value in the column always wins.
+ */
+function inferTransactionType(raw: Record<string, string>): string {
+  const explicit = (raw["Transaction Type"] ?? "").trim();
+  if (explicit) {
+    return explicit;
+  }
+  const visitId = (raw["Visit ID"] ?? "").trim();
+  const procedure = (raw["Procedure"] ?? "").trim();
+  if (/^RES/i.test(visitId) || /reservation/i.test(procedure)) {
+    return "Reservation";
+  }
+  return "Visit";
+}
+
+function findBranchName(rows: string[][], beforeIndex: number): string | undefined {
+  for (const row of rows.slice(0, Math.max(beforeIndex, 0))) {
+    for (const cell of row) {
+      const match = cell.replace(/\s+/g, " ").trim().match(TITLE_PATTERN);
+      if (match) {
+        return match[1].trim();
+      }
+    }
+  }
+  return undefined;
+}
+
+function normalizeRow(raw: Record<string, string>) {
   const visitId = (raw["Visit ID"] ?? "").trim();
   const date = parseClinicDate(raw["Date"]);
   const monthYear = date ? deriveMonthYear(date) : null;
@@ -53,11 +93,10 @@ function normalizeRow(raw: Record<string, string>, lineNumber: number) {
   const rawNetCollection = (raw["Net Collection"] ?? "").trim();
 
   return {
-    id: `${visitId || "row"}-${lineNumber}`,
     date: date ?? "",
     visitId,
     patientName: (raw["Patient Name"] ?? "").trim(),
-    transactionType: (raw["Transaction Type"] ?? "").trim(),
+    transactionType: inferTransactionType(raw),
     visitType: (raw["Visit Type"] ?? "").trim(),
     dentist: (raw["Dentist"] ?? "").trim(),
     procedure: (raw["Procedure"] ?? "").trim(),
@@ -71,6 +110,8 @@ function normalizeRow(raw: Record<string, string>, lineNumber: number) {
     remarks: (raw["Remarks"] ?? "").trim(),
     merchantFee,
     withholdingTax,
+    // A blank Net Collection (the Day End report leaves it blank on
+    // reservation fees) falls back to amount paid less fees and tax.
     netCollection: rawNetCollection
       ? parseAmount(rawNetCollection)
       : computeNetCollection(amountPaid, merchantFee, withholdingTax),
@@ -80,10 +121,16 @@ function normalizeRow(raw: Record<string, string>, lineNumber: number) {
 /**
  * Parses the clinic's cashflow CSV export into validated transactions.
  *
- * Handles two quirks seen in real exports: a summary block (Target, Sales,
- * Lacking, %) sometimes sits above the real header row, and a run of blank
- * template rows can trail after the real data — both are skipped rather
- * than treated as data.
+ * Handles the quirks seen in real exports: a summary block (Target, Sales,
+ * Lacking, %) sometimes sits above the real header row; a run of blank
+ * template rows can trail after the real data; the Day End report ends
+ * with a Breakdown/Total block; and the Day End report has no Transaction
+ * Type, Visit Type, Month or Year columns (those are inferred or derived).
+ *
+ * Row ids are the Visit ID itself when it is unique in the file, so
+ * re-importing a corrected file updates the same rows even if their order
+ * changed. Only when a Visit ID repeats (several lines for one visit) is a
+ * running number added to tell the lines apart.
  */
 export function parseCashflowCsv(csvText: string): CsvParseResult {
   const parsed = Papa.parse<string[]>(csvText, {
@@ -109,32 +156,57 @@ export function parseCashflowCsv(csvText: string): CsvParseResult {
     };
   }
 
+  const branchName = findBranchName(rows, headerIndex);
   const header = rows[headerIndex].map(cleanHeaderCell);
   const dataRows = rows.slice(headerIndex + 1);
 
-  const transactions: CashflowTransaction[] = [];
-  const errors: CsvRowError[] = [];
-  let lineNumber = 0;
+  type Candidate = { line: number; row: ReturnType<typeof normalizeRow> };
+  const candidates: Candidate[] = [];
+  let reachedSummary = false;
 
   dataRows.forEach((row: string[], index: number) => {
+    if (reachedSummary) {
+      return;
+    }
     const raw = toRecord(header, row);
     if (isPlaceholderRow(raw)) {
       return;
     }
+    const dateCell = (raw["Date"] ?? "").trim();
+    if (END_OF_TABLE_MARKER.test(dateCell) && !parseClinicDate(dateCell)) {
+      reachedSummary = true;
+      return;
+    }
+    candidates.push({ line: headerIndex + 2 + index, row: normalizeRow(raw) });
+  });
 
-    lineNumber += 1;
-    const candidate = normalizeRow(raw, lineNumber);
-    const result = CashflowTransactionSchema.safeParse(candidate);
+  const visitCounts = new Map<string, number>();
+  for (const { row } of candidates) {
+    visitCounts.set(row.visitId, (visitCounts.get(row.visitId) ?? 0) + 1);
+  }
+  const visitSequence = new Map<string, number>();
 
+  const transactions: CashflowTransaction[] = [];
+  const errors: CsvRowError[] = [];
+
+  for (const { line, row } of candidates) {
+    let id = `row-${line}`;
+    if (row.visitId) {
+      const sequence = (visitSequence.get(row.visitId) ?? 0) + 1;
+      visitSequence.set(row.visitId, sequence);
+      id = (visitCounts.get(row.visitId) ?? 1) > 1 ? `${row.visitId}-${sequence}` : row.visitId;
+    }
+
+    const result = CashflowTransactionSchema.safeParse({ ...row, id });
     if (result.success) {
       transactions.push(result.data);
     } else {
       errors.push({
-        line: headerIndex + 2 + index,
+        line,
         message: result.error.issues.map((issue) => issue.message).join("; "),
       });
     }
-  });
+  }
 
-  return { transactions, errors };
+  return { transactions, errors, branchName };
 }

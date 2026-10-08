@@ -1,9 +1,46 @@
-import { ilike } from "drizzle-orm";
+import { eq, ilike } from "drizzle-orm";
+import { normalizeVatType, type VatType } from "@/lib/cashflow/pricing";
 import { db } from "@/lib/db/client";
 import { procedures, type ProcedureRow } from "@/lib/db/schema";
 
 export async function listProcedures(): Promise<ProcedureRow[]> {
   return db.select().from(procedures).orderBy(procedures.name);
+}
+
+/** A procedure as the transaction form needs it: name plus the price and
+ * VAT type it was last sold with, used to pre-fill a new line. */
+export type ProcedureOption = {
+  name: string;
+  defaultPrice: number | null;
+  defaultVatType: VatType;
+};
+
+export async function listProcedureOptions(): Promise<ProcedureOption[]> {
+  const rows = await listProcedures();
+  return rows.map((row) => ({
+    name: row.name,
+    defaultPrice: row.defaultPrice === null ? null : Number(row.defaultPrice),
+    defaultVatType: normalizeVatType(row.defaultVatType),
+  }));
+}
+
+/**
+ * Remembers the list price and VAT type a procedure was just sold with, so
+ * the next time it is picked on the form they are already filled in. Called
+ * on manual saves only — a CSV import must not rewrite them from historical
+ * (possibly discounted) figures.
+ */
+export async function rememberProcedureDefaults(
+  procedureId: string,
+  defaults: { price: number; vatType: VatType },
+): Promise<void> {
+  await db
+    .update(procedures)
+    .set({
+      defaultVatType: defaults.vatType,
+      ...(defaults.price > 0 ? { defaultPrice: defaults.price.toString() } : {}),
+    })
+    .where(eq(procedures.id, procedureId));
 }
 
 /**

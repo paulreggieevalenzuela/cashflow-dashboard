@@ -2,16 +2,18 @@
 
 import { revalidatePath } from "next/cache";
 import { auth } from "@/auth";
-import { PaymentInputSchema, type PaymentInput } from "@/lib/cashflow/payment-schema";
+import {
+  PaymentInputSchema,
+  type PaymentInput,
+} from "@/lib/cashflow/payment-schema";
+import { appliedToBill, receivedForBill } from "@/lib/cashflow/pricing";
+import { getInvoiceSummaries, recomputeInvoiceFees } from "@/lib/db/invoices";
 import { addPayment, deletePayment } from "@/lib/db/payments";
-import { getTransactionById } from "@/lib/db/transactions";
 
 type ActionResult = { ok: true } | { ok: false; message: string };
 
-function revalidate(transactionId: string) {
-  const id = encodeURIComponent(transactionId);
-  revalidatePath(`/cashflow/transactions/${id}`);
-  revalidatePath("/cashflow/transactions");
+function revalidate() {
+  revalidatePath("/cashflow/transactions", "layout");
   revalidatePath("/cashflow");
 }
 
@@ -21,7 +23,7 @@ function revalidate(transactionId: string) {
  * admin-only, matching `removeTransactionAction`.
  */
 export async function addPaymentAction(
-  transactionId: string,
+  invoiceId: string,
   input: PaymentInput,
 ): Promise<ActionResult> {
   const session = await auth();
@@ -29,8 +31,8 @@ export async function addPaymentAction(
     return { ok: false, message: "You must be signed in to record a payment." };
   }
 
-  const transaction = await getTransactionById(transactionId);
-  if (!transaction) {
+  const summary = (await getInvoiceSummaries([invoiceId]))[invoiceId];
+  if (!summary) {
     return { ok: false, message: "That transaction no longer exists." };
   }
 
@@ -42,28 +44,45 @@ export async function addPaymentAction(
     };
   }
 
+  const balance = Math.max(summary.totalDue - summary.collected, 0);
+  // A card payment includes its merchant fee; only the rest pays the bill.
+  if (
+    appliedToBill(parsed.data.amount, parsed.data.paymentType) >
+    balance + 0.005
+  ) {
+    const most = receivedForBill(balance, parsed.data.paymentType);
+    return {
+      ok: false,
+      message: `That is more than the balance due (${most.toFixed(2)}${most > balance ? ", including the merchant fee" : ""}).`,
+    };
+  }
+
   await addPayment({
-    transactionId,
+    invoiceId,
     amount: parsed.data.amount,
     paymentType: parsed.data.paymentType,
+    referenceNo: parsed.data.referenceNo,
     paidAt: new Date(`${parsed.data.paidAt}T00:00:00`),
     notes: parsed.data.notes,
   });
+  await recomputeInvoiceFees(invoiceId);
 
-  revalidate(transactionId);
+  revalidate();
   return { ok: true };
 }
 
 export async function deletePaymentAction(
   paymentId: string,
-  transactionId: string,
 ): Promise<ActionResult> {
   const session = await auth();
   if (session?.user.role !== "admin") {
     return { ok: false, message: "Only admins can remove a payment." };
   }
 
-  await deletePayment(paymentId);
-  revalidate(transactionId);
+  const invoiceId = await deletePayment(paymentId);
+  if (invoiceId) {
+    await recomputeInvoiceFees(invoiceId);
+  }
+  revalidate();
   return { ok: true };
 }

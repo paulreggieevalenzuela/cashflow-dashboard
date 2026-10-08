@@ -2,6 +2,16 @@ import type { CashflowTransaction } from "@/lib/cashflow/schema";
 import type { Expense } from "@/lib/cashflow/expense-schema";
 
 /**
+ * How many transactions (visits) a set of rows is. A visit with several
+ * procedures is stored as several rows sharing an invoice, but it is ONE
+ * transaction — so count distinct invoices (rows with no invoice count once
+ * each).
+ */
+export function visitCountOf(rows: CashflowTransaction[]): number {
+  return new Set(rows.map((row) => row.invoiceId ?? row.id)).size;
+}
+
+/**
  * Pure, DB-free aggregation over an already-fetched transaction list. The
  * dataset is small enough (hundreds to low thousands of rows for a single
  * clinic) that computing these in memory on each page load is simpler and
@@ -49,7 +59,10 @@ export const GRANULARITY_OPTIONS: {
   { value: "annual", label: "Annual", periodNoun: "year" },
 ];
 
-const GRANULARITY_CONFIG: Record<Granularity, { periodsBack: number; monthsPerPeriod: number }> = {
+const GRANULARITY_CONFIG: Record<
+  Granularity,
+  { periodsBack: number; monthsPerPeriod: number }
+> = {
   monthly: { periodsBack: 12, monthsPerPeriod: 1 },
   quarterly: { periodsBack: 8, monthsPerPeriod: 3 },
   semiAnnual: { periodsBack: 6, monthsPerPeriod: 6 },
@@ -96,9 +109,21 @@ export function currentPeriodKeys(referenceDate = new Date()): {
   year: string;
 } {
   return {
-    month: periodKeyAndLabel(referenceDate.getFullYear(), referenceDate.getMonth(), "monthly").key,
-    quarter: periodKeyAndLabel(referenceDate.getFullYear(), referenceDate.getMonth(), "quarterly").key,
-    year: periodKeyAndLabel(referenceDate.getFullYear(), referenceDate.getMonth(), "annual").key,
+    month: periodKeyAndLabel(
+      referenceDate.getFullYear(),
+      referenceDate.getMonth(),
+      "monthly",
+    ).key,
+    quarter: periodKeyAndLabel(
+      referenceDate.getFullYear(),
+      referenceDate.getMonth(),
+      "quarterly",
+    ).key,
+    year: periodKeyAndLabel(
+      referenceDate.getFullYear(),
+      referenceDate.getMonth(),
+      "annual",
+    ).key,
   };
 }
 
@@ -131,19 +156,28 @@ function trailingPeriodTotals<T>(
   for (const item of items) {
     const parsed = new Date(`${getDate(item)}T00:00:00`);
     if (Number.isNaN(parsed.getTime())) continue;
-    const { key } = periodKeyAndLabel(parsed.getFullYear(), parsed.getMonth(), granularity);
+    const { key } = periodKeyAndLabel(
+      parsed.getFullYear(),
+      parsed.getMonth(),
+      granularity,
+    );
     totalsByKey.set(key, (totalsByKey.get(key) ?? 0) + getAmount(item));
   }
 
   // Align the cursor to the start of the reference period, then step back
   // (periodsBack - 1) whole periods so the series ends on the current one.
-  const periodStartMonth0 = Math.floor(referenceDate.getMonth() / monthsPerPeriod) * monthsPerPeriod;
+  const periodStartMonth0 =
+    Math.floor(referenceDate.getMonth() / monthsPerPeriod) * monthsPerPeriod;
   const cursor = new Date(referenceDate.getFullYear(), periodStartMonth0, 1);
   cursor.setMonth(cursor.getMonth() - monthsPerPeriod * (periodsBack - 1));
 
   const points: PeriodPoint[] = [];
   for (let i = 0; i < periodsBack; i++) {
-    const { key, label } = periodKeyAndLabel(cursor.getFullYear(), cursor.getMonth(), granularity);
+    const { key, label } = periodKeyAndLabel(
+      cursor.getFullYear(),
+      cursor.getMonth(),
+      granularity,
+    );
     points.push({ key, label, total: totalsByKey.get(key) ?? 0 });
     cursor.setMonth(cursor.getMonth() + monthsPerPeriod);
   }
@@ -208,7 +242,8 @@ export function filterTransactionsToCurrentPeriod(
     const parsed = new Date(`${transaction.date}T00:00:00`);
     if (Number.isNaN(parsed.getTime())) return false;
     return (
-      periodKeyAndLabel(parsed.getFullYear(), parsed.getMonth(), granularity).key === currentKey
+      periodKeyAndLabel(parsed.getFullYear(), parsed.getMonth(), granularity)
+        .key === currentKey
     );
   });
 }
@@ -234,7 +269,8 @@ export function filterExpensesToCurrentPeriod(
     const parsed = new Date(`${expense.date}T00:00:00`);
     if (Number.isNaN(parsed.getTime())) return false;
     return (
-      periodKeyAndLabel(parsed.getFullYear(), parsed.getMonth(), granularity).key === currentKey
+      periodKeyAndLabel(parsed.getFullYear(), parsed.getMonth(), granularity)
+        .key === currentKey
     );
   });
 }
@@ -255,11 +291,18 @@ export function monthlyNetCollectionSeries(
     const parsed = new Date(`${transaction.date}T00:00:00`);
     if (Number.isNaN(parsed.getTime())) continue;
     const key = monthKey(parsed);
-    totalsByMonth.set(key, (totalsByMonth.get(key) ?? 0) + transaction.netCollection);
+    totalsByMonth.set(
+      key,
+      (totalsByMonth.get(key) ?? 0) + transaction.netCollection,
+    );
   }
 
   const points: MonthlyPoint[] = [];
-  const cursor = new Date(referenceDate.getFullYear(), referenceDate.getMonth(), 1);
+  const cursor = new Date(
+    referenceDate.getFullYear(),
+    referenceDate.getMonth(),
+    1,
+  );
   cursor.setMonth(cursor.getMonth() - (monthsBack - 1));
 
   for (let i = 0; i < monthsBack; i++) {
@@ -282,7 +325,8 @@ export function periodOverPeriodChange(series: MonthlyPoint[]): {
 } {
   const current = series.at(-1)?.total ?? 0;
   const previous = series.at(-2)?.total ?? 0;
-  const pctChange = previous === 0 ? null : ((current - previous) / previous) * 100;
+  const pctChange =
+    previous === 0 ? null : ((current - previous) / previous) * 100;
   return { current, previous, pctChange };
 }
 
@@ -305,11 +349,17 @@ export function topProcedures(
       existing.count += 1;
       existing.revenue += transaction.amountPaid;
     } else {
-      byProcedure.set(key, { procedure: key, count: 1, revenue: transaction.amountPaid });
+      byProcedure.set(key, {
+        procedure: key,
+        count: 1,
+        revenue: transaction.amountPaid,
+      });
     }
   }
 
-  const sorted = Array.from(byProcedure.values()).sort((a, b) => b.count - a.count);
+  const sorted = Array.from(byProcedure.values()).sort(
+    (a, b) => b.count - a.count,
+  );
   const top = sorted.slice(0, limit);
   const rest = sorted.slice(limit);
 
@@ -327,7 +377,9 @@ export type PaymentStat = {
 };
 
 /** Revenue share by payment method, largest first, with a share-of-total pct. */
-export function paymentMethodBreakdown(transactions: CashflowTransaction[]): PaymentStat[] {
+export function paymentMethodBreakdown(
+  transactions: CashflowTransaction[],
+): PaymentStat[] {
   const byType = new Map<string, number>();
   let grandTotal = 0;
 
@@ -357,7 +409,9 @@ export type ExpenseCategoryStat = {
  * category instead of payment type — feeds the Overview dashboard's
  * Expense breakdown card (see ExpenseBreakdownCard).
  */
-export function expenseCategoryBreakdown(expenses: Expense[]): ExpenseCategoryStat[] {
+export function expenseCategoryBreakdown(
+  expenses: Expense[],
+): ExpenseCategoryStat[] {
   const byCategory = new Map<string, number>();
   let grandTotal = 0;
 
@@ -424,7 +478,11 @@ export function patientStats(
   for (const transaction of transactions) {
     const parsed = new Date(`${transaction.date}T00:00:00`);
     if (Number.isNaN(parsed.getTime())) continue;
-    const { key } = periodKeyAndLabel(parsed.getFullYear(), parsed.getMonth(), granularity);
+    const { key } = periodKeyAndLabel(
+      parsed.getFullYear(),
+      parsed.getMonth(),
+      granularity,
+    );
     if (key === currentPeriodKey) {
       patientsInPeriod.add(transaction.patientName.trim().toLowerCase());
     }

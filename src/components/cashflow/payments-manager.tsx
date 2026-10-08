@@ -9,6 +9,12 @@ import {
 import { FormField } from "@/components/auth/form-field";
 import { SelectField } from "@/components/cashflow/select-field";
 import { PAYMENT_TYPES } from "@/lib/cashflow/constants";
+import {
+  appliedToBill,
+  computeMerchantFee,
+  merchantFeeRateFor,
+  receivedForBill,
+} from "@/lib/cashflow/pricing";
 import type { Payment } from "@/lib/db/payments";
 
 const currencyFormatter = new Intl.NumberFormat("en-PH", {
@@ -25,22 +31,29 @@ function todayInputValue(): string {
 type FormState = {
   amount: string;
   paymentType: string;
+  referenceNo: string;
   paidAt: string;
   notes: string;
 };
 
 function emptyForm(): FormState {
-  return { amount: "", paymentType: "", paidAt: todayInputValue(), notes: "" };
+  return {
+    amount: "",
+    paymentType: "",
+    referenceNo: "",
+    paidAt: todayInputValue(),
+    notes: "",
+  };
 }
 
 export function PaymentsManager({
-  transactionId,
+  invoiceId,
   totalDue,
   payments,
   canDelete = false,
   readOnly = false,
 }: {
-  transactionId: string;
+  invoiceId: string;
   totalDue: number;
   payments: Payment[];
   canDelete?: boolean;
@@ -56,7 +69,12 @@ export function PaymentsManager({
   const [status, setStatus] = useState<"idle" | "submitting">("idle");
   const [rowBusyId, setRowBusyId] = useState<string | null>(null);
 
-  const collected = payments.reduce((sum, payment) => sum + payment.amount, 0);
+  // "Collected" counts towards the bill: a card payment includes its
+  // merchant fee, which is taken out here.
+  const collected = payments.reduce(
+    (sum, payment) => sum + appliedToBill(payment.amount, payment.paymentType),
+    0,
+  );
   const balanceDue = Math.max(totalDue - collected, 0);
   const isFullyPaid = balanceDue < 0.01;
 
@@ -69,9 +87,10 @@ export function PaymentsManager({
     setFormError(null);
     setStatus("submitting");
 
-    const result = await addPaymentAction(transactionId, {
+    const result = await addPaymentAction(invoiceId, {
       amount: Number(form.amount) || 0,
       paymentType: form.paymentType,
+      referenceNo: form.referenceNo,
       paidAt: form.paidAt,
       notes: form.notes,
     });
@@ -92,7 +111,7 @@ export function PaymentsManager({
     }
     setRowBusyId(paymentId);
     try {
-      const result = await deletePaymentAction(paymentId, transactionId);
+      const result = await deletePaymentAction(paymentId);
       if (!result.ok) {
         window.alert(result.message);
       }
@@ -106,7 +125,9 @@ export function PaymentsManager({
     <div className="space-y-6 rounded-xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-950">
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
         <div>
-          <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">Payments</h3>
+          <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">
+            Payments
+          </h3>
           {readOnly && (
             <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
               Read-only — edit the transaction to record or remove a payment.
@@ -129,9 +150,18 @@ export function PaymentsManager({
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <SummaryField label="Total due" value={currencyFormatter.format(totalDue)} />
-        <SummaryField label="Collected" value={currencyFormatter.format(collected)} />
-        <SummaryField label="Balance due" value={currencyFormatter.format(balanceDue)} />
+        <SummaryField
+          label="Total due"
+          value={currencyFormatter.format(totalDue)}
+        />
+        <SummaryField
+          label="Collected"
+          value={currencyFormatter.format(collected)}
+        />
+        <SummaryField
+          label="Balance due"
+          value={currencyFormatter.format(balanceDue)}
+        />
       </div>
 
       {payments.length > 0 && (
@@ -144,6 +174,16 @@ export function PaymentsManager({
               <div>
                 <p className="font-medium text-zinc-900 dark:text-zinc-50">
                   {currencyFormatter.format(payment.amount)}
+                  {computeMerchantFee(payment.amount, payment.paymentType) >
+                    0 && (
+                    <span className="ml-2 text-xs font-normal text-zinc-500 dark:text-zinc-400">
+                      incl.{" "}
+                      {currencyFormatter.format(
+                        computeMerchantFee(payment.amount, payment.paymentType),
+                      )}{" "}
+                      fee
+                    </span>
+                  )}
                   {payment.paymentType && (
                     <span className="ml-2 text-xs font-normal text-zinc-500 dark:text-zinc-400">
                       {payment.paymentType}
@@ -152,6 +192,7 @@ export function PaymentsManager({
                 </p>
                 <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
                   {dateFormatter.format(new Date(payment.paidAt))}
+                  {payment.referenceNo ? ` · Ref. ${payment.referenceNo}` : ""}
                   {payment.notes ? ` · ${payment.notes}` : ""}
                 </p>
               </div>
@@ -185,22 +226,90 @@ export function PaymentsManager({
             </div>
           )}
 
-          <form onSubmit={handleSubmit} noValidate className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <FormField
-              label="Amount"
-              type="number"
-              min="0"
-              step="0.01"
-              placeholder="0.00"
-              value={form.amount}
-              onChange={(event) => updateField("amount", event.target.value)}
-            />
+          <form
+            onSubmit={handleSubmit}
+            noValidate
+            className="grid grid-cols-1 gap-4 sm:grid-cols-2"
+          >
+            <div className="flex flex-col gap-1.5">
+              <FormField
+                label="Amount"
+                type="number"
+                min="0"
+                step="0.01"
+                placeholder="0.00"
+                value={form.amount}
+                onChange={(event) => updateField("amount", event.target.value)}
+              />
+              {balanceDue >= 0.01 &&
+                Number(form.amount) !==
+                  receivedForBill(balanceDue, form.paymentType) && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      updateField(
+                        "amount",
+                        receivedForBill(
+                          balanceDue,
+                          form.paymentType,
+                        ).toString(),
+                      )
+                    }
+                    className="w-fit text-xs font-medium text-amber-700 hover:underline dark:text-amber-400"
+                  >
+                    Pay balance in full (
+                    {currencyFormatter.format(
+                      receivedForBill(balanceDue, form.paymentType),
+                    )}
+                    )
+                  </button>
+                )}
+            </div>
             <SelectField
               label="Payment type"
               placeholder="Select payment type"
               options={PAYMENT_TYPES}
               value={form.paymentType}
-              onChange={(event) => updateField("paymentType", event.target.value)}
+              onChange={(event) =>
+                updateField("paymentType", event.target.value)
+              }
+            />
+            {merchantFeeRateFor(form.paymentType) > 0 && (
+              <p className="text-xs text-zinc-600 dark:text-zinc-300 sm:col-span-2">
+                Merchant fee ({merchantFeeRateFor(form.paymentType)}% for{" "}
+                {form.paymentType}) is added on top: to pay the balance of{" "}
+                {currencyFormatter.format(balanceDue)} in full the patient pays{" "}
+                <span className="font-medium tabular-nums">
+                  {currencyFormatter.format(
+                    receivedForBill(balanceDue, form.paymentType),
+                  )}
+                </span>
+                .
+                {Number(form.amount) > 0 && (
+                  <>
+                    {" "}
+                    Of the {currencyFormatter.format(Number(form.amount))}{" "}
+                    entered,{" "}
+                    {currencyFormatter.format(
+                      appliedToBill(Number(form.amount), form.paymentType),
+                    )}{" "}
+                    pays the bill and{" "}
+                    {currencyFormatter.format(
+                      computeMerchantFee(Number(form.amount), form.paymentType),
+                    )}{" "}
+                    is the merchant fee.
+                  </>
+                )}
+              </p>
+            )}
+            <FormField
+              label="Reference no."
+              type="text"
+              placeholder="Card slip / GCash / transfer ref."
+              value={form.referenceNo}
+              onChange={(event) =>
+                updateField("referenceNo", event.target.value)
+              }
             />
             <FormField
               label="Date"

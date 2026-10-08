@@ -93,7 +93,10 @@ export function BranchesManager({ branches }: { branches: Branch[] }) {
           </div>
         )}
 
-        <form onSubmit={handleCreate} className="flex flex-col gap-4 sm:flex-row sm:items-end">
+        <form
+          onSubmit={handleCreate}
+          className="flex flex-col gap-4 sm:flex-row sm:items-end"
+        >
           <div className="flex flex-1 flex-col gap-1.5">
             <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
               Branch name
@@ -129,8 +132,12 @@ export function BranchesManager({ branches }: { branches: Branch[] }) {
           <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
             {branches.length === 0 ? (
               <tr>
-                <td colSpan={3} className="px-4 py-6 text-center text-sm text-zinc-500 dark:text-zinc-400">
-                  No branches yet. Add one above once the clinic has more than one location.
+                <td
+                  colSpan={3}
+                  className="px-4 py-6 text-center text-sm text-zinc-500 dark:text-zinc-400"
+                >
+                  No branches yet. Add one above once the clinic has more than
+                  one location.
                 </td>
               </tr>
             ) : (
@@ -139,13 +146,18 @@ export function BranchesManager({ branches }: { branches: Branch[] }) {
                 const isEditing = editingId === branch.id;
 
                 return (
-                  <tr key={branch.id} className="text-zinc-700 dark:text-zinc-300">
+                  <tr
+                    key={branch.id}
+                    className="text-zinc-700 dark:text-zinc-300"
+                  >
                     <td className="px-4 py-3 font-medium text-zinc-900 dark:text-zinc-50">
                       {isEditing ? (
                         <input
                           type="text"
                           value={editingName}
-                          onChange={(event) => setEditingName(event.target.value)}
+                          onChange={(event) =>
+                            setEditingName(event.target.value)
+                          }
                           className="w-full rounded-md border border-zinc-300 bg-white px-2 py-1 text-sm text-zinc-900 outline-none dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
                         />
                       ) : (

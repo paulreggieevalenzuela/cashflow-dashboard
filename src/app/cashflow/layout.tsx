@@ -4,6 +4,7 @@ import { auth } from "@/auth";
 import { CashflowNav } from "@/components/cashflow/cashflow-nav";
 import { RouteFocusManager } from "@/components/navigation/route-focus-manager";
 import { listBranches } from "@/lib/db/branches";
+import { listSuppliers } from "@/lib/db/suppliers";
 
 export const metadata: Metadata = {
   title: {
@@ -13,7 +14,11 @@ export const metadata: Metadata = {
 };
 
 export default async function CashflowLayout({ children }: { children: ReactNode }) {
-  const [session, branches] = await Promise.all([auth(), listBranches()]);
+  const [session, branches, suppliers] = await Promise.all([
+    auth(),
+    listBranches(),
+    listSuppliers(),
+  ]);
   const role = session?.user.role ?? "staff";
   const displayName = session?.user.name ?? session?.user.email ?? "";
   const email = session?.user.email ?? undefined;
@@ -38,6 +43,7 @@ export default async function CashflowLayout({ children }: { children: ReactNode
             displayName={displayName || undefined}
             email={email}
             branches={branches}
+            suppliers={suppliers}
           />
         </div>
       </header>

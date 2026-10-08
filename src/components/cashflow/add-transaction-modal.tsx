@@ -4,6 +4,7 @@ import { useState } from "react";
 import { TransactionForm } from "@/components/cashflow/transaction-form";
 import { Modal } from "@/components/ui/modal";
 import type { Branch } from "@/lib/db/branches";
+import type { ProcedureOption } from "@/lib/db/procedures";
 
 export function AddTransactionModal({
   dentistOptions,
@@ -12,7 +13,7 @@ export function AddTransactionModal({
 }: {
   dentistOptions: string[];
   branches: Branch[];
-  procedures: string[];
+  procedures: ProcedureOption[];
 }) {
   const [open, setOpen] = useState(false);
 
@@ -39,7 +40,7 @@ export function AddTransactionModal({
         open={open}
         onClose={() => setOpen(false)}
         title="Add transaction"
-        description="Record a manual transaction. It will appear in the table once saved."
+        description="Record a visit with one or more procedures. It will appear in the table once saved."
       >
         <TransactionForm
           dentistOptions={dentistOptions}
