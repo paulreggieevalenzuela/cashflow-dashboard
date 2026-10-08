@@ -271,6 +271,39 @@ export const payments = pgTable("payments", {
 export type PaymentRow = typeof payments.$inferSelect;
 export type NewPaymentRow = typeof payments.$inferInsert;
 
+/**
+ * A photo or PDF attached to a visit or to an expense. On a visit it is the
+ * paper invoice or a proof of payment (card slip, GCash / bank-transfer
+ * screenshot); `kind` says which, and a proof of payment can also point at
+ * the specific payment it proves (`paymentId`). On an expense it is the
+ * receipt / proof. All the links cascade, so removing a visit, a payment or
+ * an expense removes its files.
+ *
+ * The file itself is stored in the database as base64 text in `dataBase64`
+ * (simple, no extra service, and works wherever the app is hosted — files
+ * are kept small, see `attachment-rules.ts`). Lists and screens read only
+ * the other columns; the data column is read only when a file is opened.
+ */
+export const attachments = pgTable("attachments", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  // A file belongs to a visit (invoice photo, proof of payment) or to an
+  // expense (receipt / proof) — exactly one of the two is set.
+  invoiceId: uuid("invoice_id").references(() => invoices.id, { onDelete: "cascade" }),
+  expenseId: uuid("expense_id").references(() => expenses.id, { onDelete: "cascade" }),
+  paymentId: uuid("payment_id").references(() => payments.id, { onDelete: "cascade" }),
+  // "invoice" | "receipt"
+  kind: text("kind").notNull(),
+  fileName: text("file_name").notNull(),
+  contentType: text("content_type").notNull(),
+  sizeBytes: integer("size_bytes").notNull(),
+  dataBase64: text("data_base64").notNull(),
+  createdByUserId: uuid("created_by_user_id").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type AttachmentRow = typeof attachments.$inferSelect;
+export type NewAttachmentRow = typeof attachments.$inferInsert;
+
 export const targetPeriodEnum = pgEnum("target_period", ["month", "quarter", "year"]);
 export type TargetPeriodType = (typeof targetPeriodEnum.enumValues)[number];
 

@@ -38,7 +38,7 @@ async function requireSession() {
 
 export async function addExpenseAction(
   input: ManualExpenseInput,
-): Promise<ActionResult<null>> {
+): Promise<ActionResult<{ expenseId: string }>> {
   const session = await requireSession();
   if (!session) {
     return { ok: false, message: "You must be signed in to add an expense." };
@@ -119,6 +119,7 @@ export async function addExpenseAction(
 
   await createExpense(result.data);
   revalidatePath("/cashflow");
+  revalidatePath("/cashflow/expenses");
 
-  return { ok: true, data: null };
+  return { ok: true, data: { expenseId: result.data.id } };
 }

@@ -1,4 +1,4 @@
-import { VAT_RATE, type OrSummary } from "@/lib/cashflow/pricing";
+import type { OrSummary } from "@/lib/cashflow/pricing";
 
 const money = new Intl.NumberFormat("en-PH", {
   style: "currency",
@@ -21,7 +21,7 @@ export function OrBreakdown({ summary }: { summary: OrSummary }) {
     { label: "Vatable sales", value: money.format(summary.vatableSales) },
     { label: "VAT-exempt sales", value: money.format(summary.vatExemptSales) },
     {
-      label: `VAT (${Math.round(VAT_RATE * 100)}%)`,
+      label: "VAT",
       value: money.format(summary.vat),
     },
     {

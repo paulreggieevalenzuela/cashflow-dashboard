@@ -94,8 +94,9 @@ export const InvoicePaymentInputSchema = z.object({
  */
 export const InvoiceInputSchema = z.object({
   date: z.string().min(1, "Date is required."),
-  // Typed from the paper invoice booklet. Optional on purpose — some
-  // transactions (reservation fees, HMO-covered visits) have no invoice.
+  // Typed from the paper invoice booklet. Optional: blank means there is no
+  // invoice for this transaction (e.g. a reservation fee). When given, it
+  // must not already be used at the same branch.
   invoiceNumber: z.string().trim().optional().default(""),
   patientName: z.string().trim().min(1, "Patient name is required."),
   // One dentist per transaction; every procedure line is saved under them.

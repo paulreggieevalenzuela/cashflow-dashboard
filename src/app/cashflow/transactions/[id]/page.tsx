@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { auth } from "@/auth";
 import { TransactionDetail } from "@/components/cashflow/transaction-detail";
+import { listAttachmentsForInvoice } from "@/lib/db/attachments";
 import { listBranches } from "@/lib/db/branches";
 import { listDentistUsers } from "@/lib/db/dentists";
 import { getInvoiceDetail } from "@/lib/db/invoices";
@@ -45,7 +46,10 @@ export default async function TransactionDetailPage({
   }
 
   // Any line of a visit opens the whole visit.
-  const detail = await getInvoiceDetail(transaction.invoiceId);
+  const [detail, attachments] = await Promise.all([
+    getInvoiceDetail(transaction.invoiceId),
+    listAttachmentsForInvoice(transaction.invoiceId),
+  ]);
   if (!detail || detail.lines.length === 0) {
     return <NotFound message="We couldn't find that transaction. It may have been removed." />;
   }
@@ -58,6 +62,7 @@ export default async function TransactionDetailPage({
       dentistOptions={dentists.map((dentist) => dentist.name)}
       branches={branches}
       procedures={procedures}
+      attachments={attachments}
     />
   );
 }

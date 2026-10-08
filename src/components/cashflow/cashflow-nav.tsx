@@ -13,6 +13,7 @@ import type { Supplier } from "@/lib/db/suppliers";
 const BASE_LINKS = [
   { href: "/cashflow", label: "Overview" },
   { href: "/cashflow/transactions", label: "Transactions" },
+  { href: "/cashflow/expenses", label: "Expenses" },
 ] as const;
 
 // A dentist sees their own priority/commission here; a staff member sees

@@ -13,8 +13,9 @@
 2. **Also run `scripts/sql/2026-10-commission-rates-unique.sql`** (same place, also safe to repeat). It adds a missing database rule that stops one dentist + procedure from having two commission rates. Without it, setting a commission rate failed with "there is no unique or exclusion constraint matching the ON CONFLICT specification"; the app no longer needs it to save a rate, but the rule should be there.
 3. **Start the app** as usual.
 4. **Optional — old visits that show "Not paid":** `yarn db:backfill-payments` records one payment equal to the total due for every visit that has no payment at all. Only run it if those old visits really were paid in full.
-5. **Run `scripts/sql/2026-10-commission-rates-from-sheet.sql`** (same place, safe to repeat) **before opening the Commissions page.** It adds two HMO columns to the commission rates table and loads the rates from the clinic's "LIST - COMMISSION" sheet (see "Commission rates per dentist and procedure" below). The bottom of the file shows two checks: dentists on the sheet who have no dentist account yet (their rates were not loaded — create the account on the Users page and run the file again), and how many rates each dentist now has.
-6. **Then run `yarn db:backfill-links` once**, so visits that are already saved pick up the new rates. Commission is worked out when a visit is saved, so without this only visits saved from now on use the new rates.
+5. **Run `scripts/sql/2026-10-commission-rates-from-sheet.sql`** (same place, safe to repeat) **before opening the Commissions page.** It adds two HMO columns to the commission rates table and loads the rates from the clinic's "LIST - COMMISSION" sheet (see "Commission rates per dentist and procedure" below). It also **adds the 7 dentists on the sheet** as dentist accounts (Dawn Rufino Rey Teope, Rearosa Ayapana, Beatrice Kiara Bandayrel, Kyla Denise Ahmad, Katherine Roldan, James Russel Banawa, Anna Beatrice Perez) when they don't exist yet, so they appear in the Dentist dropdown and on the Commissions page. These are **profile-only accounts: nobody can sign in as them** (placeholder e-mail ending in `@adt-dental.invalid`, and a password that can't be typed). The bottom of the file shows two checks: any sheet dentist still without a matching dentist account (their rates were not loaded — e.g. an existing account with the same name but a different role), and how many rates each dentist now has.
+6. **Run `scripts/sql/2026-10-attachments.sql`** (same place, safe to repeat) before using the new invoice / receipt upload buttons (see "Invoice and receipt uploads" below). Until it is run the transaction page still opens, just without files, and an upload says the SQL file must be run first.
+7. **Then run `yarn db:backfill-links` once**, so visits that are already saved pick up the new rates. Commission is worked out when a visit is saved, so without this only visits saved from now on use the new rates.
 
 ---
 
@@ -33,11 +34,11 @@
 |---|---|
 | **Multiple procedures per transaction** | One visit = one **invoice** with one or more procedure lines. The **dentist is chosen once per transaction** (every line is saved under that dentist); each line has its own price, discount and VAT setting. "+ Add another procedure" adds a line. |
 | **Discount (percentage or peso amount)** | Per line. Choose No discount, PWD (20%), Senior citizen (20%), Dental Network Member (5%), Promo or Other, then adjust the value and switch between % and ₱. A reason is required whenever there is a discount. **PWD and Senior citizen follow the official-receipt rule** (VAT taken out first, 20% off the VAT-free price — see "PWD / Senior discount and VAT" below); the other discounts are plain price reductions. The rates are starting presets — **please confirm them with the accountant.** |
-| **VAT / Non-VAT** | Per line, one **VAT number field**: **leave it empty for non-VAT / VAT-exempt** (they are treated the same); **type the VAT amount in pesos** (as shown on the receipt, e.g. 120.00) and the line automatically becomes a VATable transaction. The VATable amount is the price minus that VAT. A small "Use 12% VAT" link under the empty field fills in the standard 12% of the price. VAT can't be more than the price. The form, the transaction page and the printed invoice also show the full **official-receipt breakdown** (Vatable sales, VAT-exempt sales, VAT, Less: VAT, Net of VAT, Less: Discount (SC, PWD), Add: VAT, Total amount due), following the "Auto compute OR" sheet. |
-| **Procedures remember price and VAT** | Each procedure remembers the price and whether it was VAT when it was last sold, and pre-fills the price (and the standard 12% VAT, if it was a VAT item) the next time it is picked (only into an empty price field). |
+| **VAT / Non-VAT** | Per line, one **VAT number field**: **leave it empty for non-VAT / VAT-exempt** (they are treated the same); **type the VAT amount in pesos** (as shown on the receipt, e.g. 120.00) and the line automatically becomes a VATable transaction. The VATable amount is the price minus that VAT. The VAT is **not fixed at any percentage** — it is whatever is typed (nothing is suggested or pre-filled, and no 12% note is shown). VAT can't be more than the price. The form, the transaction page and the printed invoice also show the full **official-receipt breakdown** (Vatable sales, VAT-exempt sales, VAT, Less: VAT, Net of VAT, Less: Discount (SC, PWD), Add: VAT, Total amount due), following the "Auto compute OR" sheet. |
+| **Procedures remember price and VAT** | Each procedure remembers the price and whether it was VAT when it was last sold, and pre-fills the price the next time it is picked (only into an empty price field). VAT is never pre-filled; it is typed each time. |
 | **Patients table + typeahead** | New `patients` table. The Patient field searches as you type (names starting with the text first, then names containing it), shows each patient's last visit date, and offers "+ New patient" when the name isn't on file. Existing patients were created from your current data by the SQL file. |
 | **New / Returning** | Worked out automatically: *Returning* if the patient has an earlier visit on file. A reservation fee alone does not count as a visit; a zero-amount follow-up does. A badge next to the patient field shows the result, and the Visit type dropdown can override it. |
-| **Invoice number (manual)** | Typed in from the paper booklet. **Optional** (some transactions have no invoice or receipt). If the number is already used at the same branch, the form warns when you leave the field and refuses to save. |
+| **Invoice number (manual)** | Typed in from the paper booklet. **Not required — leaving it blank means there is no invoice for that transaction** (the transaction page then shows "No invoice"). When a number is typed it is checked for duplicates (capitals are ignored): if it is already used at the same branch, the form warns when you leave the field and refuses to save. |
 | **Payments belong to the invoice** | One payment can cover several procedures. Payments carry a **reference number** (card slip / GCash / bank transfer) as proof of payment. Recording more than the balance due is refused. |
 | **Merchant fee (automatic) / withholding tax (removed)** | The **Merchant fee and Withholding tax fields are gone from the form.** The merchant fee is worked out automatically from the payment type (see "Merchant fee" below), added on top of the bill for the patient to pay, and shared across the procedure lines in proportion to their totals, to the centavo. |
 | **Add Expenses (new layout)** | Follows the clinic's Operating Expenses sheet: Date, Particulars, Source of fund, Supplier (searchable, remembers address and TIN), Reference no., Services or Goods, VAT type with VAT computed, Description, Remarks, Branch. A VAT expense requires the supplier name and TIN. A likely duplicate (same date, amount and supplier — or same supplier and reference no.) shows a warning with "Add it anyway". |
@@ -68,6 +69,17 @@ The sheet lists "MAYA" but the app had no Maya payment type, so **POS (MAYA) –
 
 Commission = **(total − discount − fees) × commission rate**. "Total − discount" is the line's price after any discount, and "fees" are any withholding tax already on older visits (and, on older imported files, a merchant fee that was deducted). The automatic card fee is added on top for the patient, so it does not reduce net collection or commission — the same figure the system already calls net collection. Discounts therefore reduce commission automatically. Applies to dentist commission and to staff bonus. This is the rule the app already used, kept as is.
 
+### Invoice and receipt uploads
+
+Photos and PDFs can now be attached to a transaction in two places, and they are kept in the database (so no extra storage service or keys are needed):
+
+- **The paper invoice**, attached to the visit. **Proof of payment** (card slip, GCash or bank-transfer screenshot), attached to a specific payment.
+- **When adding a transaction:** the form has *Invoice photo / PDF (optional)* under the invoice number and *Proof of payment (optional)* next to the payment's reference no. The files are chosen first and uploaded as soon as the transaction is saved; the proof is attached to that visit's payment. If a file fails to upload, the transaction is still saved and the form says which file to attach again.
+- **On an existing transaction:** the transaction page has an *Invoice / receipt files* box with an *Attach invoice photo / PDF* button, and each payment has an *Attach proof of payment* button. Files open in a new tab; **only admins can remove a file**.
+- **Rules:** JPG, PNG, WebP or PDF, up to **4 MB** each. Phone photos are shrunk in the browser (longest side 1,800 px, saved as JPEG) so they are normally a few hundred KB; a PDF over 4 MB is refused. Opening a file requires being signed in. Removing a visit or a payment removes its files with it.
+- **Limits of keeping files in the database:** fine for photos and slips at the clinic's volume (roughly a few thousand files); if the number of files grows very large, they can be moved to cloud storage later without changing these screens.
+- Editing a transaction does not show the file boxes — use the transaction page for that. Imported (CSV) visits have no files until one is attached.
+
 ### Commission rates per dentist and procedure
 
 Source: the clinic's **LIST - COMMISSION** sheet (one block per dentist: a cash-paying percentage per procedure, plus an HMO column).
@@ -95,7 +107,8 @@ A procedure left blank on the sheet earns **no commission** (no rate is stored).
 **Things to know about the sheet's data:**
 
 - Rates are matched by **procedure name**, ignoring capitals (e.g. "Consultation"). A procedure typed differently — "Panoramic Xray w/ Hard Copy", or a package name such as "Ortho Install(Package5) …" — does not match the sheet's "Panoramic xray" / "Ortho Install" and earns nothing until a rate is set for that exact name on the Commissions page. Using the same procedure names on the form (the procedure list fills from what has been typed) avoids this.
-- Rates are matched to the dentist by **account name**, spelled as on the sheet (e.g. "Dawn Rufino Rey Teope"). A dentist without an account, or whose account name is spelled differently, is skipped by the SQL file and listed in its check; fix the account name or create the account and run the file again. Visits are linked to a dentist by the name typed on the transaction, the same as before.
+- Rates are matched to the dentist by **account name**, spelled as on the sheet (e.g. "Dawn Rufino Rey Teope"); the SQL file adds any of the 7 that are missing. If a dentist already has an account under a different spelling, the file adds a second one — remove the duplicate on the Users page. A visit is linked to a dentist by the name on the transaction, so pick the dentist from the Dentist dropdown (the full names above). Older imported visits that only say "TEOPE" or "AHMAD" are not linked to an account, as before, and so earn no commission.
+- **To let a dentist sign in**, create their real account on the Users page and remove the placeholder one (rates are per account, so set them again or ask for them to be copied).
 - Wherever the sheet repeats a procedure name with a typo or double spaces ("Simple  extraction", "Post & Core (per post"), only rows that actually have a rate were loaded, so those do not matter.
 - Staff bonus is unchanged (still the cash percentage).
 
@@ -106,10 +119,10 @@ This follows the clinic's **"Auto compute OR"** sheet (the block marked "ITO PO 
 | Case | What the system does |
 |---|---|
 | **No discount, non-VAT item** | Total due = price. The whole amount is a **VAT-exempt sale**. |
-| **No discount, VAT item** | VATable sales = price ÷ 1.12; VAT = the rest (12%). Total due = price (VAT is *added back* on the receipt, so the total does not change). |
+| **No discount, VAT item** | VATable sales = price − the VAT typed; VAT = the amount typed. Total due = price (VAT is *added back* on the receipt, so the total does not change). |
 | **Promo / Dental Network Member / Other discount** | A plain reduction of the price. A VAT item keeps its VAT, now worked out on the lower amount. |
 | **PWD or Senior citizen, non-VAT item** | 20% of the price is taken off. Total due = price − 20%. Example from the sheet: ₱1,250 − ₱250 = **₱1,000**. |
-| **PWD or Senior citizen, VAT item** | VAT is removed first (the VAT amount typed on the line; if none, price ÷ 1.12), the **20% is taken off that VAT-free price**, and no VAT is added back — the sale becomes VAT-exempt. Example: ₱1,120 → net ₱1,000 → less ₱200 → **₱800** (Less: VAT ₱120). |
+| **PWD or Senior citizen, VAT item** | VAT is removed first (the VAT amount typed on the line; only for older visits saved as VAT without an amount is the standard price ÷ 1.12 used), the **20% is taken off that VAT-free price**, and no VAT is added back — the sale becomes VAT-exempt. Example: ₱1,120 → net ₱1,000 → less ₱200 → **₱800** (Less: VAT ₱120). |
 
 The receipt breakdown adds the lines up as: **Total sales (VAT inclusive)** − **Less: VAT** = **Amount: net of VAT**; then − **Less: Discount (SC, PWD)** + **Add: VAT** = **Total amount due**. *Vatable sales* are VAT items without a PWD/Senior discount; *VAT-exempt sales* are non-VAT items plus PWD/Senior items (shown before their discount, as on the sheet).
 
@@ -119,20 +132,23 @@ How it is applied: the discount is per procedure line, so a visit can mix a PWD 
 
 ### Left out on purpose
 
-- **Proof-of-payment file upload** (pictures/PDFs). The reference-number field is in; attaching files needs a file-storage service and is a separate piece of work.
 - **Head Office branch** — not added, as agreed.
 
 ---
 
-## 3. Files created (11)
+## 3. Files created (19)
 
 | File | Purpose |
 |---|---|
 | `scripts/sql/2026-10-invoices-patients-suppliers.sql` | Creates the new tables and columns, and fills them from existing data (see section 5). |
 | `scripts/sql/2026-10-commission-rates-unique.sql` | Adds the missing unique (dentist, procedure) rule on commission rates; if the same pair somehow has two rates, keeps the latest. |
-| `scripts/sql/2026-10-commission-rates-from-sheet.sql` | Adds the HMO columns to commission rates and loads every dentist's rates from the "LIST - COMMISSION" sheet (matches dentists by account name, adds missing procedures, safe to repeat). |
+| `scripts/sql/2026-10-attachments.sql` | Creates the `attachments` table that holds uploaded invoice photos / receipts. |
+| `src/lib/db/attachments.ts`, `src/lib/cashflow/attachment-rules.ts`, `src/lib/cashflow/attachment-client.ts` | Saving / listing / removing files; the shared file rules (types, 4 MB); the browser-side photo shrinking and upload. |
+| `src/app/api/cashflow/attachments/route.ts`, `[id]/route.ts` | Upload endpoint; open (sign-in required) and remove (admin only) a file. |
+| `src/components/cashflow/attachments-panel.tsx`, `file-picker.tsx` | The upload / list box on the transaction page and the file chooser on the Add transaction form. |
+| `scripts/sql/2026-10-commission-rates-from-sheet.sql` | Adds the HMO columns to commission rates, adds the 7 dentists on the sheet as profile-only dentist accounts, and loads every dentist's rates from the "LIST - COMMISSION" sheet (adds missing procedures, safe to repeat). |
 | `src/lib/cashflow/pricing.ts` | One shared set of money rules (discount, line total, VAT split, **PWD/Senior rule, official-receipt breakdown**, fee sharing) used by both the form and the server, so what staff see is what gets saved. |
-| `src/lib/cashflow/invoice-schema.ts` | Validation for the new transaction form (lines, discount rules, optional invoice number, first payment). |
+| `src/lib/cashflow/invoice-schema.ts` | Validation for the new transaction form (lines, discount rules, optional invoice number (duplicate-checked), first payment). |
 | `src/lib/db/invoices.ts` | Create / edit / delete a visit; invoice totals; invoice-number duplicate check; the new CSV import that groups lines into invoices and records payments. |
 | `src/lib/db/patients.ts` | Patient search, find-or-create, and the New/Returning rule. |
 | `src/lib/db/suppliers.ts` | Supplier list and find-or-create (existing details are never overwritten; blanks are filled in). |
@@ -140,7 +156,7 @@ How it is applied: the discount is per procedure line, so a visit can mix a PWD 
 | `src/components/cashflow/patient-combobox.tsx` | The patient typeahead field. |
 | `src/components/cashflow/or-breakdown.tsx` | The official-receipt breakdown block shown on the form, the transaction page and the printed invoice. |
 
-## 4. Files updated (52)
+## 4. Files updated (58)
 
 | File | What changed |
 |---|---|
@@ -163,6 +179,7 @@ How it is applied: the discount is per procedure line, so a visit can mix a PWD 
 | `src/lib/db/transactions.ts`, `src/lib/cashflow/dashboard-metrics.ts`, `src/components/cashflow/cashflow-overview.tsx`, `dashboard/dashboard-cards.tsx` | Transactions list shows one row per visit; transaction counts on the dashboard and Performance tables count visits. |
 | `scripts/recompute-merchant-fees.ts`, `scripts/backfill-payments.ts`, `package.json` | New `yarn db:recompute-fees` one-time refresh of merchant fee / net collection on visits with a card payment; the payment backfill now includes the fee on card visits. |
 | `src/lib/cashflow/constants.ts`, `src/lib/cashflow/invoice-schema.ts`, `src/lib/db/payments.ts`, `src/app/cashflow/transactions/payment-actions.ts`, `src/components/cashflow/payments-manager.tsx`, `invoice-view.tsx` | Merchant-fee rates and Maya payment types; Merchant fee / Withholding tax removed from the transaction input; fee added on top of the amount paid and recalculated when payments change; fee and total paid shown on the form, payments list and printed invoice. |
+| `src/lib/db/schema.ts`, `src/lib/cashflow/invoice-schema.ts`, `src/components/cashflow/transaction-form.tsx`, `transaction-detail.tsx`, `payments-manager.tsx`, `src/app/cashflow/transactions/[id]/page.tsx` | New `attachments` table; upload pickers on the form; files box and per-payment proof buttons on the transaction page. |
 | `src/lib/db/commission-rates.ts` | Saving a commission rate no longer depends on a database rule that was missing on the live database (fixes the "no unique or exclusion constraint" error). Rates now carry an optional HMO % and HMO peso value. |
 | `src/lib/db/schema.ts`, `src/lib/cashflow/pricing.ts`, `src/lib/db/transactions.ts` | Commission rate table gains `hmo_rate_percent` and `hmo_peso_value`; new HMO payment-type list and `computeCommission` rule (cash % for cash visits; HMO peso value or HMO % for HMO visits; none otherwise); used when a visit is saved. |
 | `src/app/cashflow/commissions/actions.ts`, `page.tsx`, `src/components/cashflow/commission-rates-manager.tsx` | Commissions page: cash-paying and HMO columns, HMO % and HMO peso inputs, explanatory text. |
@@ -203,12 +220,14 @@ How it is applied: the discount is per procedure line, so a visit can mix a PWD 
 - **Removing a transaction from the table removes the whole visit** (all its procedures and payments), and the confirmation says how many procedures.
 - **Patients are matched by name only.** Two different people with exactly the same name are treated as one patient.
 - **Discount rates** (PWD 20%, Senior 20%, Dental Network Member 5%) are presets to confirm with the accountant; staff can always type a different value.
-- **VAT field:** the typed VAT is the VAT contained in what the patient pays for that line (after any promo discount). Procedures that were last sold as VAT pre-fill the standard 12% of their remembered price, which can be overwritten. The Add Expenses form still uses the three-option VAT type.
+- **VAT field:** the typed VAT is the VAT contained in what the patient pays for that line (after any promo discount). VAT is never pre-filled or suggested. The Add Expenses form still uses the three-option VAT type.
 - **Merchant fees on visits saved before this update** were typed by hand or deducted from net collection. For visits with a **card payment**, run `yarn db:recompute-fees` once (it only re-works visits that have a card payment; cash / GCash / HMO visits are left alone, and it is safe to repeat) so their fee, net collection and commission follow the add-on rule. **Existing card payments will now read as part-paid**: a card payment of exactly the bill (e.g. ₱1,000 on a ₱1,000 bill by BDO) leaves the fee unpaid, so the visit shows a small balance until the fee is paid (or the payment is corrected to include it). Otherwise a visit is refreshed when it is edited or a payment on it is added or removed.
 - **PWD / Senior visits saved before this update** were worked out as 20% of the full price. They are not changed automatically; if one is opened and saved again it is recalculated with the new rule (VAT removed first for VAT items).
 - **The sample sheet's first block has numbers that do not add up** (see "PWD / Senior discount and VAT"). The system follows the arithmetic and the second block; please confirm with the accountant.
 
 ## 8. What was checked, and what to test
+
+**Checked (uploads, invoice number):** type check and lint — no errors; the Add transaction form was opened in the browser and shows the Invoice number field and the two file choosers (nothing was saved or uploaded). Not yet tried with a real file, because the attachments SQL has to be run first.
 
 **Checked (commission rates):** type check and lint — no errors; the commission rule gives ₱100 for a ₱1,000 cash consultation at 10%, ₱0 for the same consultation billed to Maxicare, ₱150 for a ₱1,500 OP billed to Maxicare, ₱0 for OP paid cash, ₱50 for a Medicard Panoramic xray (and ₱0 if paid by GCash), and ₱0 with no rate set. The Commissions page itself was **not** opened, because it needs the new SQL file run first.
 
@@ -216,6 +235,7 @@ How it is applied: the discount is per procedure line, so a visit can mix a PWD 
 
 **Not yet done:** running the SQL, and trying it in the browser. Suggested walk-through after the SQL is run:
 
+00. After running the attachments SQL: add a transaction with an invoice photo and a proof of payment, open it and check both files open; try a PDF over 4 MB (refused).
 0. After running the commission SQL: open **Commissions** and confirm each dentist has their rates (Dawn: Consultation 10%, Ortho Install 25%, OP HMO 10%, Panoramic xray HMO ₱50 …). Then add a cash **Consultation** for a dentist (commission = 10% of the net collection) and the same consultation paid by **Maxicare** (commission ₱0).
 1. Add a transaction with **two procedures**, one with a 20% PWD discount and one VAT. Check the totals, then save and open it — it should show two lines, a payment and the OR breakdown. Also try a ₱1,250 non-VAT item with PWD (expect ₱1,000) and a ₱1,120 VAT item with PWD (expect ₱800).
 2. Type the start of an existing patient's name — they should appear with their last visit date; a new name should show "New patient".
@@ -226,4 +246,4 @@ How it is applied: the discount is per procedure line, so a visit can mix a PWD 
 
 ## 9. Not done yet (deferred)
 
-Proof-of-payment file upload · showing the last invoice number used as a hint · a "missing invoice no." filter · changing the Visit ID format · Head Office branch · switching the dashboard's patient card to use the patients table · importing the expenses spreadsheet.
+Showing the last invoice number used as a hint · a "missing invoice no." filter · changing the Visit ID format · Head Office branch · switching the dashboard's patient card to use the patients table · importing the expenses spreadsheet.

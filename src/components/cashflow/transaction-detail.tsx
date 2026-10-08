@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { removeInvoiceAction } from "@/app/cashflow/actions";
+import { AttachmentsPanel } from "@/components/cashflow/attachments-panel";
 import { EditTransactionModal } from "@/components/cashflow/edit-transaction-modal";
 import { PaymentsManager } from "@/components/cashflow/payments-manager";
 import {
@@ -13,6 +14,7 @@ import {
 } from "@/lib/cashflow/pricing";
 import { OrBreakdown, hasOrDetail } from "@/components/cashflow/or-breakdown";
 import type { Branch } from "@/lib/db/branches";
+import type { AttachmentInfo } from "@/lib/db/attachments";
 import type { InvoiceDetail } from "@/lib/db/invoices";
 import type { ProcedureOption } from "@/lib/db/procedures";
 
@@ -30,6 +32,7 @@ export function TransactionDetail({
   dentistOptions,
   branches,
   procedures,
+  attachments,
 }: {
   detail: InvoiceDetail;
   openedLineId: string;
@@ -37,6 +40,8 @@ export function TransactionDetail({
   dentistOptions: string[];
   branches: Branch[];
   procedures: ProcedureOption[];
+  /** Invoice photos and proofs of payment attached to this visit. */
+  attachments: AttachmentInfo[];
 }) {
   const router = useRouter();
   const [isRemoving, setIsRemoving] = useState(false);
@@ -144,7 +149,7 @@ export function TransactionDetail({
       <div className="grid grid-cols-1 gap-6 rounded-xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-950 sm:grid-cols-2">
         <DetailField
           label="Invoice number"
-          value={invoice.invoiceNumber || "—"}
+          value={invoice.invoiceNumber || "No invoice"}
           mono
         />
         <DetailField label="Date" value={invoice.visitDate} />
@@ -271,7 +276,42 @@ export function TransactionDetail({
         payments={payments}
         canDelete={canDelete}
         readOnly
+        attachments={attachments}
       />
+
+      <div className="rounded-xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-950">
+        <h3 className="mb-3 text-sm font-semibold text-zinc-900 dark:text-zinc-50">
+          Invoice / receipt files
+        </h3>
+        <AttachmentsPanel
+          invoiceId={invoice.id}
+          kind="invoice"
+          items={attachments.filter(
+            (item) => item.kind === "invoice" && item.paymentId === null,
+          )}
+          canDelete={canDelete}
+          buttonLabel="Attach invoice photo / PDF"
+          emptyText="No invoice file attached yet."
+        />
+        {attachments.some(
+          (item) => item.kind === "receipt" && item.paymentId === null,
+        ) && (
+          <div className="mt-4 space-y-2">
+            <p className="text-xs font-medium uppercase tracking-wide text-zinc-400 dark:text-zinc-500">
+              Other proof of payment
+            </p>
+            <AttachmentsPanel
+              invoiceId={invoice.id}
+              kind="receipt"
+              items={attachments.filter(
+                (item) => item.kind === "receipt" && item.paymentId === null,
+              )}
+              canDelete={canDelete}
+              buttonLabel="Attach proof of payment"
+            />
+          </div>
+        )}
+      </div>
 
       {first?.remarks && (
         <div className="rounded-xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-950">

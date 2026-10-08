@@ -10,6 +10,7 @@ import {
 } from "@/app/cashflow/actions";
 import { lookupPatientAction } from "@/app/cashflow/patient-actions";
 import { FormField } from "@/components/auth/form-field";
+import { FilePicker } from "@/components/cashflow/file-picker";
 import { PatientCombobox } from "@/components/cashflow/patient-combobox";
 import { ProcedureCombobox } from "@/components/cashflow/procedure-combobox";
 import { SelectField } from "@/components/cashflow/select-field";
@@ -19,6 +20,7 @@ import {
   TRANSACTION_TYPES,
   VISIT_TYPES,
 } from "@/lib/cashflow/constants";
+import { uploadAttachment } from "@/lib/cashflow/attachment-client";
 import { InvoiceInputSchema } from "@/lib/cashflow/invoice-schema";
 import { OrBreakdown, hasOrDetail } from "@/components/cashflow/or-breakdown";
 import {
@@ -29,7 +31,6 @@ import {
   priceLine,
   receivedForBill,
   round2,
-  standardVatOf,
   summarizeOr,
   vatTypeFromAmount,
 } from "@/lib/cashflow/pricing";
@@ -258,6 +259,9 @@ export function TransactionForm(props: TransactionFormProps) {
   const [status, setStatus] = useState<"idle" | "submitting">("idle");
   const [justAdded, setJustAdded] = useState(false);
   const [numberWarning, setNumberWarning] = useState<string | null>(null);
+  // Photos / PDFs chosen while adding; uploaded once the transaction is saved.
+  const [invoiceFiles, setInvoiceFiles] = useState<File[]>([]);
+  const [receiptFiles, setReceiptFiles] = useState<File[]>([]);
   const [lookup, setLookup] = useState<{
     forKey: string;
     known: boolean;
@@ -303,15 +307,11 @@ export function TransactionForm(props: TransactionFormProps) {
       lines: prev.lines.map((line, i) => {
         if (i !== index) return line;
         const next = { ...line, procedure: name };
-        // Pre-fill the price and VAT type remembered for this procedure,
-        // but only on a line that has no price yet — never over what staff
-        // already typed.
+        // Pre-fill the price remembered for this procedure, but only on a
+        // line that has no price yet — never over what staff already typed.
+        // VAT is never pre-filled: it varies, so it is typed from the receipt.
         if (known && !line.listPrice && known.defaultPrice !== null) {
           next.listPrice = known.defaultPrice.toString();
-          next.vatAmount =
-            known.defaultVatType === "vat"
-              ? standardVatOf(known.defaultPrice).toString()
-              : "";
         }
         return next;
       }),
@@ -370,21 +370,30 @@ export function TransactionForm(props: TransactionFormProps) {
       : null;
   const effectiveVisitType = form.visitType || activeLookup?.visitType || "";
 
-  async function checkNumber() {
+  /** Checks the typed invoice number against the others at the same
+   * branch. Returns the problem ("already used ...") or null when it is
+   * fine or blank (blank = no invoice, never a duplicate). A duplicate also
+   * blocks the form from being submitted. */
+  async function checkNumber(
+    branchId: string = form.branchId,
+  ): Promise<string | null> {
     const number = form.invoiceNumber.trim();
     if (!number) {
       setNumberWarning(null);
-      return;
+      return null;
     }
     try {
       const result = await checkInvoiceNumberAction(
         number,
-        form.branchId,
+        branchId,
         editingInvoiceId,
       );
-      setNumberWarning(result.ok ? result.problem : null);
+      const problem = result.ok ? result.problem : null;
+      setNumberWarning(problem);
+      return problem;
     } catch {
       setNumberWarning(null);
+      return null;
     }
   }
 
@@ -449,8 +458,16 @@ export function TransactionForm(props: TransactionFormProps) {
       return;
     }
 
-    setErrors({});
+    // A duplicate invoice number can't be submitted.
     setStatus("submitting");
+    const duplicate = await checkNumber();
+    if (duplicate) {
+      setErrors({ invoiceNumber: duplicate });
+      setStatus("idle");
+      return;
+    }
+
+    setErrors({});
 
     const result =
       props.mode === "edit"
@@ -466,11 +483,43 @@ export function TransactionForm(props: TransactionFormProps) {
       return;
     }
 
+    // Attach the chosen invoice / proof-of-payment files to the new visit.
+    let uploadProblem: string | null = null;
+    if (props.mode !== "edit") {
+      const uploads = [
+        ...invoiceFiles.map((file) => ({ file, kind: "invoice" as const })),
+        ...receiptFiles.map((file) => ({ file, kind: "receipt" as const })),
+      ];
+      for (const upload of uploads) {
+        const uploaded = await uploadAttachment({
+          invoiceId: result.data.invoiceId,
+          kind: upload.kind,
+          file: upload.file,
+          toOnlyPayment: upload.kind === "receipt",
+        });
+        if (!uploaded.ok) {
+          uploadProblem = `${upload.file.name}: ${uploaded.message}`;
+          break;
+        }
+      }
+    }
+
     setStatus("idle");
 
     if (props.mode !== "edit") {
       setForm(blankFormState());
       setNumberWarning(null);
+      setInvoiceFiles([]);
+      setReceiptFiles([]);
+    }
+    if (uploadProblem) {
+      // The transaction itself is saved; only a file failed. Stay open so the
+      // message is seen, and say where to attach it again.
+      setFormError(
+        `The transaction was saved, but a file could not be attached (${uploadProblem}). Open the transaction to attach it again.`,
+      );
+      router.refresh();
+      return;
     }
     setJustAdded(true);
     router.refresh();
@@ -507,22 +556,25 @@ export function TransactionForm(props: TransactionFormProps) {
           <FormField
             label="Invoice number"
             type="text"
-            placeholder="From the invoice booklet"
+            placeholder="Leave blank if there is no invoice"
             value={form.invoiceNumber}
             error={errors.invoiceNumber}
             onChange={(event) => {
               updateField("invoiceNumber", event.target.value);
               setNumberWarning(null);
+              setErrors((prev) => ({ ...prev, invoiceNumber: "" }));
             }}
-            onBlur={checkNumber}
+            onBlur={() => void checkNumber()}
           />
           {numberWarning && !errors.invoiceNumber && (
-            <p className="text-xs text-amber-700 dark:text-amber-400">
-              {numberWarning}
+            <p role="alert" className="text-xs text-red-600 dark:text-red-400">
+              {numberWarning} Use a different number, or leave it blank if there
+              is no invoice.
             </p>
           )}
           <p className="text-xs text-zinc-500 dark:text-zinc-400">
-            Copy the number from the paper invoice.
+            Copy the number from the paper invoice. Blank means this transaction
+            has no invoice.
           </p>
         </div>
         <FormField
@@ -533,6 +585,16 @@ export function TransactionForm(props: TransactionFormProps) {
           error={errors.date}
           onChange={(event) => updateField("date", event.target.value)}
         />
+        {mode === "create" && (
+          <div className="sm:col-span-2">
+            <FilePicker
+              label="Invoice photo / PDF (optional)"
+              hint="JPG, PNG or PDF. Phone photos are shrunk automatically."
+              files={invoiceFiles}
+              onChange={setInvoiceFiles}
+            />
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -609,7 +671,11 @@ export function TransactionForm(props: TransactionFormProps) {
             </label>
             <select
               value={form.branchId}
-              onChange={(event) => updateField("branchId", event.target.value)}
+              onChange={(event) => {
+                updateField("branchId", event.target.value);
+                // The same number can be fine at another branch.
+                void checkNumber(event.target.value);
+              }}
               className={selectClass}
             >
               <option value="">No branch</option>
@@ -705,21 +771,6 @@ export function TransactionForm(props: TransactionFormProps) {
                     >
                       {err("vatAmount")}
                     </p>
-                  ) : Number(line.listPrice) > 0 &&
-                    !(Number(line.vatAmount) > 0) ? (
-                    <button
-                      type="button"
-                      onClick={() =>
-                        updateLine(index, {
-                          vatAmount: standardVatOf(
-                            Number(line.listPrice),
-                          ).toString(),
-                        })
-                      }
-                      className="w-fit text-xs font-medium text-amber-700 hover:underline dark:text-amber-400"
-                    >
-                      Use 12% VAT
-                    </button>
                   ) : null}
                 </div>
 
@@ -912,6 +963,14 @@ export function TransactionForm(props: TransactionFormProps) {
                 }
               />
             </div>
+            <div className="sm:col-span-2">
+              <FilePicker
+                label="Proof of payment (optional)"
+                hint="Card slip, GCash or bank-transfer screenshot."
+                files={receiptFiles}
+                onChange={setReceiptFiles}
+              />
+            </div>
           </div>
           {feeRate > 0 && (
             <p className="text-xs text-zinc-600 dark:text-zinc-300">
@@ -958,7 +1017,7 @@ export function TransactionForm(props: TransactionFormProps) {
       <div className="flex items-center gap-3">
         <button
           type="submit"
-          disabled={status === "submitting"}
+          disabled={status === "submitting" || Boolean(numberWarning)}
           className="rounded-lg bg-amber-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-70"
         >
           {mode === "edit"

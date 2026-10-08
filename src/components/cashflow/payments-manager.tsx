@@ -7,6 +7,7 @@ import {
   deletePaymentAction,
 } from "@/app/cashflow/transactions/payment-actions";
 import { FormField } from "@/components/auth/form-field";
+import { AttachmentsPanel } from "@/components/cashflow/attachments-panel";
 import { SelectField } from "@/components/cashflow/select-field";
 import { PAYMENT_TYPES } from "@/lib/cashflow/constants";
 import {
@@ -15,6 +16,7 @@ import {
   merchantFeeRateFor,
   receivedForBill,
 } from "@/lib/cashflow/pricing";
+import type { AttachmentInfo } from "@/lib/db/attachments";
 import type { Payment } from "@/lib/db/payments";
 
 const currencyFormatter = new Intl.NumberFormat("en-PH", {
@@ -52,11 +54,15 @@ export function PaymentsManager({
   payments,
   canDelete = false,
   readOnly = false,
+  attachments,
 }: {
   invoiceId: string;
   totalDue: number;
   payments: Payment[];
   canDelete?: boolean;
+  /** When given, each payment shows its proof-of-payment files with an
+   * "Attach proof" button (the transaction page passes them). */
+  attachments?: AttachmentInfo[];
   /** Viewing a transaction shows payments as read-only — no "Record a
    * payment" form, no "Remove" buttons. Recording or removing a payment is
    * only available from the edit flow, where this is rendered without
@@ -169,7 +175,7 @@ export function PaymentsManager({
           {payments.map((payment) => (
             <li
               key={payment.id}
-              className="flex items-center justify-between gap-3 px-4 py-3 text-sm"
+              className="flex flex-wrap items-start justify-between gap-3 px-4 py-3 text-sm"
             >
               <div>
                 <p className="font-medium text-zinc-900 dark:text-zinc-50">
@@ -195,6 +201,20 @@ export function PaymentsManager({
                   {payment.referenceNo ? ` · Ref. ${payment.referenceNo}` : ""}
                   {payment.notes ? ` · ${payment.notes}` : ""}
                 </p>
+                {attachments && (
+                  <div className="mt-2">
+                    <AttachmentsPanel
+                      invoiceId={invoiceId}
+                      kind="receipt"
+                      paymentId={payment.id}
+                      items={attachments.filter(
+                        (item) => item.paymentId === payment.id,
+                      )}
+                      canDelete={canDelete}
+                      buttonLabel="Attach proof of payment"
+                    />
+                  </div>
+                )}
               </div>
               {!readOnly && canDelete && (
                 <button

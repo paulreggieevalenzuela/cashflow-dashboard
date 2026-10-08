@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { addExpenseAction } from "@/app/cashflow/expense-actions";
 import { FormField } from "@/components/auth/form-field";
+import { FilePicker } from "@/components/cashflow/file-picker";
 import { ProcedureCombobox } from "@/components/cashflow/procedure-combobox";
 import { SelectField } from "@/components/cashflow/select-field";
 import {
@@ -11,6 +12,7 @@ import {
   EXPENSE_NATURES,
   EXPENSE_SOURCES,
 } from "@/lib/cashflow/constants";
+import { uploadAttachment } from "@/lib/cashflow/attachment-client";
 import { ManualExpenseInputSchema } from "@/lib/cashflow/expense-schema";
 import {
   VAT_TYPES,
@@ -100,6 +102,8 @@ export function ExpenseForm({
   const [duplicateWarning, setDuplicateWarning] = useState<string | null>(null);
   const [status, setStatus] = useState<"idle" | "submitting">("idle");
   const [justAdded, setJustAdded] = useState(false);
+  // Receipt / proof photos or PDFs, uploaded once the expense is saved.
+  const [proofFiles, setProofFiles] = useState<File[]>([]);
 
   function updateField<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -174,8 +178,31 @@ export function ExpenseForm({
       return;
     }
 
+    // Attach the chosen receipt / proof files to the new expense.
+    let uploadProblem: string | null = null;
+    for (const file of proofFiles) {
+      const uploaded = await uploadAttachment({
+        expenseId: result.data.expenseId,
+        kind: "receipt",
+        file,
+      });
+      if (!uploaded.ok) {
+        uploadProblem = `${file.name}: ${uploaded.message}`;
+        break;
+      }
+    }
+
     setStatus("idle");
     setForm(blankFormState());
+    setProofFiles([]);
+    if (uploadProblem) {
+      // The expense itself is saved; only a file failed.
+      setFormError(
+        `The expense was saved, but a file could not be attached (${uploadProblem}). You can attach it again from the Expenses page.`,
+      );
+      router.refresh();
+      return;
+    }
     setJustAdded(true);
     router.refresh();
     window.setTimeout(() => setJustAdded(false), 2500);
@@ -372,6 +399,13 @@ export function ExpenseForm({
         placeholder="Optional"
         value={form.remarks}
         onChange={(event) => updateField("remarks", event.target.value)}
+      />
+
+      <FilePicker
+        label="Receipt / proof (optional)"
+        hint="Photo or PDF of the receipt or proof of payment. Phone photos are shrunk automatically."
+        files={proofFiles}
+        onChange={setProofFiles}
       />
 
       {branches && branches.length > 0 && (
