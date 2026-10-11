@@ -11,6 +11,7 @@ import { AttachmentsPanel } from "@/components/cashflow/attachments-panel";
 import { SelectField } from "@/components/cashflow/select-field";
 import { PAYMENT_TYPES } from "@/lib/cashflow/constants";
 import {
+  round2,
   appliedToBill,
   computeMerchantFee,
   merchantFeeRateFor,
@@ -75,8 +76,8 @@ export function PaymentsManager({
   const [status, setStatus] = useState<"idle" | "submitting">("idle");
   const [rowBusyId, setRowBusyId] = useState<string | null>(null);
 
-  // "Collected" counts towards the bill: a card payment includes its
-  // merchant fee, which is taken out here.
+  // "Collected" counts towards the bill: a card payment's merchant fee is
+  // inside the amount, so the whole payment counts.
   const collected = payments.reduce(
     (sum, payment) => sum + appliedToBill(payment.amount, payment.paymentType),
     0,
@@ -297,27 +298,28 @@ export function PaymentsManager({
             {merchantFeeRateFor(form.paymentType) > 0 && (
               <p className="text-xs text-zinc-600 dark:text-zinc-300 sm:col-span-2">
                 Merchant fee ({merchantFeeRateFor(form.paymentType)}% for{" "}
-                {form.paymentType}) is added on top: to pay the balance of{" "}
-                {currencyFormatter.format(balanceDue)} in full the patient pays{" "}
-                <span className="font-medium tabular-nums">
-                  {currencyFormatter.format(
-                    receivedForBill(balanceDue, form.paymentType),
-                  )}
-                </span>
-                .
+                {form.paymentType}) is included in the payment, not added on
+                top.
                 {Number(form.amount) > 0 && (
                   <>
                     {" "}
-                    Of the {currencyFormatter.format(Number(form.amount))}{" "}
-                    entered,{" "}
-                    {currencyFormatter.format(
-                      appliedToBill(Number(form.amount), form.paymentType),
-                    )}{" "}
-                    pays the bill and{" "}
+                    Of the {currencyFormatter.format(
+                      Number(form.amount),
+                    )} paid,{" "}
                     {currencyFormatter.format(
                       computeMerchantFee(Number(form.amount), form.paymentType),
                     )}{" "}
-                    is the merchant fee.
+                    is the merchant fee, so the clinic receives{" "}
+                    {currencyFormatter.format(
+                      round2(
+                        Number(form.amount) -
+                          computeMerchantFee(
+                            Number(form.amount),
+                            form.paymentType,
+                          ),
+                      ),
+                    )}
+                    .
                   </>
                 )}
               </p>

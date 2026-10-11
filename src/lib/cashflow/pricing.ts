@@ -120,14 +120,12 @@ export function merchantFeeRateFor(
 }
 
 /**
- * The fee is ADDED ON TOP of the bill: a ₱1,000 bill at 5% costs the patient
- * ₱1,050 by card (₱1,000 for the bill + ₱50 merchant fee). So the amount of
- * a card payment is what actually goes through the terminal, and only the
- * part that is not fee counts towards the bill. Paying just ₱1,000 by card
- * leaves the bill NOT fully paid.
+ * The fee is INCLUDED in the payment, not added on top: a ₱3,500 bill paid
+ * by card at 5% is paid in full by a ₱3,500 payment. The terminal keeps the
+ * fee (₱175), so the clinic receives ₱3,325 — that is its net collection.
  *
- * Splits an amount received into the part that pays the bill and the
- * merchant fee inside it. Payment types with no fee apply in full.
+ * Splits an amount received into what pays the bill (all of it) and the
+ * merchant fee contained in it. Payment types with no fee have none.
  */
 export function splitReceived(
   received: number,
@@ -135,14 +133,14 @@ export function splitReceived(
 ): { applied: number; fee: number } {
   const amount = round2(received);
   const rate = merchantFeeRateFor(paymentType);
-  if (!(amount > 0) || rate <= 0) {
-    return { applied: amount > 0 ? amount : 0, fee: 0 };
+  if (!(amount > 0)) {
+    return { applied: 0, fee: 0 };
   }
-  const applied = round2(amount / (1 + rate / 100));
-  return { applied, fee: round2(amount - applied) };
+  return { applied: amount, fee: round2((amount * rate) / 100) };
 }
 
-/** The part of an amount received that pays the bill (the rest is fee). */
+/** The part of an amount received that pays the bill (all of it — the fee
+ * comes out of the payment, it is not extra). */
 export function appliedToBill(
   received: number,
   paymentType: string | null | undefined,
@@ -158,15 +156,21 @@ export function computeMerchantFee(
   return splitReceived(received, paymentType).fee;
 }
 
-/** What the patient must hand over to settle `bill` with this payment type:
- * the bill plus its merchant fee (just the bill when there is no fee). */
+/** What the patient hands over to settle `bill`: the bill itself — the
+ * merchant fee is taken out of it. */
 export function receivedForBill(
   bill: number,
-  paymentType: string | null | undefined,
+  // Kept so callers read the same for every payment type.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  _paymentType?: string | null,
 ): number {
-  const rate = merchantFeeRateFor(paymentType);
-  const amount = round2(bill);
-  return rate > 0 && amount > 0 ? round2(amount * (1 + rate / 100)) : amount;
+  return round2(bill);
+}
+
+/** Unit price times quantity — the line's price before any discount. */
+export function computeListPrice(unitPrice: number, quantity: number): number {
+  const qty = Number.isFinite(quantity) && quantity > 0 ? Math.floor(quantity) : 1;
+  return round2(round2(unitPrice) * qty);
 }
 
 export const DISCOUNT_MODES = ["percent", "amount"] as const;
@@ -267,22 +271,6 @@ export type PricedLineAmounts = {
 };
 
 /**
- * What the VAT field on a line means: a peso amount typed from the receipt.
- * Blank (or 0) = non-VAT / VAT-exempt; any amount = a VATable line.
- */
-export function vatTypeFromAmount(
-  vatAmount: number | null | undefined,
-): VatType {
-  return (vatAmount ?? 0) > 0 ? "vat" : "non_vat";
-}
-
-/** The standard 12% VAT contained in a VAT-inclusive price — the figure the
- * form offers as a one-click fill for the VAT field. */
-export function standardVatOf(price: number): number {
-  return computeVat(price, "vat").vat;
-}
-
-/**
  * Prices one procedure line — the single place the discount + VAT rules
  * live, used by the form (live totals) and the server (saved figures).
  *
@@ -295,28 +283,25 @@ export function standardVatOf(price: number): number {
 export function priceLine(input: {
   listPrice: number;
   vatType: VatType;
-  /** The VAT peso amount typed on the line, when there is one. It is the VAT
-   * contained in the amount due; without it the standard 12% is used. */
-  vatAmount?: number;
   discountMode: DiscountMode | "" | undefined;
   discountValue: number;
   discountReason?: string | null;
+  /**
+   * Whether the discount is the PWD / Senior Citizen kind. The discount
+   * type decides this (its `statutory` flag); when the caller does not know
+   * it — an old line with free-text reason — the reason text is used.
+   */
+  statutory?: boolean;
 }): PricedLineAmounts {
   const listPrice = round2(input.listPrice);
-  const typedVat =
-    input.vatType === "vat" && (input.vatAmount ?? 0) > 0
-      ? round2(input.vatAmount ?? 0)
-      : undefined;
+  const isStatutory =
+    input.statutory ?? isStatutoryDiscount(input.discountReason);
   const hasDiscount =
     !!input.discountMode && input.discountValue > 0 && listPrice > 0;
 
-  if (hasDiscount && isStatutoryDiscount(input.discountReason)) {
+  if (hasDiscount && isStatutory) {
     const net =
-      input.vatType !== "vat"
-        ? listPrice
-        : typedVat !== undefined
-          ? round2(listPrice - Math.min(typedVat, listPrice))
-          : computeVat(listPrice, "vat").base;
+      input.vatType !== "vat" ? listPrice : computeVat(listPrice, "vat").base;
     const discountAmount = computeDiscountAmount(
       net,
       input.discountMode,
@@ -332,16 +317,6 @@ export function priceLine(input: {
     input.discountValue,
   );
   const total = round2(listPrice - discountAmount);
-  if (typedVat !== undefined) {
-    const vat = Math.min(typedVat, total);
-    return {
-      discountAmount,
-      total,
-      vatBase: round2(total - vat),
-      vat,
-      statutory: false,
-    };
-  }
   const { base, vat } = computeVat(total, input.vatType);
   return { discountAmount, total, vatBase: base, vat, statutory: false };
 }

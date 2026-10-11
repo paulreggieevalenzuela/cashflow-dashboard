@@ -17,6 +17,7 @@ import { Modal } from "@/components/ui/modal";
 import type { CashflowTransaction } from "@/lib/cashflow/schema";
 import type { Branch } from "@/lib/db/branches";
 import type { Invoice, InvoiceSummary } from "@/lib/db/invoices";
+import type { DiscountTypeOption } from "@/lib/db/discount-types";
 import type { ProcedureOption } from "@/lib/db/procedures";
 
 /**
@@ -256,6 +257,7 @@ export function TransactionsTable({
   dentistOptions,
   branches,
   procedures,
+  discountTypes,
 }: {
   transactions: CashflowTransaction[];
   canDelete?: boolean;
@@ -265,6 +267,7 @@ export function TransactionsTable({
   dentistOptions: string[];
   branches: Branch[];
   procedures: ProcedureOption[];
+  discountTypes: DiscountTypeOption[];
 }) {
   const router = useRouter();
   const [removingId, setRemovingId] = useState<string | null>(null);
@@ -338,6 +341,7 @@ export function TransactionsTable({
           dentistOptions={dentistOptions}
           branches={branches}
           procedures={procedures}
+          discountTypes={discountTypes}
           onSuccess={() => setEditing(null)}
         />
       )}

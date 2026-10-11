@@ -8,6 +8,7 @@ import type { CashflowTransaction } from "@/lib/cashflow/schema";
 import type { Branch } from "@/lib/db/branches";
 import type { Invoice } from "@/lib/db/invoices";
 import type { Payment } from "@/lib/db/payments";
+import type { DiscountTypeOption } from "@/lib/db/discount-types";
 import type { ProcedureOption } from "@/lib/db/procedures";
 
 /**
@@ -24,6 +25,7 @@ export function EditTransactionModal({
   dentistOptions,
   branches,
   procedures,
+  discountTypes,
   payments,
   totalDue,
   canDelete = false,
@@ -34,6 +36,7 @@ export function EditTransactionModal({
   dentistOptions: string[];
   branches: Branch[];
   procedures: ProcedureOption[];
+  discountTypes: DiscountTypeOption[];
   /** When provided, an editable Payments section (record/remove a payment)
    * is shown below the transaction form — payments are only ever
    * updatable from here, never from the read-only detail page view. */
@@ -77,6 +80,7 @@ export function EditTransactionModal({
             dentistOptions={dentistOptions}
             branches={branches}
             procedures={procedures}
+            discountTypes={discountTypes}
             onSuccess={() => setOpen(false)}
           />
           {payments && (

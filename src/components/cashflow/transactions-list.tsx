@@ -12,6 +12,7 @@ import {
 } from "@/lib/cashflow/transactions-query";
 import type { CashflowTransaction } from "@/lib/cashflow/schema";
 import type { Branch } from "@/lib/db/branches";
+import type { DiscountTypeOption } from "@/lib/db/discount-types";
 import type { ProcedureOption } from "@/lib/db/procedures";
 
 export function TransactionsList({
@@ -23,6 +24,7 @@ export function TransactionsList({
   dentistOptions,
   branches,
   procedures,
+  discountTypes,
   invoiceSummaries,
 }: {
   transactions: CashflowTransaction[];
@@ -33,6 +35,7 @@ export function TransactionsList({
   dentistOptions: string[];
   branches: Branch[];
   procedures: ProcedureOption[];
+  discountTypes: DiscountTypeOption[];
   invoiceSummaries: InvoiceSummaries;
 }) {
   const filtered = hasActiveTransactionFilters(query);
@@ -53,6 +56,7 @@ export function TransactionsList({
           dentistOptions={dentistOptions}
           branches={branches}
           procedures={procedures}
+          discountTypes={discountTypes}
         />
       </div>
       <TransactionsToolbar query={query} dentistOptions={dentistOptions} />
@@ -65,6 +69,7 @@ export function TransactionsList({
         dentistOptions={dentistOptions}
         branches={branches}
         procedures={procedures}
+        discountTypes={discountTypes}
       />
       {/* useSearchParams() inside TransactionsPagination needs a Suspense
           boundary — otherwise Next.js bails this route out of static

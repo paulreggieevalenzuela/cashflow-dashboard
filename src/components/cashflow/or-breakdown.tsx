@@ -21,7 +21,7 @@ export function OrBreakdown({ summary }: { summary: OrSummary }) {
     { label: "Vatable sales", value: money.format(summary.vatableSales) },
     { label: "VAT-exempt sales", value: money.format(summary.vatExemptSales) },
     {
-      label: "VAT",
+      label: "VAT (12%)",
       value: money.format(summary.vat),
     },
     {

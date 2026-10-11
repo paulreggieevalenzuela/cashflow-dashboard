@@ -5,13 +5,13 @@ config({ path: ".env.local" });
 /**
  * One-time refresh of merchant fees on existing visits.
  *
- * The merchant fee is now worked out from each payment's type (GHL 2.8%,
- * BDO 5%, MAYA 3.4%) and is added ON TOP of the bill: the patient pays the
- * bill plus the fee, and net collection / commission stay on the bill.
- * Visits saved before that rule have the old figures (fee typed by hand, or
- * subtracted from net collection). This re-works the visits that have a
- * card payment (a payment type with a merchant fee), so their merchant fee,
- * net collection and commission match the new rule.
+ * The merchant fee is worked out from each payment's type (GHL 2.8%,
+ * BDO 5%, MAYA 3.4%) and is INCLUDED in the payment: a 3,500 card payment
+ * pays a 3,500 bill in full, the fee (175) comes out of it and the clinic's
+ * net collection is 3,325. Visits saved earlier (fee typed by hand, or under
+ * the short-lived "fee on top" rule) have other figures. This re-works the
+ * visits that have a card payment (a payment type with a merchant fee), so
+ * their merchant fee, net collection and commission match this rule.
  *
  * Visits with no card payment are never touched, so older hand-typed fees on
  * cash / GCash / HMO visits are left exactly as they are. Safe to run more

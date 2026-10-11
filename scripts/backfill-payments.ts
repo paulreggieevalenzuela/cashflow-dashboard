@@ -21,7 +21,7 @@ async function main() {
   const { listTransactions } = await import("../src/lib/db/transactions");
   const { bulkInsertPayments, listInvoiceIdsWithPayments } =
     await import("../src/lib/db/payments");
-  const { receivedForBill, round2 } =
+  const { round2 } =
     await import("../src/lib/cashflow/pricing");
 
   const [transactions, alreadyCovered] = await Promise.all([
@@ -62,9 +62,9 @@ async function main() {
   await bulkInsertPayments(
     toBackfill.map(([invoiceId, entry]) => ({
       invoiceId,
-      // A card payment carries its merchant fee on top of the bill, so the
-      // visit still reads as fully paid.
-      amount: receivedForBill(entry.amount, entry.paymentType),
+      // A card payment's merchant fee is inside the amount, so the visit
+      // reads as fully paid.
+      amount: entry.amount,
       paymentType: entry.paymentType,
       // The visit's own date, not "now" — this is historical data, so the
       // payment should read as having happened when the visit did.

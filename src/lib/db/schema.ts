@@ -1,4 +1,4 @@
-import { integer, numeric, pgEnum, pgTable, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
+import { boolean, integer, numeric, pgEnum, pgTable, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
 
 /**
  * A physical clinic location. Dentist/staff accounts and transactions can
@@ -48,10 +48,10 @@ export const transactions = pgTable("transactions", {
   // their historical transactions.
   dentistUserId: uuid("dentist_user_id").references(() => users.id, { onDelete: "set null" }),
   procedure: text("procedure").notNull(),
-  // Every transaction is linked to a row in `procedures` (created
-  // automatically the first time a given procedure name is seen — see
-  // `src/lib/db/procedures.ts`), which is what commission rates are set
-  // against.
+  // Linked to the row in `procedures` (the price list) with the same name,
+  // when there is one — see `findProcedureByName` in
+  // `src/lib/db/procedures.ts`. That is what commission rates are set
+  // against; a name not on the price list stays unlinked.
   procedureId: uuid("procedure_id").references(() => procedures.id, { onDelete: "set null" }),
   paymentType: text("payment_type").notNull().default(""),
   amountPaid: numeric("amount_paid", { precision: 12, scale: 2 }).notNull(),
@@ -110,6 +110,16 @@ export const transactions = pgTable("transactions", {
   // "vat" | "non_vat" | "vat_exempt". `vatExclusive`/`vatAmount` above are
   // derived from this and the line total.
   vatType: text("vat_type").notNull().default("non_vat"),
+  // How many of the procedure's price unit (teeth, surfaces, arches, units)
+  // and the price of one. `listPrice` above = unitPrice × quantity.
+  quantity: integer("quantity").notNull().default(1),
+  unitPrice: numeric("unit_price", { precision: 12, scale: 2 }).notNull().default("0"),
+  // FDI tooth numbers / arch words as entered, e.g. "11, 12, upper arch".
+  teeth: text("teeth").notNull().default(""),
+  // The discount type picked on the form (PWD, Senior citizen, Promo).
+  // `discountReason` keeps the type's name as text so history reads the
+  // same even if a type is renamed later.
+  discountTypeId: uuid("discount_type_id").references(() => discountTypes.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -170,11 +180,10 @@ export type NewUserPreferencesRow = typeof userPreferences.$inferInsert;
 
 /**
  * Canonical list of procedure names, so commission rates have something
- * stable to attach to. Procedures aren't gated behind an admin UI — a row
- * is created automatically the first time a given name is seen, from
- * either manual entry or CSV import (see `getOrCreateProcedureByName` in
- * `src/lib/db/procedures.ts`), matched case-insensitively so "Ortho Adj"
- * and "ortho adj" resolve to the same row. The free-text `procedure` column
+ * stable to attach to. It is the clinic's price list (loaded from the
+ * pricelist SQL file): a row is never created automatically from a
+ * transaction's text. Names are matched case-insensitively (see
+ * `findProcedureByName` in `src/lib/db/procedures.ts`). The free-text `procedure` column
  * on `transactions` is unchanged (still what's displayed/exported); this
  * table exists purely so procedures can be referenced (and rated) as an
  * entity instead of matched by string every time.
@@ -182,16 +191,80 @@ export type NewUserPreferencesRow = typeof userPreferences.$inferInsert;
 export const procedures = pgTable("procedures", {
   id: uuid("id").defaultRandom().primaryKey(),
   name: text("name").notNull().unique(),
-  // Remembered from the last time this procedure was sold, to pre-fill the
-  // price and VAT type on the transaction form. Nullable price: a procedure
-  // that has never been priced has no default.
+  // The list price (filled in on the transaction form, still editable) and
+  // whether the procedure carries 12% VAT. Nullable price: a procedure
+  // that has no list price has no default.
   defaultVatType: text("default_vat_type").notNull().default("non_vat"),
   defaultPrice: numeric("default_price", { precision: 12, scale: 2 }),
+  // What the price counts: flat | tooth | surface | arch | unit.
+  priceBasis: text("price_basis").notNull().default("flat"),
+  // false = hidden from the transaction form's list (never deleted once used).
+  active: boolean("active").notNull().default(true),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
 export type ProcedureRow = typeof procedures.$inferSelect;
 export type NewProcedureRow = typeof procedures.$inferInsert;
+
+/**
+ * Every change to a procedure's list price. Old transactions keep the price
+ * they were sold at (it is stored on the line), so this table is the audit
+ * trail of what the price list used to say.
+ */
+export const procedurePriceHistory = pgTable("procedure_price_history", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  procedureId: uuid("procedure_id")
+    .notNull()
+    .references(() => procedures.id, { onDelete: "cascade" }),
+  oldPrice: numeric("old_price", { precision: 12, scale: 2 }),
+  newPrice: numeric("new_price", { precision: 12, scale: 2 }),
+  changedByUserId: uuid("changed_by_user_id").references(() => users.id, { onDelete: "set null" }),
+  changedByName: text("changed_by_name").notNull().default(""),
+  changedAt: timestamp("changed_at", { withTimezone: true }).notNull().defaultNow(),
+  note: text("note").notNull().default(""),
+  // Which price changed: "Cash" (procedures.default_price) or an HMO name.
+  payer: text("payer").notNull().default("Cash"),
+});
+
+/**
+ * The price of a procedure for one HMO (payer = the payment type name as on
+ * the form, e.g. "Maxicare"). Cash and every other payment method use
+ * `procedures.default_price`. No row = that HMO has no price for it.
+ */
+export const procedurePrices = pgTable(
+  "procedure_prices",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    procedureId: uuid("procedure_id")
+      .notNull()
+      .references(() => procedures.id, { onDelete: "cascade" }),
+    payer: text("payer").notNull(),
+    price: numeric("price", { precision: 12, scale: 2 }).notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [unique().on(table.procedureId, table.payer)],
+);
+
+export type PriceHistoryRow = typeof procedurePriceHistory.$inferSelect;
+
+/**
+ * The discounts the form offers. `statutory` (PWD / Senior citizen) is what
+ * switches on the "VAT removed first, then 20%" rule; `needsId` is what makes
+ * an ID number mandatory on the visit. Managed here, not in code.
+ */
+export const discountTypes = pgTable("discount_types", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  name: text("name").notNull().unique(),
+  defaultPercent: numeric("default_percent", { precision: 5, scale: 2 }),
+  statutory: boolean("statutory").notNull().default(false),
+  needsId: boolean("needs_id").notNull().default(false),
+  active: boolean("active").notNull().default(true),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type DiscountTypeRow = typeof discountTypes.$inferSelect;
 
 /**
  * A commission percentage for one (person, procedure) pair — set by an
@@ -419,6 +492,13 @@ export const invoices = pgTable("invoices", {
   branchId: uuid("branch_id").references(() => branches.id, { onDelete: "set null" }),
   transactionType: text("transaction_type").notNull().default("Visit"),
   visitType: text("visit_type").notNull().default(""),
+  // PWD / Senior citizen ID, recorded once per visit (required when a line
+  // uses a discount type that needs an ID).
+  discountIdType: text("discount_id_type").notNull().default(""),
+  discountIdNumber: text("discount_id_number").notNull().default(""),
+  // When the patient should come back, and why (optional). YYYY-MM-DD.
+  recallDate: text("recall_date"),
+  recallReason: text("recall_reason").notNull().default(""),
   createdByUserId: uuid("created_by_user_id").references(() => users.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });

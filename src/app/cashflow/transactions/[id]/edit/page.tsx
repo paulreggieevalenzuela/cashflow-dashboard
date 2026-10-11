@@ -3,6 +3,7 @@ import { TransactionForm } from "@/components/cashflow/transaction-form";
 import { listBranches } from "@/lib/db/branches";
 import { listDentistUsers } from "@/lib/db/dentists";
 import { getInvoiceDetail } from "@/lib/db/invoices";
+import { listActiveDiscountTypes } from "@/lib/db/discount-types";
 import { listProcedureOptions } from "@/lib/db/procedures";
 import { getTransactionById } from "@/lib/db/transactions";
 
@@ -26,11 +27,12 @@ export default async function EditTransactionPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const [transaction, dentists, branches, procedures] = await Promise.all([
+  const [transaction, dentists, branches, procedures, discountTypes] = await Promise.all([
     getTransactionById(decodeURIComponent(id)),
     listDentistUsers(),
     listBranches(),
     listProcedureOptions(),
+    listActiveDiscountTypes(),
   ]);
 
   if (!transaction) {
@@ -72,6 +74,7 @@ export default async function EditTransactionPage({
           dentistOptions={dentists.map((dentist) => dentist.name)}
           branches={branches}
           procedures={procedures}
+          discountTypes={discountTypes}
         />
       </div>
     </div>

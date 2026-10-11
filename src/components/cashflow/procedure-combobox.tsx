@@ -11,12 +11,10 @@ import {
 
 /**
  * A searchable Procedure field: type to filter the known procedure list,
- * click/arrow-keys/Enter to pick one, or keep typing a name that isn't in
- * the list yet and it's offered as "+ Add ... as a new procedure" (the
- * procedure gets created for real the first time a transaction using it is
- * saved — see `getOrCreateProcedureByName` in `db/procedures.ts`). Replaces
- * the previous plain `<select>` + separate "add new" text-input toggle
- * with one control that does both.
+ * click/arrow-keys/Enter to pick one. Other lists using it (suppliers) can
+ * also keep a typed name that isn't listed yet; for procedures a name that
+ * isn't on the price list is kept as typed, as a one-off, and is not added
+ * to the procedure list (see `findProcedureByName` in `db/procedures.ts`).
  *
  * `label` / `entityName` let the same control serve other short lists that
  * work the same way (the Add Expenses form uses it for suppliers).
@@ -157,6 +155,11 @@ export function ProcedureCombobox({
             setQuery(event.target.value);
             setIsOpen(true);
             setHighlightedIndex(0);
+            // Emptying the field clears the choice (and whatever was filled
+            // in from it) straight away, not only when the field loses focus.
+            if (!event.target.value.trim() && value) {
+              onChange("");
+            }
           }}
           onFocus={() => setIsOpen(true)}
           onKeyDown={handleKeyDown}
@@ -210,7 +213,9 @@ export function ProcedureCombobox({
                       : "hover:bg-amber-50 dark:hover:bg-amber-950/30"
                   }`}
                 >
-                  + Add “{trimmed}” as a new {entityName}
+                  {entityName === "procedure"
+                    ? `Use “${trimmed}” (not on the price list)`
+                    : `+ Add “${trimmed}” as a new ${entityName}`}
                 </button>
               </li>
             )}
@@ -220,7 +225,9 @@ export function ProcedureCombobox({
       <p className="text-xs text-zinc-500 dark:text-zinc-400">
         {options.length === 0
           ? `No ${entityName}s yet — type a name to add the first one.`
-          : `Type to search, or add a new ${entityName} if it isn't listed.`}
+          : entityName === "procedure"
+            ? "Pick a procedure from the price list."
+            : `Type to search, or add a new ${entityName} if it isn't listed.`}
       </p>
       {error && (
         <p role="alert" className="text-sm text-red-600 dark:text-red-400">

@@ -15,7 +15,7 @@ import { PatientCombobox } from "@/components/cashflow/patient-combobox";
 import { ProcedureCombobox } from "@/components/cashflow/procedure-combobox";
 import { SelectField } from "@/components/cashflow/select-field";
 import {
-  DISCOUNT_PRESETS,
+  DISCOUNT_ID_TYPES,
   PAYMENT_TYPES,
   TRANSACTION_TYPES,
   VISIT_TYPES,
@@ -23,19 +23,26 @@ import {
 import { uploadAttachment } from "@/lib/cashflow/attachment-client";
 import { InvoiceInputSchema } from "@/lib/cashflow/invoice-schema";
 import { OrBreakdown, hasOrDetail } from "@/components/cashflow/or-breakdown";
+import { suggestQuantity } from "@/lib/cashflow/price-basis";
+import { PRICE_BASIS_LABELS } from "@/lib/cashflow/price-basis";
+import { teethError } from "@/lib/cashflow/teeth";
 import {
   appliedToBill,
+  computeListPrice,
   computeMerchantFee,
   isStatutoryDiscount,
+  isHmoPayment,
   merchantFeeRateFor,
   priceLine,
   receivedForBill,
   round2,
   summarizeOr,
-  vatTypeFromAmount,
+  normalizeVatType,
+  type VatType,
 } from "@/lib/cashflow/pricing";
 import type { CashflowTransaction } from "@/lib/cashflow/schema";
 import type { Branch } from "@/lib/db/branches";
+import type { DiscountTypeOption } from "@/lib/db/discount-types";
 import type { Invoice } from "@/lib/db/invoices";
 import type { ProcedureOption } from "@/lib/db/procedures";
 
@@ -66,16 +73,29 @@ type LineState = {
   /** Id of the saved line when editing; blank for a new line. */
   id: string;
   procedure: string;
-  listPrice: string;
-  /** "" = no discount, otherwise the chosen preset ("Other" = custom text). */
-  discountChoice: string;
-  discountCustomReason: string;
+  /** The procedure name a saved line was recorded with ("" for a new line). */
+  savedProcedure: string;
+  /** Price of ONE unit (tooth, surface, arch, unit — see the procedure's
+   * price basis). */
+  unitPrice: string;
+  quantity: string;
+  /** Staff typed the quantity themselves, so changing the teeth no longer
+   * rewrites it. */
+  quantityTouched: boolean;
+  teeth: string;
+  /** Chosen discount type id; "" = no discount; LEGACY_DISCOUNT = the free
+   * text reason an old line was saved with (no longer on the list). */
+  discountTypeId: string;
+  legacyReason: string;
   discountMode: DiscountMode;
   discountValue: string;
-  /** VAT in pesos, from the receipt. Blank = non-VAT / VAT-exempt; any
-   * amount = a VATable line. */
-  vatAmount: string;
+  /** VAT setting a saved line was recorded with. A saved line keeps it for as
+   * long as it stays on the same procedure; otherwise the procedure list
+   * decides, see `vatTypeFor`. */
+  savedVatType: VatType;
 };
+
+const LEGACY_DISCOUNT = "legacy";
 
 type FormState = {
   date: string;
@@ -88,28 +108,36 @@ type FormState = {
   visitType: string;
   branchId: string;
   remarks: string;
+  /** PWD / Senior citizen ID, once for the visit. */
+  discountIdType: string;
+  discountIdNumber: string;
+  recallDate: string;
+  recallReason: string;
   paymentAmount: string;
   paymentType: string;
   referenceNo: string;
+  /** "Not paid yet": lets staff open the procedures without picking a
+   * payment method. */
+  paymentLater: boolean;
   lines: LineState[];
   nextLineKey: number;
 };
-
-const PRESET_REASONS: string[] = DISCOUNT_PRESETS.map(
-  (preset) => preset.reason,
-);
 
 function blankLine(key: number): LineState {
   return {
     key,
     id: "",
     procedure: "",
-    listPrice: "",
-    discountChoice: "",
-    discountCustomReason: "",
+    savedProcedure: "",
+    unitPrice: "",
+    quantity: "1",
+    quantityTouched: false,
+    teeth: "",
+    discountTypeId: "",
+    legacyReason: "",
     discountMode: "",
     discountValue: "",
-    vatAmount: "",
+    savedVatType: "vat",
   };
 }
 
@@ -123,9 +151,14 @@ function blankFormState(): FormState {
     visitType: "",
     branchId: "",
     remarks: "",
+    discountIdType: "",
+    discountIdNumber: "",
+    recallDate: "",
+    recallReason: "",
     paymentAmount: "",
     paymentType: "",
     referenceNo: "",
+    paymentLater: false,
     lines: [blankLine(1)],
     nextLineKey: 2,
   };
@@ -135,32 +168,46 @@ function asDiscountMode(value: string | undefined): DiscountMode {
   return value === "percent" || value === "amount" ? value : "";
 }
 
-function lineFromSaved(line: CashflowTransaction, key: number): LineState {
+function lineFromSaved(
+  line: CashflowTransaction,
+  key: number,
+  discountTypes: DiscountTypeOption[],
+): LineState {
   const hasDiscount = (line.discountAmount ?? 0) > 0;
   const reason = line.discountReason ?? "";
-  const choice = !hasDiscount
-    ? ""
-    : PRESET_REASONS.includes(reason)
-      ? reason
-      : "Other";
-  const price =
-    line.listPrice && line.listPrice > 0 ? line.listPrice : line.amountPaid;
+  const type = hasDiscount
+    ? (discountTypes.find((item) => item.id === line.discountTypeId) ??
+      discountTypes.find(
+        (item) => item.name.toLowerCase() === reason.trim().toLowerCase(),
+      ))
+    : undefined;
+  const unit =
+    line.unitPrice && line.unitPrice > 0
+      ? line.unitPrice
+      : line.listPrice && line.listPrice > 0
+        ? line.listPrice
+        : line.amountPaid;
   return {
     key,
     id: line.id,
     procedure: line.procedure,
-    listPrice: price.toString(),
-    discountChoice: choice,
-    discountCustomReason: choice === "Other" ? reason : "",
+    savedProcedure: line.procedure,
+    unitPrice: unit.toString(),
+    quantity: String(line.quantity && line.quantity > 0 ? line.quantity : 1),
+    quantityTouched: true,
+    teeth: line.teeth ?? "",
+    discountTypeId: !hasDiscount ? "" : type ? type.id : LEGACY_DISCOUNT,
+    legacyReason: hasDiscount && !type ? reason : "",
     discountMode: hasDiscount ? asDiscountMode(line.discountMode) : "",
     discountValue: hasDiscount ? (line.discountValue ?? 0).toString() : "",
-    vatAmount: savedVatAmount(line),
+    savedVatType: normalizeVatType(line.vatType),
   };
 }
 
 function formStateFromInvoice(
   invoice: Invoice,
   lines: CashflowTransaction[],
+  discountTypes: DiscountTypeOption[],
 ): FormState {
   const first = lines[0];
   return {
@@ -172,56 +219,145 @@ function formStateFromInvoice(
     visitType: invoice.visitType,
     branchId: invoice.branchId ?? "",
     remarks: first?.remarks ?? "",
+    discountIdType: invoice.discountIdType,
+    discountIdNumber: invoice.discountIdNumber,
+    recallDate: invoice.recallDate ?? "",
+    recallReason: invoice.recallReason,
     paymentAmount: "",
     paymentType: "",
     referenceNo: "",
-    lines: lines.map((line, index) => lineFromSaved(line, index + 1)),
+    paymentLater: false,
+    lines: lines.map((line, index) =>
+      lineFromSaved(line, index + 1, discountTypes),
+    ),
     nextLineKey: lines.length + 1,
   };
 }
 
-/** The VAT figure to show when editing a saved line. A PWD/Senior line is
- * saved with no VAT charged, so the VAT that was taken out of its price is
- * worked back from the saved amounts. */
-function savedVatAmount(line: CashflowTransaction): string {
-  if (line.vatType !== "vat") {
-    return "";
+/** Whether a line carries 12% VAT. A saved line keeps the setting it was
+ * recorded with while it stays on the same procedure (changing the price
+ * list never re-classifies an old visit); a new line, or one moved to
+ * another procedure, follows the procedure list. */
+function vatTypeFor(line: LineState, options: ProcedureOption[]): VatType {
+  const name = line.procedure.trim().toLowerCase();
+  if (
+    line.savedProcedure &&
+    line.savedProcedure.trim().toLowerCase() === name
+  ) {
+    return line.savedVatType;
   }
-  const removed =
-    isStatutoryDiscount(line.discountReason) && (line.discountAmount ?? 0) > 0
-      ? (line.listPrice ?? line.amountPaid) -
-        (line.amountPaid + (line.discountAmount ?? 0))
-      : line.vatAmount;
-  const value = round2(removed);
-  return value > 0 ? value.toString() : "";
+  const known = options.find((option) => option.name.toLowerCase() === name);
+  return known ? known.defaultVatType : line.savedVatType;
 }
 
-function discountReasonFor(line: LineState): string {
-  return line.discountChoice === "Other"
-    ? line.discountCustomReason.trim()
-    : line.discountChoice;
+/** The discount this line uses: the chosen type, or the old reason text. */
+function discountFor(line: LineState, types: DiscountTypeOption[]) {
+  if (!line.discountTypeId) {
+    return { type: undefined, reason: "", statutory: false, needsId: false };
+  }
+  if (line.discountTypeId === LEGACY_DISCOUNT) {
+    const statutory = isStatutoryDiscount(line.legacyReason);
+    return {
+      type: undefined,
+      reason: line.legacyReason,
+      statutory,
+      needsId: statutory,
+    };
+  }
+  const type = types.find((item) => item.id === line.discountTypeId);
+  return {
+    type,
+    reason: type?.name ?? "",
+    statutory: type?.statutory ?? false,
+    needsId: type?.needsId ?? false,
+  };
 }
 
-function lineAmounts(line: LineState) {
-  const listPrice = Number(line.listPrice) || 0;
-  const mode: DiscountMode = line.discountChoice ? line.discountMode : "";
-  const value = line.discountChoice ? Number(line.discountValue) || 0 : 0;
-  const vatAmount = Number(line.vatAmount) || 0;
+function lineAmounts(
+  line: LineState,
+  vatType: VatType,
+  types: DiscountTypeOption[],
+) {
+  const unitPrice = Number(line.unitPrice) || 0;
+  const quantity = Math.max(1, Math.floor(Number(line.quantity) || 1));
+  const listPrice = computeListPrice(unitPrice, quantity);
+  const discount = discountFor(line, types);
+  const fixed = discount.type?.defaultPercent ?? null;
+  const mode: DiscountMode = line.discountTypeId
+    ? fixed !== null
+      ? "percent"
+      : line.discountMode
+    : "";
+  const value = line.discountTypeId
+    ? fixed !== null
+      ? fixed
+      : Number(line.discountValue) || 0
+    : 0;
   const priced = priceLine({
     listPrice,
-    vatType: vatTypeFromAmount(vatAmount),
-    vatAmount,
+    vatType,
     discountMode: mode,
     discountValue: value,
-    discountReason: discountReasonFor(line),
+    discountReason: discount.reason,
+    statutory: discount.statutory,
   });
   return {
+    unitPrice,
+    quantity,
     listPrice,
+    discountMode: mode,
+    discountValue: value,
     discountAmount: priced.discountAmount,
     total: priced.total,
     vatBase: priced.vatBase,
     vat: priced.vat,
     statutory: priced.statutory,
+  };
+}
+
+/** The list price of a procedure for the chosen payment method: an HMO uses
+ * its own price (none = null, staff enter it); every other method uses the
+ * cash price. */
+function listPriceFor(
+  option: ProcedureOption | undefined,
+  paymentType: string,
+): number | null {
+  if (!option) {
+    return null;
+  }
+  if (isHmoPayment(paymentType)) {
+    return option.payerPrices[paymentType] ?? null;
+  }
+  return option.defaultPrice;
+}
+
+/** A line is finished once it has a procedure and a price. */
+function isLineComplete(line: LineState): boolean {
+  return Boolean(line.procedure.trim()) && (Number(line.unitPrice) || 0) > 0;
+}
+
+/** Nothing typed on a line that has never been saved. */
+function isLineBlank(line: LineState): boolean {
+  return (
+    !line.id &&
+    !line.procedure.trim() &&
+    !line.unitPrice.trim() &&
+    !line.teeth.trim() &&
+    !line.discountTypeId
+  );
+}
+
+/** When the last procedure is finished, a fresh empty one is added after
+ * it, so staff can keep going without pressing "Add another procedure". */
+function withTrailingBlank(form: FormState): FormState {
+  const last = form.lines[form.lines.length - 1];
+  if (!last || !isLineComplete(last)) {
+    return form;
+  }
+  return {
+    ...form,
+    lines: [...form.lines, blankLine(form.nextLineKey)],
+    nextLineKey: form.nextLineKey + 1,
   };
 }
 
@@ -234,6 +370,8 @@ type TransactionFormProps = {
    * type each was last sold with), for the Procedure dropdown. When empty,
    * the field is a plain text input. */
   procedures?: ProcedureOption[];
+  /** The discounts staff can pick (PWD, Senior citizen, Promo). */
+  discountTypes?: DiscountTypeOption[];
 } & (
   | { mode?: "create"; onSuccess?: () => void }
   | {
@@ -248,9 +386,10 @@ export function TransactionForm(props: TransactionFormProps) {
   const mode = props.mode ?? "create";
   const router = useRouter();
   const editingInvoiceId = props.mode === "edit" ? props.invoice.id : undefined;
+  const discountTypes = props.discountTypes ?? [];
   const [form, setForm] = useState<FormState>(
     props.mode === "edit"
-      ? formStateFromInvoice(props.invoice, props.lines)
+      ? formStateFromInvoice(props.invoice, props.lines, discountTypes)
       : blankFormState(),
   );
   const procedureOptions = props.procedures ?? [];
@@ -259,6 +398,7 @@ export function TransactionForm(props: TransactionFormProps) {
   const [status, setStatus] = useState<"idle" | "submitting">("idle");
   const [justAdded, setJustAdded] = useState(false);
   const [numberWarning, setNumberWarning] = useState<string | null>(null);
+  const [priceNotice, setPriceNotice] = useState<string | null>(null);
   // Photos / PDFs chosen while adding; uploaded once the transaction is saved.
   const [invoiceFiles, setInvoiceFiles] = useState<File[]>([]);
   const [receiptFiles, setReceiptFiles] = useState<File[]>([]);
@@ -273,8 +413,14 @@ export function TransactionForm(props: TransactionFormProps) {
     setForm((prev) => ({ ...prev, [key]: value }));
   }
 
+  /** Like setForm, for edits to a procedure line: afterwards a finished last
+   * line is followed by a new empty one. */
+  function setFormAuto(update: (prev: FormState) => FormState) {
+    setForm((prev) => withTrailingBlank(update(prev)));
+  }
+
   function updateLine(index: number, patch: Partial<LineState>) {
-    setForm((prev) => ({
+    setFormAuto((prev) => ({
       ...prev,
       lines: prev.lines.map((line, i) =>
         i === index ? { ...line, ...patch } : line,
@@ -298,34 +444,144 @@ export function TransactionForm(props: TransactionFormProps) {
     );
   }
 
-  function handleProcedureChange(index: number, name: string) {
-    const known = procedureOptions.find(
-      (option) => option.name.toLowerCase() === name.trim().toLowerCase(),
+  function findProcedure(value: string): ProcedureOption | undefined {
+    return procedureOptions.find(
+      (option) => option.name.toLowerCase() === value.trim().toLowerCase(),
     );
-    setForm((prev) => ({
+  }
+
+  /** The quantity staff would expect for these teeth, when the procedure's
+   * price basis says so (per tooth / per arch); otherwise null. */
+  function quantityFor(procedure: string, teeth: string): string | null {
+    const basis = findProcedure(procedure)?.priceBasis;
+    const suggested = basis ? suggestQuantity(basis, teeth) : null;
+    return suggested === null ? null : String(suggested);
+  }
+
+  function handleProcedureChange(index: number, name: string) {
+    const known = findProcedure(name);
+    setFormAuto((prev) => ({
       ...prev,
       lines: prev.lines.map((line, i) => {
         if (i !== index) return line;
-        const next = { ...line, procedure: name };
-        // Pre-fill the price remembered for this procedure, but only on a
-        // line that has no price yet — never over what staff already typed.
-        // VAT is never pre-filled: it varies, so it is typed from the receipt.
-        if (known && !line.listPrice && known.defaultPrice !== null) {
-          next.listPrice = known.defaultPrice.toString();
+        // Re-committing the same name changes nothing, so an edited price
+        // is never overwritten.
+        if (line.procedure.trim().toLowerCase() === name.trim().toLowerCase()) {
+          return { ...line, procedure: name };
+        }
+        const previous = findProcedure(line.procedure);
+        const next: LineState = {
+          ...line,
+          procedure: name,
+          // A saved line's VAT setting only belongs to the procedure it was
+          // saved with (vatTypeFor ignores it once the name differs).
+          savedVatType: "vat",
+          quantityTouched: false,
+        };
+        if (!name.trim()) {
+          // Procedure cleared: everything filled in from it goes too.
+          next.unitPrice = "";
+          next.quantity = "1";
+        } else if (listPriceFor(known, prev.paymentType) !== null) {
+          // Picking a procedure fills in its list price for the chosen
+          // payment method (still editable).
+          next.unitPrice = String(listPriceFor(known, prev.paymentType));
+        } else if (
+          listPriceFor(previous, prev.paymentType) !== null &&
+          Number(line.unitPrice) === listPriceFor(previous, prev.paymentType)
+        ) {
+          // Moved to something with no list price: drop the old autofill.
+          next.unitPrice = "";
+        }
+        if (name.trim()) {
+          // Quantity follows the teeth already typed when the new
+          // procedure is priced per tooth / per arch.
+          const basis = known?.priceBasis;
+          const suggested = basis ? suggestQuantity(basis, line.teeth) : null;
+          next.quantity = suggested === null ? "1" : String(suggested);
         }
         return next;
       }),
     }));
   }
 
+  function handleTeethChange(index: number, teeth: string) {
+    setFormAuto((prev) => ({
+      ...prev,
+      lines: prev.lines.map((line, i) => {
+        if (i !== index) return line;
+        const next = { ...line, teeth };
+        if (!line.quantityTouched) {
+          const suggested = quantityFor(line.procedure, teeth);
+          if (suggested !== null) {
+            next.quantity = suggested;
+          }
+        }
+        return next;
+      }),
+    }));
+  }
+
+  /** Changing the payment method re-prices the lines whose price is still
+   * the list price of the old method (a price typed by hand is left alone). */
+  function handlePaymentTypeChange(paymentType: string) {
+    let changed = 0;
+    const lines = form.lines.map((line) => {
+      const option = findProcedure(line.procedure);
+      if (!option || line.id) {
+        return line;
+      }
+      const oldPrice = listPriceFor(option, form.paymentType);
+      const current = line.unitPrice.trim();
+      if (current !== "" && Number(current) !== oldPrice) {
+        return line;
+      }
+      const newPrice = listPriceFor(option, paymentType);
+      const nextText = newPrice === null ? "" : String(newPrice);
+      if (nextText === current) {
+        return line;
+      }
+      changed += 1;
+      return { ...line, unitPrice: nextText };
+    });
+    setForm((prev) => ({ ...prev, paymentType, lines }));
+    setPriceNotice(
+      changed > 0
+        ? `Procedure prices updated to ${isHmoPayment(paymentType) ? `${paymentType} prices` : "the cash price list"}.`
+        : null,
+    );
+  }
+
   function chooseDiscount(index: number, choice: string) {
-    const preset = DISCOUNT_PRESETS.find((item) => item.reason === choice);
-    updateLine(index, {
-      discountChoice: choice,
-      discountCustomReason: "",
-      discountMode: choice ? (preset?.mode ?? "percent") : "",
-      discountValue:
-        choice && preset && preset.value > 0 ? preset.value.toString() : "",
+    const type = discountTypes.find((item) => item.id === choice);
+    updateLine(
+      index,
+      choice === LEGACY_DISCOUNT
+        ? { discountTypeId: choice }
+        : {
+            discountTypeId: choice,
+            legacyReason: "",
+            discountMode: choice ? "percent" : "",
+            discountValue:
+              type?.defaultPercent != null ? String(type.defaultPercent) : "",
+          },
+    );
+  }
+
+  /** Copies one line's discount to every other line of the visit. */
+  function applyDiscountToAll(index: number) {
+    setForm((prev) => {
+      const source = prev.lines[index];
+      return {
+        ...prev,
+        lines: prev.lines.map((line) => ({
+          ...line,
+          discountTypeId: source.discountTypeId,
+          legacyReason: source.legacyReason,
+          discountMode: source.discountMode,
+          discountValue: source.discountValue,
+        })),
+      };
     });
   }
 
@@ -397,7 +653,21 @@ export function TransactionForm(props: TransactionFormProps) {
     }
   }
 
-  const amounts = form.lines.map(lineAmounts);
+  const vatTypes = form.lines.map((line) => vatTypeFor(line, procedureOptions));
+  const amounts = form.lines.map((line, index) =>
+    lineAmounts(line, vatTypes[index], discountTypes),
+  );
+  // Create: the procedures appear once a payment method is chosen (or
+  // "not paid yet"). Edit: they are always there.
+  const showProcedures =
+    mode === "edit" || Boolean(form.paymentType) || form.paymentLater;
+  // PWD / Senior citizen (or any type flagged "needs ID") on a line that
+  // actually gets a discount: the visit must carry an ID number.
+  const idRequired = form.lines.some(
+    (line, index) =>
+      amounts[index].discountAmount > 0 &&
+      discountFor(line, discountTypes).needsId,
+  );
   const orSummary = summarizeOr(amounts);
   const totalDue = round2(amounts.reduce((sum, a) => sum + a.total, 0));
   const paidNow = Number(form.paymentAmount) || 0;
@@ -415,6 +685,16 @@ export function TransactionForm(props: TransactionFormProps) {
     setFormError(null);
     setJustAdded(false);
 
+    // Empty procedure lines (the spare one added after each finished line)
+    // are left out; if every line is empty, keep the first so the form
+    // reports what is missing.
+    const keptIndexes = form.lines.flatMap((line, index) =>
+      isLineBlank(line) ? [] : [index],
+    );
+    if (keptIndexes.length === 0) {
+      keptIndexes.push(0);
+    }
+
     const input = InvoiceInputSchema.safeParse({
       date: form.date,
       invoiceNumber: form.invoiceNumber,
@@ -424,18 +704,29 @@ export function TransactionForm(props: TransactionFormProps) {
       visitType: form.visitType,
       branchId: form.branchId,
       remarks: form.remarks,
-      lines: form.lines.map((line) => ({
-        id: line.id,
-        procedure: line.procedure,
-        listPrice: Number(line.listPrice) || 0,
-        discountMode: line.discountChoice ? line.discountMode : "",
-        discountValue: line.discountChoice
-          ? Number(line.discountValue) || 0
-          : 0,
-        discountReason: discountReasonFor(line),
-        vatAmount: Number(line.vatAmount) || 0,
-        vatType: vatTypeFromAmount(Number(line.vatAmount) || 0),
-      })),
+      discountIdType: idRequired ? form.discountIdType : "",
+      discountIdNumber: idRequired ? form.discountIdNumber : "",
+      recallDate: form.recallDate,
+      recallReason: form.recallReason,
+      lines: keptIndexes.map((index) => {
+        const line = form.lines[index];
+        const discount = discountFor(line, discountTypes);
+        return {
+          id: line.id,
+          procedure: line.procedure,
+          unitPrice: amounts[index].unitPrice,
+          quantity: amounts[index].quantity,
+          teeth: line.teeth,
+          discountTypeId:
+            line.discountTypeId && line.discountTypeId !== LEGACY_DISCOUNT
+              ? line.discountTypeId
+              : "",
+          discountMode: amounts[index].discountMode,
+          discountValue: amounts[index].discountValue,
+          discountReason: discount.reason,
+          vatType: vatTypes[index],
+        };
+      }),
       payment:
         mode === "create"
           ? {
@@ -449,7 +740,13 @@ export function TransactionForm(props: TransactionFormProps) {
     if (!input.success) {
       const nextErrors: FieldErrors = {};
       for (const issue of input.error.issues) {
-        const key = issue.path.join(".");
+        const path = [...issue.path];
+        // Errors name the line by its place among the lines sent; show them
+        // on the line as it is on screen.
+        if (path[0] === "lines" && typeof path[1] === "number") {
+          path[1] = keptIndexes[path[1]] ?? path[1];
+        }
+        const key = path.join(".");
         if (key && !nextErrors[key]) {
           nextErrors[key] = issue.message;
         }
@@ -551,32 +848,7 @@ export function TransactionForm(props: TransactionFormProps) {
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <div className="flex flex-col gap-1.5">
-          <FormField
-            label="Invoice number"
-            type="text"
-            placeholder="Leave blank if there is no invoice"
-            value={form.invoiceNumber}
-            error={errors.invoiceNumber}
-            onChange={(event) => {
-              updateField("invoiceNumber", event.target.value);
-              setNumberWarning(null);
-              setErrors((prev) => ({ ...prev, invoiceNumber: "" }));
-            }}
-            onBlur={() => void checkNumber()}
-          />
-          {numberWarning && !errors.invoiceNumber && (
-            <p role="alert" className="text-xs text-red-600 dark:text-red-400">
-              {numberWarning} Use a different number, or leave it blank if there
-              is no invoice.
-            </p>
-          )}
-          <p className="text-xs text-zinc-500 dark:text-zinc-400">
-            Copy the number from the paper invoice. Blank means this transaction
-            has no invoice.
-          </p>
-        </div>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <FormField
           label="Date"
           type="date"
@@ -585,19 +857,6 @@ export function TransactionForm(props: TransactionFormProps) {
           error={errors.date}
           onChange={(event) => updateField("date", event.target.value)}
         />
-        {mode === "create" && (
-          <div className="sm:col-span-2">
-            <FilePicker
-              label="Invoice photo / PDF (optional)"
-              hint="JPG, PNG or PDF. Phone photos are shrunk automatically."
-              files={invoiceFiles}
-              onChange={setInvoiceFiles}
-            />
-          </div>
-        )}
-      </div>
-
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="flex flex-col gap-1.5">
           <PatientCombobox
             value={form.patientName}
@@ -626,15 +885,16 @@ export function TransactionForm(props: TransactionFormProps) {
           )}
         </div>
         <SelectField
-          label="Transaction type"
-          required
-          placeholder="Select transaction type"
-          options={TRANSACTION_TYPES}
-          value={form.transactionType}
-          error={errors.transactionType}
-          onChange={(event) =>
-            updateField("transactionType", event.target.value)
+          label="Visit type"
+          placeholder={
+            activeLookup
+              ? `Automatic (${activeLookup.visitType === "RETURNING" ? "Returning" : "New"})`
+              : "Automatic"
           }
+          options={VISIT_TYPES}
+          value={form.visitType}
+          error={errors.visitType}
+          onChange={(event) => updateField("visitType", event.target.value)}
         />
       </div>
 
@@ -653,16 +913,15 @@ export function TransactionForm(props: TransactionFormProps) {
           onChange={(event) => updateField("dentist", event.target.value)}
         />
         <SelectField
-          label="Visit type"
-          placeholder={
-            activeLookup
-              ? `Automatic (${activeLookup.visitType === "RETURNING" ? "Returning" : "New"})`
-              : "Automatic"
+          label="Transaction type"
+          required
+          placeholder="Select transaction type"
+          options={TRANSACTION_TYPES}
+          value={form.transactionType}
+          error={errors.transactionType}
+          onChange={(event) =>
+            updateField("transactionType", event.target.value)
           }
-          options={VISIT_TYPES}
-          value={form.visitType}
-          error={errors.visitType}
-          onChange={(event) => updateField("visitType", event.target.value)}
         />
         {props.branches && props.branches.length > 0 && (
           <div className="flex flex-col gap-1.5">
@@ -689,330 +948,534 @@ export function TransactionForm(props: TransactionFormProps) {
         )}
       </div>
 
-      <section className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">
-            Procedures
-          </h3>
-          {errors.lines && (
-            <p className="text-sm text-red-600 dark:text-red-400">
-              {errors.lines}
+      <section className="space-y-3 rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
+        <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">
+          {mode === "create" ? "Payment method & invoice" : "Invoice"}
+        </h3>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          {mode === "create" && (
+            <div className="flex flex-col gap-1.5">
+              <SelectField
+                label="Payment method"
+                placeholder="Select payment method"
+                options={PAYMENT_TYPES}
+                value={form.paymentType}
+                onChange={(event) =>
+                  handlePaymentTypeChange(event.target.value)
+                }
+              />
+              {priceNotice && (
+                <p className="text-xs text-zinc-600 dark:text-zinc-300">
+                  {priceNotice}
+                </p>
+              )}
+              {!form.paymentType && !form.paymentLater && (
+                <button
+                  type="button"
+                  onClick={() => updateField("paymentLater", true)}
+                  className="w-fit text-xs font-medium text-amber-700 hover:underline dark:text-amber-400"
+                >
+                  Not paid yet — continue to the procedures
+                </button>
+              )}
+              {isHmoPayment(form.paymentType) && (
+                <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                  {form.paymentType} prices are used for the procedures below. A
+                  procedure with no {form.paymentType} price is left blank for
+                  you to enter.
+                </p>
+              )}
+            </div>
+          )}
+          <div className="flex flex-col gap-1.5">
+            <FormField
+              label="Invoice number"
+              type="text"
+              placeholder="Leave blank if there is no invoice"
+              value={form.invoiceNumber}
+              error={errors.invoiceNumber}
+              onChange={(event) => {
+                updateField("invoiceNumber", event.target.value);
+                setNumberWarning(null);
+                setErrors((prev) => ({ ...prev, invoiceNumber: "" }));
+              }}
+              onBlur={() => void checkNumber()}
+            />
+            {numberWarning && !errors.invoiceNumber && (
+              <p
+                role="alert"
+                className="text-xs text-red-600 dark:text-red-400"
+              >
+                {numberWarning} Use a different number, or leave it blank if
+                there is no invoice.
+              </p>
+            )}
+            <p className="text-xs text-zinc-500 dark:text-zinc-400">
+              Copy the number from the paper invoice. Blank means this
+              transaction has no invoice.
             </p>
+          </div>
+          {mode === "create" && (
+            <div className="sm:col-span-2">
+              <FilePicker
+                label="Invoice photo / PDF (optional)"
+                hint="JPG, PNG or PDF. Phone photos are shrunk automatically."
+                files={invoiceFiles}
+                onChange={setInvoiceFiles}
+              />
+            </div>
           )}
         </div>
+      </section>
 
-        {form.lines.map((line, index) => {
-          const amount = amounts[index];
-          const err = (field: string) => errors[`lines.${index}.${field}`];
-          return (
-            <div
-              key={line.key}
-              className="space-y-4 rounded-xl border border-zinc-200 bg-zinc-50/50 p-4 dark:border-zinc-800 dark:bg-zinc-900/40"
-            >
-              <div className="flex items-center justify-between">
-                <p className="text-xs font-medium uppercase tracking-wide text-zinc-400 dark:text-zinc-500">
-                  Procedure {index + 1}
-                </p>
-                {form.lines.length > 1 && (
-                  <button
-                    type="button"
-                    onClick={() => removeLine(index)}
-                    className="rounded-md px-2 py-1 text-xs font-medium text-zinc-400 transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40 dark:hover:text-red-400"
-                  >
-                    Remove
-                  </button>
-                )}
-              </div>
+      {!showProcedures && (
+        <p className="rounded-xl border border-dashed border-zinc-300 px-4 py-6 text-center text-sm text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">
+          Choose the payment method above to add the procedures — prices can
+          differ by payment method (HMO).
+        </p>
+      )}
 
-              <ProcedureCombobox
-                value={line.procedure}
-                options={procedureOptions.map((option) => option.name)}
-                onChange={(value) => handleProcedureChange(index, value)}
-                error={err("procedure")}
-                required
-              />
+      {showProcedures && (
+        <section className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">
+              Procedures
+            </h3>
+            {errors.lines && (
+              <p className="text-sm text-red-600 dark:text-red-400">
+                {errors.lines}
+              </p>
+            )}
+          </div>
 
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                <FormField
-                  label="Price"
-                  type="number"
+          {form.lines.map((line, index) => {
+            const amount = amounts[index];
+            const err = (field: string) => errors[`lines.${index}.${field}`];
+            const known = findProcedure(line.procedure);
+            const basis = known?.priceBasis ?? "flat";
+            const discount = discountFor(line, discountTypes);
+            const fixedPercent = discount.type?.defaultPercent ?? null;
+            const teethProblem = err("teeth") ?? teethError(line.teeth);
+            return (
+              <div
+                key={line.key}
+                className="space-y-4 rounded-xl border border-zinc-200 bg-zinc-50/50 p-4 dark:border-zinc-800 dark:bg-zinc-900/40"
+              >
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-medium uppercase tracking-wide text-zinc-400 dark:text-zinc-500">
+                    Procedure {index + 1}
+                  </p>
+                  {form.lines.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() => removeLine(index)}
+                      className="rounded-md px-2 py-1 text-xs font-medium text-zinc-400 transition-colors hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40 dark:hover:text-red-400"
+                    >
+                      Remove
+                    </button>
+                  )}
+                </div>
+
+                <ProcedureCombobox
+                  value={line.procedure}
+                  options={procedureOptions.map((option) => option.name)}
+                  onChange={(value) => handleProcedureChange(index, value)}
+                  error={err("procedure")}
                   required
-                  min="0"
-                  step="0.01"
-                  placeholder="0.00"
-                  value={line.listPrice}
-                  error={err("listPrice")}
-                  onChange={(event) =>
-                    updateLine(index, { listPrice: event.target.value })
-                  }
                 />
+
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                    VAT
-                  </label>
-                  {/* Blank = non-VAT / VAT-exempt; an amount = VATable. */}
-                  <input
+                  <FormField
+                    label="Teeth"
+                    type="text"
+                    placeholder="e.g. 11, 12, 21 or upper arch (optional)"
+                    value={line.teeth}
+                    error={teethProblem ?? undefined}
+                    onChange={(event) =>
+                      handleTeethChange(index, event.target.value)
+                    }
+                  />
+                  {basis !== "flat" && (
+                    <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                      The price is {PRICE_BASIS_LABELS[basis].toLowerCase()}.
+                      {basis === "tooth" || basis === "arch"
+                        ? " The quantity follows the teeth you enter; you can still change it."
+                        : " Enter how many in Qty."}
+                    </p>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+                  <FormField
+                    label={basis === "flat" ? "Unit price" : "Price each"}
                     type="number"
+                    required
                     min="0"
                     step="0.01"
-                    aria-label="VAT amount"
-                    aria-invalid={Boolean(err("vatAmount"))}
-                    placeholder="Blank = non-VAT"
-                    value={line.vatAmount}
+                    placeholder="0.00"
+                    value={line.unitPrice}
+                    error={err("unitPrice")}
                     onChange={(event) =>
-                      updateLine(index, { vatAmount: event.target.value })
+                      updateLine(index, { unitPrice: event.target.value })
                     }
-                    className="w-full rounded-lg border border-zinc-300 bg-white px-3.5 py-2.5 text-sm text-zinc-900 shadow-sm outline-none transition-colors placeholder:text-zinc-400 focus:border-amber-500 focus:ring-2 focus:ring-amber-100 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50 dark:focus:ring-amber-900/40"
                   />
-                  {err("vatAmount") ? (
-                    <p
-                      role="alert"
-                      className="text-sm text-red-600 dark:text-red-400"
-                    >
-                      {err("vatAmount")}
-                    </p>
-                  ) : null}
-                </div>
-
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                    Discount
-                  </label>
-                  <select
-                    value={line.discountChoice}
+                  <FormField
+                    label="Qty"
+                    type="number"
+                    min="1"
+                    step="1"
+                    value={line.quantity}
+                    error={err("quantity")}
                     onChange={(event) =>
-                      chooseDiscount(index, event.target.value)
+                      updateLine(index, {
+                        quantity: event.target.value,
+                        quantityTouched: true,
+                      })
                     }
-                    className={selectClass}
-                  >
-                    <option value="">No discount</option>
-                    {DISCOUNT_PRESETS.map((preset) => (
-                      <option key={preset.reason} value={preset.reason}>
-                        {preset.reason}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              {line.discountChoice && (
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                  <div className="flex flex-col gap-1.5">
+                  />
+                  <ReadOnlyAmount
+                    label="Sub total"
+                    value={currencyFormatter.format(amount.listPrice)}
+                  />
+                  <div className="col-span-2 flex flex-col gap-1.5 sm:col-span-1">
                     <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                      Amount off
+                      Discount
                     </label>
-                    <div className="flex gap-2">
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        aria-label="Discount value"
-                        aria-invalid={Boolean(err("discountValue"))}
-                        placeholder="0"
-                        value={line.discountValue}
-                        onChange={(event) =>
-                          updateLine(index, {
-                            discountValue: event.target.value,
-                          })
-                        }
-                        className="min-w-0 flex-1 rounded-lg border border-zinc-300 bg-white px-3.5 py-2.5 text-sm text-zinc-900 shadow-sm outline-none transition-colors placeholder:text-zinc-400 focus:border-amber-500 focus:ring-2 focus:ring-amber-100 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50 dark:focus:ring-amber-900/40"
-                      />
-                      <select
-                        aria-label="Discount type"
-                        value={line.discountMode || "percent"}
-                        onChange={(event) =>
-                          updateLine(index, {
-                            discountMode: asDiscountMode(event.target.value),
-                          })
-                        }
-                        className="select-chevron w-20 rounded-lg border border-zinc-300 bg-white px-2.5 py-2.5 text-sm text-zinc-900 shadow-sm outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
-                      >
-                        <option value="percent">%</option>
-                        <option value="amount">₱</option>
-                      </select>
-                    </div>
-                    {err("discountValue") && (
-                      <p
-                        role="alert"
-                        className="text-sm text-red-600 dark:text-red-400"
-                      >
-                        {err("discountValue")}
-                      </p>
-                    )}
-                  </div>
-                  {line.discountChoice === "Other" ? (
-                    <FormField
-                      label="Reason"
-                      type="text"
-                      placeholder="Why is there a discount?"
-                      value={line.discountCustomReason}
-                      error={err("discountReason")}
+                    <select
+                      value={line.discountTypeId}
                       onChange={(event) =>
-                        updateLine(index, {
-                          discountCustomReason: event.target.value,
-                        })
+                        chooseDiscount(index, event.target.value)
                       }
-                    />
-                  ) : (
-                    <div className="flex flex-col justify-end pb-2.5 text-xs text-zinc-500 dark:text-zinc-400">
-                      {amount.statutory
-                        ? Number(line.vatAmount) > 0
-                          ? "VAT is removed first, then 20% off the VAT-free price"
-                          : "20% off the price (VAT-exempt sale)"
-                        : `${line.discountChoice} discount`}
+                      className={selectClass}
+                    >
+                      <option value="">No discount</option>
+                      {discountTypes.map((type) => (
+                        <option key={type.id} value={type.id}>
+                          {type.name}
+                        </option>
+                      ))}
+                      {line.legacyReason && (
+                        <option value={LEGACY_DISCOUNT}>
+                          {line.legacyReason} (old)
+                        </option>
+                      )}
+                    </select>
+                  </div>
+                  <ReadOnlyAmount
+                    label="Net total"
+                    strong
+                    value={currencyFormatter.format(amount.total)}
+                  />
+                </div>
+
+                {isHmoPayment(form.paymentType) &&
+                  known &&
+                  known.payerPrices[form.paymentType] === undefined && (
+                    <p className="text-xs text-amber-700 dark:text-amber-400">
+                      No {form.paymentType} price for this procedure — enter
+                      the price.
+                    </p>
+                  )}
+
+                {line.discountTypeId && (
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                        Amount off
+                      </label>
+                      <div className="flex gap-2">
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          aria-label="Discount value"
+                          aria-invalid={Boolean(err("discountValue"))}
+                          placeholder="0"
+                          readOnly={fixedPercent !== null}
+                          value={
+                            fixedPercent !== null
+                              ? String(fixedPercent)
+                              : line.discountValue
+                          }
+                          onChange={(event) =>
+                            updateLine(index, {
+                              discountValue: event.target.value,
+                            })
+                          }
+                          className="min-w-0 flex-1 rounded-lg border border-zinc-300 bg-white px-3.5 py-2.5 text-sm text-zinc-900 shadow-sm outline-none transition-colors placeholder:text-zinc-400 read-only:bg-zinc-100 focus:border-amber-500 focus:ring-2 focus:ring-amber-100 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50 dark:read-only:bg-zinc-800 dark:focus:ring-amber-900/40"
+                        />
+                        <select
+                          aria-label="Discount unit"
+                          disabled={fixedPercent !== null}
+                          value={
+                            fixedPercent !== null
+                              ? "percent"
+                              : line.discountMode || "percent"
+                          }
+                          onChange={(event) =>
+                            updateLine(index, {
+                              discountMode: asDiscountMode(event.target.value),
+                            })
+                          }
+                          className="select-chevron w-20 rounded-lg border border-zinc-300 bg-white px-2.5 py-2.5 text-sm text-zinc-900 shadow-sm outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100 disabled:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50 dark:disabled:bg-zinc-800"
+                        >
+                          <option value="percent">%</option>
+                          <option value="amount">₱</option>
+                        </select>
+                      </div>
+                      {err("discountValue") && (
+                        <p
+                          role="alert"
+                          className="text-sm text-red-600 dark:text-red-400"
+                        >
+                          {err("discountValue")}
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex flex-col justify-end gap-1 pb-2.5 text-xs text-zinc-500 dark:text-zinc-400">
+                      <span>
+                        {amount.statutory
+                          ? vatTypes[index] === "vat"
+                            ? "VAT is removed first, then 20% off the VAT-free price"
+                            : "20% off the price (VAT-exempt sale)"
+                          : `${discount.reason || "Discount"} discount`}
+                      </span>
+                      {amount.discountAmount > 0 && (
+                        <span>
+                          −{currencyFormatter.format(amount.discountAmount)} off
+                        </span>
+                      )}
                       {err("discountReason") && (
                         <span className="text-red-600 dark:text-red-400">
                           {err("discountReason")}
                         </span>
                       )}
+                      {form.lines.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => applyDiscountToAll(index)}
+                          className="w-fit font-medium text-amber-700 hover:underline dark:text-amber-400"
+                        >
+                          Apply to all lines
+                        </button>
+                      )}
                     </div>
-                  )}
-                </div>
-              )}
-
-              <p className="text-right text-sm text-zinc-600 dark:text-zinc-300">
-                {amount.discountAmount > 0 && (
-                  <span className="mr-3 text-xs text-zinc-500 dark:text-zinc-400">
-                    −{currencyFormatter.format(amount.discountAmount)} discount
-                  </span>
+                  </div>
                 )}
-                Line total{" "}
-                <span className="font-semibold tabular-nums text-zinc-900 dark:text-zinc-50">
-                  {currencyFormatter.format(amount.total)}
-                </span>
-              </p>
-            </div>
-          );
-        })}
+              </div>
+            );
+          })}
 
-        <button
-          type="button"
-          onClick={addLine}
-          className="rounded-lg border border-dashed border-zinc-300 px-3.5 py-2 text-sm font-medium text-amber-700 transition-colors hover:bg-amber-50 dark:border-zinc-700 dark:text-amber-400 dark:hover:bg-amber-950/30"
-        >
-          + Add another procedure
-        </button>
-      </section>
-
-      <div className="space-y-1 rounded-xl border border-zinc-200 bg-white p-4 text-sm dark:border-zinc-800 dark:bg-zinc-950">
-        <SummaryRow
-          label="Total due"
-          value={currencyFormatter.format(totalDue)}
-          strong
-        />
-        {hasOrDetail(orSummary) && (
-          <details className="pt-2" open>
-            <summary className="cursor-pointer text-xs font-medium text-zinc-500 dark:text-zinc-400">
-              OR breakdown (VAT / PWD-SC)
-            </summary>
-            <div className="pt-2">
-              <OrBreakdown summary={orSummary} />
-            </div>
-          </details>
-        )}
-      </div>
-
-      {mode === "create" ? (
-        <section className="space-y-3 rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
-          <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">
-            Payment received now
-          </h3>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div className="flex flex-col gap-1.5">
-              <FormField
-                label="Amount received"
-                type="number"
-                min="0"
-                step="0.01"
-                placeholder="0.00"
-                value={form.paymentAmount}
-                error={errors["payment.amount"] ?? errors.paymentAmount}
-                onChange={(event) =>
-                  updateField("paymentAmount", event.target.value)
-                }
-              />
-              {totalDue > 0 && paidNow !== fullAmount && (
-                <button
-                  type="button"
-                  onClick={() =>
-                    updateField("paymentAmount", fullAmount.toString())
-                  }
-                  className="w-fit text-xs font-medium text-amber-700 hover:underline dark:text-amber-400"
-                >
-                  Paid in full ({currencyFormatter.format(fullAmount)})
-                </button>
-              )}
-            </div>
-            <SelectField
-              label="Payment type"
-              placeholder="Select payment type"
-              options={PAYMENT_TYPES}
-              value={form.paymentType}
-              onChange={(event) =>
-                updateField("paymentType", event.target.value)
-              }
-            />
-            <div className="sm:col-span-2">
-              <FormField
-                label="Reference no."
-                type="text"
-                placeholder="Card slip / GCash / transfer ref."
-                value={form.referenceNo}
-                onChange={(event) =>
-                  updateField("referenceNo", event.target.value)
-                }
-              />
-            </div>
-            <div className="sm:col-span-2">
-              <FilePicker
-                label="Proof of payment (optional)"
-                hint="Card slip, GCash or bank-transfer screenshot."
-                files={receiptFiles}
-                onChange={setReceiptFiles}
-              />
-            </div>
-          </div>
-          {feeRate > 0 && (
-            <p className="text-xs text-zinc-600 dark:text-zinc-300">
-              Merchant fee ({feeRate}% for {form.paymentType}) is added on top:
-              to pay the {currencyFormatter.format(totalDue)} in full the
-              patient pays{" "}
-              <span className="font-medium tabular-nums">
-                {currencyFormatter.format(fullAmount)}
-              </span>
-              .
-              {paidNow > 0 && (
-                <>
-                  {" "}
-                  Of the {currencyFormatter.format(paidNow)} entered,{" "}
-                  {currencyFormatter.format(appliedNow)} pays the bill and{" "}
-                  {currencyFormatter.format(merchantFeeNow)} is the merchant
-                  fee.
-                </>
-              )}
-            </p>
-          )}
-          <p className="text-xs text-zinc-500 dark:text-zinc-400">
-            {paidNow <= 0
-              ? "Nothing received yet — the transaction will show as not paid. You can record payments later."
-              : balanceAfter > 0
-                ? `Balance after this payment: ${currencyFormatter.format(balanceAfter)}.`
-                : "Paid in full."}
-          </p>
+          <button
+            type="button"
+            onClick={addLine}
+            className="rounded-lg border border-dashed border-zinc-300 px-3.5 py-2 text-sm font-medium text-amber-700 transition-colors hover:bg-amber-50 dark:border-zinc-700 dark:text-amber-400 dark:hover:bg-amber-950/30"
+          >
+            + Add another procedure
+          </button>
         </section>
-      ) : (
-        <p className="text-xs text-zinc-500 dark:text-zinc-400">
-          Payments are recorded and removed in the Payments section.
-        </p>
       )}
 
-      <FormField
-        label="Remarks"
-        type="text"
-        placeholder="Optional"
-        value={form.remarks}
-        onChange={(event) => updateField("remarks", event.target.value)}
-      />
+      {showProcedures && (
+        <>
+          <div className="space-y-1 rounded-xl border border-zinc-200 bg-white p-4 text-sm dark:border-zinc-800 dark:bg-zinc-950">
+            <SummaryRow
+              label="Total due"
+              value={currencyFormatter.format(totalDue)}
+              strong
+            />
+            {orSummary.vat > 0 && (
+              <SummaryRow
+                label="VAT (12%), included in the total"
+                value={currencyFormatter.format(orSummary.vat)}
+              />
+            )}
+            {hasOrDetail(orSummary) && (
+              <details className="pt-2" open>
+                <summary className="cursor-pointer text-xs font-medium text-zinc-500 dark:text-zinc-400">
+                  OR breakdown (VAT / PWD-SC)
+                </summary>
+                <div className="pt-2">
+                  <OrBreakdown summary={orSummary} />
+                </div>
+              </details>
+            )}
+          </div>
+
+          {mode === "create" ? (
+            <section className="space-y-3 rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
+              <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">
+                Payment received now
+              </h3>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="flex flex-col gap-1.5">
+                  <FormField
+                    label="Amount received"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    placeholder="0.00"
+                    value={form.paymentAmount}
+                    error={errors["payment.amount"] ?? errors.paymentAmount}
+                    onChange={(event) =>
+                      updateField("paymentAmount", event.target.value)
+                    }
+                  />
+                  {totalDue > 0 && paidNow !== fullAmount && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        updateField("paymentAmount", fullAmount.toString())
+                      }
+                      className="w-fit text-xs font-medium text-amber-700 hover:underline dark:text-amber-400"
+                    >
+                      Paid in full ({currencyFormatter.format(fullAmount)})
+                    </button>
+                  )}
+                </div>
+                {form.paymentType ? (
+                  <ReadOnlyAmount label="Paid by" value={form.paymentType} />
+                ) : (
+                  <SelectField
+                    label="Payment type"
+                    placeholder="Select payment type"
+                    options={PAYMENT_TYPES}
+                    value={form.paymentType}
+                    onChange={(event) =>
+                      updateField("paymentType", event.target.value)
+                    }
+                  />
+                )}
+                <div className="sm:col-span-2">
+                  <FormField
+                    label="Reference no."
+                    type="text"
+                    placeholder="Card slip / GCash / transfer ref."
+                    value={form.referenceNo}
+                    onChange={(event) =>
+                      updateField("referenceNo", event.target.value)
+                    }
+                  />
+                </div>
+                <div className="sm:col-span-2">
+                  <FilePicker
+                    label="Proof of payment (optional)"
+                    hint="Card slip, GCash or bank-transfer screenshot."
+                    files={receiptFiles}
+                    onChange={setReceiptFiles}
+                  />
+                </div>
+              </div>
+              {feeRate > 0 && (
+                <p className="text-xs text-zinc-600 dark:text-zinc-300">
+                  Merchant fee ({feeRate}% for {form.paymentType}) is included
+                  in the payment, not added on top.
+                  {paidNow > 0 && (
+                    <>
+                      {" "}
+                      Of the {currencyFormatter.format(paidNow)} paid,{" "}
+                      {currencyFormatter.format(merchantFeeNow)} is the merchant
+                      fee, so the clinic receives{" "}
+                      {currencyFormatter.format(
+                        round2(paidNow - merchantFeeNow),
+                      )}
+                      .
+                    </>
+                  )}
+                </p>
+              )}
+              <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                {paidNow <= 0
+                  ? "Nothing received yet — the transaction will show as not paid. You can record payments later."
+                  : balanceAfter > 0
+                    ? `Balance after this payment: ${currencyFormatter.format(balanceAfter)}.`
+                    : "Paid in full."}
+              </p>
+            </section>
+          ) : (
+            <p className="text-xs text-zinc-500 dark:text-zinc-400">
+              Payments are recorded and removed in the Payments section.
+            </p>
+          )}
+        </>
+      )}
+
+      {idRequired && (
+        <section className="space-y-3 rounded-xl border border-amber-200 bg-amber-50/60 p-4 dark:border-amber-900 dark:bg-amber-950/30">
+          <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">
+            PWD / Senior citizen ID
+          </h3>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <SelectField
+              label="ID type"
+              required
+              placeholder="Select ID type"
+              options={DISCOUNT_ID_TYPES}
+              value={form.discountIdType}
+              error={errors.discountIdType}
+              onChange={(event) =>
+                updateField("discountIdType", event.target.value)
+              }
+            />
+            <FormField
+              label="ID number"
+              type="text"
+              required
+              placeholder="As printed on the ID"
+              value={form.discountIdNumber}
+              error={errors.discountIdNumber}
+              onChange={(event) =>
+                updateField("discountIdNumber", event.target.value)
+              }
+            />
+          </div>
+          <p className="text-xs text-zinc-500 dark:text-zinc-400">
+            The ID number is required for these discounts and is printed on the
+            invoice.
+          </p>
+        </section>
+      )}
+
+      <section className="space-y-3 rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
+        <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">
+          Recall (optional)
+        </h3>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <FormField
+            label="Come back on"
+            type="date"
+            value={form.recallDate}
+            error={errors.recallDate}
+            onChange={(event) => updateField("recallDate", event.target.value)}
+          />
+          <FormField
+            label="Reason"
+            type="text"
+            placeholder="e.g. 6-month cleaning, follow-up"
+            value={form.recallReason}
+            onChange={(event) =>
+              updateField("recallReason", event.target.value)
+            }
+          />
+        </div>
+      </section>
+
+      <div className="flex flex-col gap-1.5">
+        <label
+          htmlFor="remarks"
+          className="text-sm font-medium text-zinc-700 dark:text-zinc-300"
+        >
+          Remarks
+        </label>
+        <textarea
+          id="remarks"
+          rows={3}
+          placeholder="Optional"
+          value={form.remarks}
+          onChange={(event) => updateField("remarks", event.target.value)}
+          className="w-full rounded-lg border border-zinc-300 bg-white px-3.5 py-2.5 text-sm text-zinc-900 shadow-sm outline-none transition-colors placeholder:text-zinc-400 focus:border-amber-500 focus:ring-2 focus:ring-amber-100 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50 dark:focus:ring-amber-900/40"
+        />
+      </div>
 
       <div className="flex items-center gap-3">
         <button
@@ -1051,6 +1514,33 @@ export function TransactionForm(props: TransactionFormProps) {
           ))}
       </div>
     </form>
+  );
+}
+
+function ReadOnlyAmount({
+  label,
+  value,
+  strong,
+}: {
+  label: string;
+  value: string;
+  strong?: boolean;
+}) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+        {label}
+      </span>
+      <span
+        className={`flex min-h-[42px] items-center rounded-lg bg-zinc-100 px-3.5 text-sm tabular-nums dark:bg-zinc-800 ${
+          strong
+            ? "font-semibold text-zinc-900 dark:text-zinc-50"
+            : "text-zinc-700 dark:text-zinc-300"
+        }`}
+      >
+        {value}
+      </span>
+    </div>
   );
 }
 

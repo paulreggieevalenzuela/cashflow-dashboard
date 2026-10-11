@@ -16,14 +16,16 @@ import type { InvoiceInput } from "@/lib/cashflow/invoice-schema";
 import {
   allocateProportionally,
   appliedToBill,
+  computeListPrice,
   computeMerchantFee,
-  receivedForBill,
-  priceLine,
+  isHmoPayment,
+  isStatutoryDiscount,
   normalizeVatType,
+  priceLine,
   round2,
-  vatTypeFromAmount,
   type VatType,
 } from "@/lib/cashflow/pricing";
+import { parseTeeth } from "@/lib/cashflow/teeth";
 import type { CashflowTransaction } from "@/lib/cashflow/schema";
 import {
   addPayment,
@@ -40,7 +42,15 @@ import {
   normalizeNameKey,
   cleanDisplayName,
 } from "@/lib/db/patients";
-import { rememberProcedureDefaults } from "@/lib/db/procedures";
+import {
+  listAllDiscountTypes,
+  type DiscountTypeOption,
+} from "@/lib/db/discount-types";
+import {
+  loadProcedureInfoMap,
+  rememberProcedureDefaults,
+  type ProcedureInfo,
+} from "@/lib/db/procedures";
 import {
   generateTransactionNumbers,
   generateVisitId,
@@ -213,36 +223,149 @@ export async function findInvoiceByNumber(
 
 type PricedLine = {
   input: InvoiceInput["lines"][number];
+  listPrice: number;
+  discountMode: "" | "percent" | "amount";
+  discountValue: number;
   discountAmount: number;
+  /** The discount's name as saved on the line (type name, or old free text). */
+  discountReason: string;
+  discountTypeId: string | null;
+  discountType: DiscountTypeOption | undefined;
   lineTotal: number;
   vatBase: number;
   vat: number;
   vatType: VatType;
+  procedureId: string | null;
 };
 
+/** A saved line, as far as pricing a re-saved line needs to know. */
+type PreviousLine = Pick<CashflowTransaction, "procedure" | "vatType" | "procedureId">;
+
+function sameProcedure(a: string, b: string): boolean {
+  return a.trim().toLowerCase() === b.trim().toLowerCase();
+}
+
 /** The server's own arithmetic for every line — what is saved is never
- * taken from the browser's totals. */
-function priceLines(lines: InvoiceInput["lines"]): PricedLine[] {
+ * taken from the browser's totals.
+ *
+ * - A line that is still on the same procedure keeps the VAT setting and
+ *   procedure link it was saved with: changing the price list later never
+ *   re-prices or re-classifies an old visit when someone edits it.
+ * - A new line, or one switched to another procedure, takes the procedure
+ *   list's current VAT setting (a procedure that isn't on the list keeps the
+ *   setting the form sent).
+ * - The discount type, not its wording, decides the PWD / Senior rule.
+ */
+function priceLines(
+  lines: InvoiceInput["lines"],
+  context: {
+    procedures: Map<string, ProcedureInfo>;
+    discountTypes: DiscountTypeOption[];
+    previousById: Map<string, PreviousLine>;
+  },
+): PricedLine[] {
+  const typeById = new Map(context.discountTypes.map((t) => [t.id, t]));
+  const typeByName = new Map(
+    context.discountTypes.map((t) => [t.name.trim().toLowerCase(), t]),
+  );
+
   return lines.map((line) => {
-    // The VAT field decides: an amount = VATable, blank = non-VAT/exempt.
-    const vatType = vatTypeFromAmount(line.vatAmount);
+    const info = context.procedures.get(line.procedure.trim().toLowerCase());
+    const previous = line.id ? context.previousById.get(line.id) : undefined;
+    const unchanged = !!previous && sameProcedure(previous.procedure, line.procedure);
+    const vatType: VatType = unchanged
+      ? normalizeVatType(previous.vatType)
+      : (info?.vatType ?? line.vatType);
+    const procedureId = unchanged
+      ? (previous.procedureId ?? info?.id ?? null)
+      : (info?.id ?? null);
+
+    // Discount: a picked type wins; otherwise an old free-text reason that
+    // still matches a type by name; otherwise the text stays as it is.
+    const reasonText = (line.discountReason ?? "").trim();
+    const discountType =
+      (line.discountTypeId ? typeById.get(line.discountTypeId) : undefined) ??
+      typeByName.get(reasonText.toLowerCase());
+    let discountMode = line.discountMode;
+    let discountValue = line.discountValue;
+    if (discountType?.defaultPercent != null && discountValue > 0) {
+      // PWD / Senior citizen have a fixed rate; it is not typed.
+      discountMode = "percent";
+      discountValue = discountType.defaultPercent;
+    }
+    const discountReason = discountType ? discountType.name : reasonText;
+
+    const listPrice = computeListPrice(line.unitPrice, line.quantity);
     const priced = priceLine({
-      listPrice: line.listPrice,
+      listPrice,
       vatType,
-      vatAmount: line.vatAmount,
-      discountMode: line.discountMode,
-      discountValue: line.discountValue,
-      discountReason: line.discountReason,
+      discountMode,
+      discountValue,
+      discountReason,
+      statutory: discountType
+        ? discountType.statutory
+        : isStatutoryDiscount(discountReason),
     });
     return {
       input: line,
+      listPrice,
+      discountMode,
+      discountValue,
       discountAmount: priced.discountAmount,
+      discountReason,
+      discountTypeId: discountType?.id ?? null,
+      discountType,
       lineTotal: priced.total,
       vatBase: priced.vatBase,
       vat: priced.vat,
       vatType,
+      procedureId,
     };
   });
+}
+
+/**
+ * Does a priced visit need an ID number? True when a line with an actual
+ * discount uses a type flagged `needsId`, or (for an old reason that is not
+ * a type) a PWD / Senior citizen reason.
+ */
+function visitNeedsDiscountId(priced: PricedLine[]): boolean {
+  return priced.some(
+    (line) =>
+      line.discountAmount > 0 &&
+      (line.discountType
+        ? line.discountType.needsId
+        : isStatutoryDiscount(line.discountReason)),
+  );
+}
+
+/** Field errors for the PWD / Senior ID and the recall fields. */
+function checkVisitFields(
+  input: InvoiceInput,
+  priced: PricedLine[],
+): Record<string, string> {
+  const errors: Record<string, string> = {};
+  if (visitNeedsDiscountId(priced)) {
+    if (!input.discountIdNumber.trim()) {
+      errors.discountIdNumber = "Enter the PWD / Senior citizen ID number.";
+    }
+    if (!input.discountIdType.trim()) {
+      errors.discountIdType = "Choose the ID type.";
+    }
+  }
+  return errors;
+}
+
+/** The ID and recall columns of the invoice header. An ID is only kept
+ * when a discount on the visit needs one. */
+function visitHeaderFields(input: InvoiceInput, priced: PricedLine[]) {
+  const keepId = visitNeedsDiscountId(priced);
+  return {
+    discountIdType: keepId ? input.discountIdType.trim() : "",
+    discountIdNumber: keepId ? input.discountIdNumber.trim() : "",
+    recallDate: input.recallDate || null,
+    recallReason: input.recallDate ? input.recallReason.trim() : "",
+  };
 }
 
 function buildLine(args: {
@@ -280,6 +403,7 @@ function buildLine(args: {
     visitType: base.visitType,
     dentist: base.dentist,
     procedure: priced.input.procedure,
+    procedureId: priced.procedureId,
     paymentType: base.paymentType,
     amountPaid: priced.lineTotal,
     vatExclusive: priced.vatBase,
@@ -290,36 +414,42 @@ function buildLine(args: {
     remarks: base.remarks,
     merchantFee: args.fee,
     withholdingTax: args.withholding,
-    // The merchant fee is charged to the patient on top of the bill, so it
-    // does not reduce what the clinic collects.
-    netCollection: computeNetCollection(priced.lineTotal, 0, args.withholding),
+    // The merchant fee is part of the payment, so the clinic receives the
+    // line total less its share of the fee.
+    netCollection: computeNetCollection(
+      priced.lineTotal,
+      args.fee,
+      args.withholding,
+    ),
     branchId: base.branchId,
     createdByUserId: base.createdByUserId,
     transactionNumber: base.transactionNumber,
     invoiceId: base.invoiceId,
     patientId: base.patientId,
     lineNumber: args.lineNumber,
-    listPrice: priced.input.listPrice,
-    discountMode: hasDiscount ? priced.input.discountMode : "",
-    discountValue: hasDiscount ? priced.input.discountValue : 0,
+    listPrice: priced.listPrice,
+    discountMode: hasDiscount ? priced.discountMode : "",
+    discountValue: hasDiscount ? priced.discountValue : 0,
     discountAmount: priced.discountAmount,
-    discountReason: hasDiscount
-      ? (priced.input.discountReason ?? "").trim()
-      : "",
+    discountReason: hasDiscount ? priced.discountReason : "",
+    discountTypeId: hasDiscount ? priced.discountTypeId : null,
     vatType: priced.vatType,
+    quantity: priced.input.quantity,
+    unitPrice: priced.input.unitPrice,
+    teeth: parseTeeth(priced.input.teeth).normalized,
   };
 }
 
-/** Remembers each line's price + VAT type on its procedure, for next time. */
+/** Gives a procedure that has no list price yet the price it was just sold at. */
 async function rememberDefaults(invoiceId: string): Promise<void> {
   const lines = await listLinesForInvoice(invoiceId);
   await Promise.all(
     lines.flatMap((line) =>
-      line.procedureId
+      // An HMO price typed on a line is not the procedure's cash price.
+      line.procedureId && !isHmoPayment(line.paymentType)
         ? [
             rememberProcedureDefaults(line.procedureId, {
-              price: line.listPrice ?? 0,
-              vatType: normalizeVatType(line.vatType),
+              price: line.unitPrice ?? 0,
             }),
           ]
         : [],
@@ -361,7 +491,7 @@ export async function recomputeInvoiceFees(invoiceId: string): Promise<void> {
       merchantFee: fees[index],
       netCollection: computeNetCollection(
         line.amountPaid,
-        0,
+        fees[index],
         line.withholdingTax,
       ),
       paymentType: line.paymentType || firstType,
@@ -398,12 +528,16 @@ export async function createInvoice(
   context: { userId: string | null },
 ): Promise<SaveInvoiceResult> {
   const branchId = input.branchId || null;
-  const priced = priceLines(input.lines);
+  const priced = priceLines(input.lines, {
+    procedures: await loadProcedureInfoMap(),
+    discountTypes: await listAllDiscountTypes(),
+    previousById: new Map(),
+  });
   const totalDue = round2(
     priced.reduce((sum, line) => sum + line.lineTotal, 0),
   );
 
-  const fieldErrors: Record<string, string> = {};
+  const fieldErrors: Record<string, string> = checkVisitFields(input, priced);
   const numberProblem = input.invoiceNumber
     ? await checkInvoiceNumber(input.invoiceNumber, branchId)
     : null;
@@ -411,10 +545,9 @@ export async function createInvoice(
     fieldErrors.invoiceNumber = numberProblem;
   }
   const paidNow = round2(input.payment?.amount ?? 0);
-  // A card payment includes its merchant fee; only the rest pays the bill.
+  // A card payment's merchant fee is inside the amount paid.
   if (appliedToBill(paidNow, input.payment?.paymentType) > totalDue + 0.005) {
-    const most = receivedForBill(totalDue, input.payment?.paymentType);
-    fieldErrors.paymentAmount = `That is more than the total due (${most.toFixed(2)}${most > totalDue ? ", including the merchant fee" : ""}).`;
+    fieldErrors.paymentAmount = `That is more than the total due (${totalDue.toFixed(2)}).`;
   }
   if (Object.keys(fieldErrors).length > 0) {
     return {
@@ -461,7 +594,10 @@ export async function createInvoice(
         visitType,
         invoiceNumber: input.invoiceNumber,
         remarks: input.remarks,
-        paymentType: paidNow > 0 ? (input.payment?.paymentType ?? "") : "",
+        // The payment method chosen at the top of the form is the visit's
+        // method (an HMO visit needs it for the HMO commission) even before
+        // any money is received.
+        paymentType: input.payment?.paymentType ?? "",
         branchId,
         createdByUserId: context.userId,
         transactionNumber: transactionNumbers[index],
@@ -478,6 +614,7 @@ export async function createInvoice(
     branchId,
     transactionType: input.transactionType,
     visitType,
+    ...visitHeaderFields(input, priced),
     createdByUserId: context.userId,
   };
 
@@ -540,12 +677,16 @@ export async function updateInvoice(
   }
 
   const branchId = input.branchId || existing.branchId;
-  const priced = priceLines(input.lines);
+  const priced = priceLines(input.lines, {
+    procedures: await loadProcedureInfoMap(),
+    discountTypes: await listAllDiscountTypes(),
+    previousById: new Map(existingLines.map((line) => [line.id, line])),
+  });
   const totalDue = round2(
     priced.reduce((sum, line) => sum + line.lineTotal, 0),
   );
 
-  const fieldErrors: Record<string, string> = {};
+  const fieldErrors: Record<string, string> = checkVisitFields(input, priced);
   const numberProblem = input.invoiceNumber
     ? await checkInvoiceNumber(input.invoiceNumber, branchId, invoiceId)
     : null;
@@ -664,6 +805,7 @@ export async function updateInvoice(
         branchId,
         transactionType: input.transactionType,
         visitType,
+        ...visitHeaderFields(input, priced),
       })
       .where(eq(invoices.id, invoiceId));
 
@@ -814,15 +956,13 @@ export async function importTransactionsWithInvoices(
           round2(row.amountPaid - row.withholdingTax);
       const importFee = fileHasFee
         ? row.merchantFee
-        : round2(
-            receivedForBill(row.amountPaid, row.paymentType) - row.amountPaid,
-          );
+        : computeMerchantFee(row.amountPaid, row.paymentType);
       lines.push({
         ...row,
         merchantFee: importFee,
         netCollection: fileHasFee
           ? row.netCollection
-          : computeNetCollection(row.amountPaid, 0, row.withholdingTax),
+          : computeNetCollection(row.amountPaid, importFee, row.withholdingTax),
         visitType,
         invoiceNumber: row.invoiceNumber || invoiceNumber,
         branchId: context.branchId,
@@ -831,6 +971,10 @@ export async function importTransactionsWithInvoices(
         patientId,
         lineNumber: index + 1,
         listPrice: row.amountPaid,
+        quantity: 1,
+        unitPrice: row.amountPaid,
+        teeth: "",
+        discountTypeId: null,
         discountMode: "",
         discountValue: 0,
         discountAmount: 0,
@@ -852,9 +996,9 @@ export async function importTransactionsWithInvoices(
     for (const [paymentType, amount] of byMethod) {
       paymentRows.push({
         invoiceId: group.invoiceId,
-        // The file's amount is the bill; a card payment also carries its
-        // merchant fee, so the visit still reads as fully paid.
-        amount: receivedForBill(amount, paymentType),
+        // The file's amount is the payment; a card payment's merchant fee is
+        // inside it.
+        amount,
         paymentType,
         paidAt: new Date(`${head.date}T00:00:00`),
       });

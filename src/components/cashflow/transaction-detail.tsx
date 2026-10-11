@@ -16,6 +16,8 @@ import { OrBreakdown, hasOrDetail } from "@/components/cashflow/or-breakdown";
 import type { Branch } from "@/lib/db/branches";
 import type { AttachmentInfo } from "@/lib/db/attachments";
 import type { InvoiceDetail } from "@/lib/db/invoices";
+import type { DiscountTypeOption } from "@/lib/db/discount-types";
+import { maskId } from "@/lib/cashflow/mask";
 import type { ProcedureOption } from "@/lib/db/procedures";
 
 const currencyFormatter = new Intl.NumberFormat("en-PH", {
@@ -32,6 +34,8 @@ export function TransactionDetail({
   dentistOptions,
   branches,
   procedures,
+  discountTypes,
+  canSeeIds = false,
   attachments,
 }: {
   detail: InvoiceDetail;
@@ -40,6 +44,9 @@ export function TransactionDetail({
   dentistOptions: string[];
   branches: Branch[];
   procedures: ProcedureOption[];
+  discountTypes: DiscountTypeOption[];
+  /** Admins see the PWD / Senior ID number in full; others see it masked. */
+  canSeeIds?: boolean;
   /** Invoice photos and proofs of payment attached to this visit. */
   attachments: AttachmentInfo[];
 }) {
@@ -129,6 +136,7 @@ export function TransactionDetail({
             dentistOptions={dentistOptions}
             branches={branches}
             procedures={procedures}
+            discountTypes={discountTypes}
             payments={payments}
             totalDue={totalDue}
             canDelete={canDelete}
@@ -164,6 +172,23 @@ export function TransactionDetail({
           value={first?.transactionNumber ?? "—"}
           mono
         />
+        {invoice.discountIdNumber && (
+          <DetailField
+            label={`PWD / Senior ID${invoice.discountIdType ? ` (${invoice.discountIdType})` : ""}`}
+            value={
+              canSeeIds
+                ? invoice.discountIdNumber
+                : maskId(invoice.discountIdNumber)
+            }
+            mono
+          />
+        )}
+        {invoice.recallDate && (
+          <DetailField
+            label="Recall"
+            value={`${invoice.recallDate}${invoice.recallReason ? ` — ${invoice.recallReason}` : ""}`}
+          />
+        )}
       </div>
 
       <div className="overflow-x-auto rounded-xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950">
@@ -180,7 +205,18 @@ export function TransactionDetail({
           <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
             {lines.map((line) => (
               <tr key={line.id} className="text-zinc-700 dark:text-zinc-300">
-                <td className="px-4 py-3">{line.procedure}</td>
+                <td className="px-4 py-3">
+                  {line.procedure}
+                  {((line.quantity ?? 1) > 1 || line.teeth) && (
+                    <span className="block text-xs text-zinc-500 dark:text-zinc-400">
+                      {(line.quantity ?? 1) > 1
+                        ? `${line.quantity} × ${currencyFormatter.format(line.unitPrice ?? 0)}`
+                        : ""}
+                      {(line.quantity ?? 1) > 1 && line.teeth ? " · " : ""}
+                      {line.teeth ? `Teeth: ${line.teeth}` : ""}
+                    </span>
+                  )}
+                </td>
                 <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums">
                   {currencyFormatter.format(line.listPrice ?? line.amountPaid)}
                 </td>
@@ -230,21 +266,10 @@ export function TransactionDetail({
           currency
         />
         <DetailField
-          label="Merchant fee (added on top)"
+          label="Merchant fee (included in payment)"
           value={currencyFormatter.format(merchantFee)}
           currency
         />
-        {merchantFee > 0 && (
-          <DetailField
-            label="Total paid by patient"
-            value={currencyFormatter.format(
-              round2(
-                payments.reduce((sum, payment) => sum + payment.amount, 0),
-              ),
-            )}
-            currency
-          />
-        )}
         {withholdingTax > 0 && (
           <DetailField
             label="Withholding tax"

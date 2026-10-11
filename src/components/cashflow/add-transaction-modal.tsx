@@ -4,16 +4,19 @@ import { useState } from "react";
 import { TransactionForm } from "@/components/cashflow/transaction-form";
 import { Modal } from "@/components/ui/modal";
 import type { Branch } from "@/lib/db/branches";
+import type { DiscountTypeOption } from "@/lib/db/discount-types";
 import type { ProcedureOption } from "@/lib/db/procedures";
 
 export function AddTransactionModal({
   dentistOptions,
   branches,
   procedures,
+  discountTypes,
 }: {
   dentistOptions: string[];
   branches: Branch[];
   procedures: ProcedureOption[];
+  discountTypes: DiscountTypeOption[];
 }) {
   const [open, setOpen] = useState(false);
 
@@ -46,6 +49,7 @@ export function AddTransactionModal({
           dentistOptions={dentistOptions}
           branches={branches}
           procedures={procedures}
+          discountTypes={discountTypes}
           onSuccess={() => setOpen(false)}
         />
       </Modal>

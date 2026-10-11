@@ -2,7 +2,7 @@ import { and, asc, desc, eq, gte, ilike, lte, or, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { getCommissionRateMap } from "@/lib/db/commission-rates";
 import { findDentistUserByName } from "@/lib/db/dentists";
-import { getOrCreateProcedureByName } from "@/lib/db/procedures";
+import { findProcedureByName } from "@/lib/db/procedures";
 import {
   dentistCommissionRates,
   invoices,
@@ -38,6 +38,7 @@ export function toAppTransaction(row: TransactionRow): CashflowTransaction {
     listPrice: Number(row.listPrice),
     discountValue: Number(row.discountValue),
     discountAmount: Number(row.discountAmount),
+    unitPrice: Number(row.unitPrice),
   };
 }
 
@@ -63,6 +64,7 @@ function toDbRow(transaction: CashflowTransaction): NewTransactionRow {
     listPrice: transaction.listPrice?.toString(),
     discountValue: transaction.discountValue?.toString(),
     discountAmount: transaction.discountAmount?.toString(),
+    unitPrice: transaction.unitPrice?.toString(),
   };
 }
 
@@ -253,8 +255,16 @@ async function resolveCommissionLinks(rows: CashflowTransaction[]) {
         .filter((name): name is string => Boolean(name)),
     ),
   ];
+  // A line that already carries its procedure link keeps it (the name on
+  // the line may be an older spelling if the procedure was renamed); only
+  // lines without one are matched by name.
   const distinctProcedureNames = [
-    ...new Set(rows.map((row) => row.procedure.trim()).filter(Boolean)),
+    ...new Set(
+      rows
+        .filter((row) => !row.procedureId)
+        .map((row) => row.procedure.trim())
+        .filter(Boolean),
+    ),
   ];
 
   const [dentistMatches, procedureMatches, rateMap] = await Promise.all([
@@ -262,7 +272,7 @@ async function resolveCommissionLinks(rows: CashflowTransaction[]) {
       distinctDentistNames.map((name) => findDentistUserByName(name)),
     ),
     Promise.all(
-      distinctProcedureNames.map((name) => getOrCreateProcedureByName(name)),
+      distinctProcedureNames.map((name) => findProcedureByName(name)),
     ),
     getCommissionRateMap(),
   ]);
@@ -287,7 +297,9 @@ async function resolveCommissionLinks(rows: CashflowTransaction[]) {
     const dentistUserId =
       dentistIdByName.get((row.dentist ?? "").trim().toLowerCase()) ?? null;
     const procedureId =
-      procedureIdByName.get(row.procedure.trim().toLowerCase()) ?? null;
+      row.procedureId ??
+      procedureIdByName.get(row.procedure.trim().toLowerCase()) ??
+      null;
 
     // Commission is on (total - discount - fees): the line total after any
     // discount, less card fees and withholding tax (= net collection). Cash
@@ -381,6 +393,10 @@ export async function upsertTransactions(
           discountAmount: sql`excluded.discount_amount`,
           discountReason: sql`excluded.discount_reason`,
           vatType: sql`excluded.vat_type`,
+          quantity: sql`excluded.quantity`,
+          unitPrice: sql`excluded.unit_price`,
+          teeth: sql`excluded.teeth`,
+          discountTypeId: sql`excluded.discount_type_id`,
         },
       });
   }

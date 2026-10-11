@@ -5,6 +5,7 @@ import { listAttachmentsForInvoice } from "@/lib/db/attachments";
 import { listBranches } from "@/lib/db/branches";
 import { listDentistUsers } from "@/lib/db/dentists";
 import { getInvoiceDetail } from "@/lib/db/invoices";
+import { listActiveDiscountTypes } from "@/lib/db/discount-types";
 import { listProcedureOptions } from "@/lib/db/procedures";
 import { getTransactionById } from "@/lib/db/transactions";
 
@@ -28,12 +29,13 @@ export default async function TransactionDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const [session, transaction, dentists, branches, procedures] = await Promise.all([
+  const [session, transaction, dentists, branches, procedures, discountTypes] = await Promise.all([
     auth(),
     getTransactionById(decodeURIComponent(id)),
     listDentistUsers(),
     listBranches(),
     listProcedureOptions(),
+    listActiveDiscountTypes(),
   ]);
 
   if (!transaction) {
@@ -59,9 +61,11 @@ export default async function TransactionDetailPage({
       detail={detail}
       openedLineId={transaction.id}
       canDelete={session?.user.role === "admin"}
+      canSeeIds={session?.user.role === "admin"}
       dentistOptions={dentists.map((dentist) => dentist.name)}
       branches={branches}
       procedures={procedures}
+      discountTypes={discountTypes}
       attachments={attachments}
     />
   );

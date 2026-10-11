@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { VAT_TYPES } from "@/lib/cashflow/pricing";
+import { computeListPrice, isStatutoryDiscount, VAT_TYPES } from "@/lib/cashflow/pricing";
+import { teethError } from "@/lib/cashflow/teeth";
 
 /**
  * One procedure line on the Add/Edit transaction form. Each line has its
@@ -16,7 +17,20 @@ export const InvoiceLineInputSchema = z
   .object({
     id: z.string().optional().default(""),
     procedure: z.string().trim().min(1, "Procedure is required."),
-    listPrice: z.number().nonnegative("Price can't be negative."),
+    // Price of ONE unit (tooth, surface, arch, unit — see the procedure's
+    // price basis); the line's price is unitPrice × quantity.
+    unitPrice: z.number().nonnegative("Price can't be negative."),
+    quantity: z
+      .number()
+      .int("Quantity must be a whole number.")
+      .min(1, "Quantity must be at least 1.")
+      .max(99, "Quantity looks too high.")
+      .default(1),
+    // FDI tooth numbers and/or upper arch / lower arch / full mouth.
+    teeth: z.string().trim().optional().default(""),
+    // The discount type picked from the list; the type decides the VAT rule
+    // and whether an ID is needed. Blank for no discount (or an old reason).
+    discountTypeId: z.string().optional().default(""),
     discountReason: z.string().optional().default(""),
     // "" = no discount; otherwise a percentage or a fixed peso amount.
     discountMode: z.enum(["", "percent", "amount"]).default(""),
@@ -24,20 +38,18 @@ export const InvoiceLineInputSchema = z
       .number()
       .nonnegative("Discount can't be negative.")
       .default(0),
-    // The VAT field: a peso amount. Blank/0 = non-VAT (VAT-exempt is the
-    // same); any amount makes the line VATable. The server works out the
-    // VAT type from this — `vatType` is only kept so older callers still fit.
-    vatAmount: z.number().nonnegative("VAT can't be negative.").default(0),
-    vatType: z.enum(VAT_TYPES).default("non_vat"),
+    // VAT is never typed: it is 12% (price is VAT-inclusive) on a "vat"
+    // procedure and none on a "non_vat" one. The procedure list decides; the
+    // server looks the procedure up and only falls back to this for a
+    // procedure that isn't on the list.
+    vatType: z.enum(VAT_TYPES).default("vat"),
   })
   .superRefine((line, ctx) => {
-    if (line.vatAmount > line.listPrice) {
-      ctx.addIssue({
-        code: "custom",
-        path: ["vatAmount"],
-        message: "VAT can't be more than the price.",
-      });
+    const message = teethError(line.teeth);
+    if (message) {
+      ctx.addIssue({ code: "custom", path: ["teeth"], message });
     }
+    const listPrice = computeListPrice(line.unitPrice, line.quantity);
     if (line.discountValue > 0) {
       if (!line.discountMode) {
         ctx.addIssue({
@@ -55,7 +67,7 @@ export const InvoiceLineInputSchema = z
       }
       if (
         line.discountMode === "amount" &&
-        line.discountValue > line.listPrice
+        line.discountValue > listPrice
       ) {
         ctx.addIssue({
           code: "custom",
@@ -107,8 +119,48 @@ export const InvoiceInputSchema = z.object({
   // Empty string means "no branch selected", normalized to null on save.
   branchId: z.string().optional().default(""),
   remarks: z.string().optional().default(""),
+  // PWD / Senior citizen ID. Required when a line uses one of those
+  // discounts (the server checks this against the discount type's own
+  // "needs ID" flag too); ignored otherwise.
+  discountIdType: z.string().trim().optional().default(""),
+  discountIdNumber: z.string().trim().optional().default(""),
+  // Optional recall: when to bring the patient back, and why.
+  recallDate: z
+    .string()
+    .regex(/^(\d{4}-\d{2}-\d{2})?$/, "Recall date must be a valid date.")
+    .optional()
+    .default(""),
+  recallReason: z.string().trim().optional().default(""),
   lines: z.array(InvoiceLineInputSchema).min(1, "Add at least one procedure."),
   payment: InvoicePaymentInputSchema.optional(),
+})
+.superRefine((input, ctx) => {
+  const needsId = input.lines.some(
+    (line) => line.discountValue > 0 && isStatutoryDiscount(line.discountReason),
+  );
+  if (needsId) {
+    if (!input.discountIdNumber) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["discountIdNumber"],
+        message: "Enter the PWD / Senior citizen ID number.",
+      });
+    }
+    if (!input.discountIdType) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["discountIdType"],
+        message: "Choose the ID type.",
+      });
+    }
+  }
+  if (input.recallReason && !input.recallDate) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["recallDate"],
+      message: "Pick the recall date, or clear the reason.",
+    });
+  }
 });
 
 export type InvoiceInput = z.infer<typeof InvoiceInputSchema>;

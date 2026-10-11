@@ -71,6 +71,13 @@ export const CashflowTransactionSchema = z.object({
   discountAmount: z.number().nonnegative().optional(),
   discountReason: z.string().optional(),
   vatType: z.string().optional(),
+  // How many of the procedure's price unit, the price of one, the teeth
+  // (FDI numbers / arch words) and the discount type picked. `listPrice` =
+  // unitPrice × quantity.
+  quantity: z.number().int().positive().optional(),
+  unitPrice: z.number().nonnegative().optional(),
+  teeth: z.string().optional(),
+  discountTypeId: z.string().nullable().optional(),
 });
 
 export type CashflowTransaction = z.infer<typeof CashflowTransactionSchema>;

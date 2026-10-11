@@ -29,7 +29,7 @@ export function InvoiceView({
   const dentistNames = [
     ...new Set(lines.map((line) => line.dentist).filter(Boolean)),
   ].join(", ");
-  // Card payments carry a merchant fee on top of the bill.
+  // A card payment's merchant fee is inside the amount paid.
   const cardFee = round2(
     payments.reduce(
       (sum, payment) =>
@@ -123,6 +123,17 @@ export function InvoiceView({
             </p>
             <p className="mt-1 text-sm font-medium">{dentistNames || "—"}</p>
           </div>
+          {invoice.discountIdNumber && (
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wide text-zinc-400 dark:text-zinc-500 print:text-black/50">
+                PWD / Senior ID
+                {invoice.discountIdType ? ` (${invoice.discountIdType})` : ""}
+              </p>
+              <p className="mt-1 text-sm font-medium">
+                {invoice.discountIdNumber}
+              </p>
+            </div>
+          )}
         </div>
 
         <table className="w-full border-t border-zinc-200 text-left text-sm dark:border-zinc-800 print:border-black/20">
@@ -137,7 +148,18 @@ export function InvoiceView({
           <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800 print:divide-black/10">
             {lines.map((line) => (
               <tr key={line.id}>
-                <td className="py-3">{line.procedure}</td>
+                <td className="py-3">
+                  {line.procedure}
+                  {((line.quantity ?? 1) > 1 || line.teeth) && (
+                    <span className="block text-xs text-zinc-500 dark:text-zinc-400 print:text-black/60">
+                      {(line.quantity ?? 1) > 1
+                        ? `${line.quantity} × ${currencyFormatter.format(line.unitPrice ?? 0)}`
+                        : ""}
+                      {(line.quantity ?? 1) > 1 && line.teeth ? " · " : ""}
+                      {line.teeth ? `Teeth: ${line.teeth}` : ""}
+                    </span>
+                  )}
+                </td>
                 <td className="py-3 text-right tabular-nums">
                   {currencyFormatter.format(line.listPrice ?? line.amountPaid)}
                 </td>
@@ -176,18 +198,11 @@ export function InvoiceView({
             value={currencyFormatter.format(collected)}
           />
           {cardFee > 0 && (
-            <>
-              <Row
-                label="Merchant fee (card)"
-                value={currencyFormatter.format(cardFee)}
-                small
-              />
-              <Row
-                label="Total paid"
-                value={currencyFormatter.format(round2(collected + cardFee))}
-                strong
-              />
-            </>
+            <Row
+              label="Card merchant fee (included in the payment)"
+              value={currencyFormatter.format(cardFee)}
+              small
+            />
           )}
           <div className="flex items-center justify-between border-t border-zinc-200 pt-2 text-base font-semibold dark:border-zinc-800 print:border-black/20">
             <span>Balance due</span>

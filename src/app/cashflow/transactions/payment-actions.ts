@@ -6,7 +6,7 @@ import {
   PaymentInputSchema,
   type PaymentInput,
 } from "@/lib/cashflow/payment-schema";
-import { appliedToBill, receivedForBill } from "@/lib/cashflow/pricing";
+import { appliedToBill } from "@/lib/cashflow/pricing";
 import { getInvoiceSummaries, recomputeInvoiceFees } from "@/lib/db/invoices";
 import { addPayment, deletePayment } from "@/lib/db/payments";
 
@@ -45,15 +45,14 @@ export async function addPaymentAction(
   }
 
   const balance = Math.max(summary.totalDue - summary.collected, 0);
-  // A card payment includes its merchant fee; only the rest pays the bill.
+  // A card payment's merchant fee is inside the amount paid.
   if (
     appliedToBill(parsed.data.amount, parsed.data.paymentType) >
     balance + 0.005
   ) {
-    const most = receivedForBill(balance, parsed.data.paymentType);
     return {
       ok: false,
-      message: `That is more than the balance due (${most.toFixed(2)}${most > balance ? ", including the merchant fee" : ""}).`,
+      message: `That is more than the balance due (${balance.toFixed(2)}).`,
     };
   }
 

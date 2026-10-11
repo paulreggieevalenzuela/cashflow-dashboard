@@ -73,17 +73,14 @@ export type PaymentTypeOption = (typeof PAYMENT_TYPES)[number];
 export const CLINIC_NAME = "ADT Dental Clinic";
 
 /**
- * Discount presets offered on the transaction form. The rates are the
- * usual statutory/clinic ones but are starting points to confirm with the
- * clinic's accountant, not law baked into the app — staff can always type a
- * different percentage or a peso amount, and "Other" asks for a reason.
+ * The ID that backs a PWD / Senior citizen discount. The discounts
+ * themselves (PWD, Senior citizen, Promo) live in the `discount_types`
+ * table, not here.
  */
-export const DISCOUNT_PRESETS = [
-  { reason: "PWD", mode: "percent", value: 20 },
-  { reason: "Senior citizen", mode: "percent", value: 20 },
-  { reason: "Dental Network Member", mode: "percent", value: 5 },
-  { reason: "Promo", mode: "percent", value: 0 },
-  { reason: "Other", mode: "percent", value: 0 },
+export const DISCOUNT_ID_TYPES = [
+  "PWD ID",
+  "Senior Citizen ID (OSCA)",
+  "Other government ID",
 ] as const;
 
 // The clinic's own "Particulars" list from its Operating Expenses sheet,
