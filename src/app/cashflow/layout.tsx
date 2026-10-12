@@ -2,9 +2,8 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { auth } from "@/auth";
 import { CashflowNav } from "@/components/cashflow/cashflow-nav";
+import { countOpenVisits } from "@/lib/db/visit-status";
 import { RouteFocusManager } from "@/components/navigation/route-focus-manager";
-import { listBranches } from "@/lib/db/branches";
-import { listSuppliers } from "@/lib/db/suppliers";
 
 export const metadata: Metadata = {
   title: {
@@ -14,14 +13,11 @@ export const metadata: Metadata = {
 };
 
 export default async function CashflowLayout({ children }: { children: ReactNode }) {
-  const [session, branches, suppliers] = await Promise.all([
-    auth(),
-    listBranches(),
-    listSuppliers(),
-  ]);
+  const session = await auth();
   const role = session?.user.role ?? "staff";
   const displayName = session?.user.name ?? session?.user.email ?? "";
   const email = session?.user.email ?? undefined;
+  const openVisits = session ? await countOpenVisits() : null;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-amber-50/40 via-white to-sky-50/50 dark:from-zinc-950 dark:via-zinc-950 dark:to-zinc-900">
@@ -42,8 +38,7 @@ export default async function CashflowLayout({ children }: { children: ReactNode
             role={role}
             displayName={displayName || undefined}
             email={email}
-            branches={branches}
-            suppliers={suppliers}
+            openVisits={openVisits}
           />
         </div>
       </header>

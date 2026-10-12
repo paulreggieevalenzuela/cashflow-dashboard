@@ -111,12 +111,15 @@ function RowActionsMenu({
   isRemoving,
   onRemove,
   onEdit,
+  editLocked = false,
 }: {
   transaction: CashflowTransaction;
   canDelete: boolean;
   isRemoving: boolean;
   onRemove: () => void;
   onEdit: () => void;
+  /** Cleared visits can only be edited by an admin. */
+  editLocked?: boolean;
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -198,11 +201,17 @@ function RowActionsMenu({
           <button
             type="button"
             role="menuitem"
+            disabled={editLocked}
+            title={
+              editLocked
+                ? "Cleared visits are locked. An admin can reopen it."
+                : undefined
+            }
             onClick={() => {
               setIsOpen(false);
               onEdit();
             }}
-            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-zinc-700 transition-colors hover:bg-amber-50 hover:text-amber-700 dark:text-zinc-300 dark:hover:bg-amber-950/40 dark:hover:text-amber-300"
+            className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-zinc-700 transition-colors disabled:cursor-not-allowed disabled:opacity-50 hover:bg-amber-50 hover:text-amber-700 dark:text-zinc-300 dark:hover:bg-amber-950/40 dark:hover:text-amber-300"
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -327,6 +336,7 @@ export function TransactionsTable({
       open={editing !== null}
       onClose={() => setEditing(null)}
       title="Edit transaction"
+      size="wide"
       description={
         editing
           ? `${editing.transaction.patientName} · ${editing.transaction.date}`
@@ -376,7 +386,7 @@ export function TransactionsTable({
 
   return (
     <div className="overflow-x-auto rounded-lg border border-zinc-200 dark:border-zinc-800">
-      <table className="w-full min-w-[880px] text-left text-sm">
+      <table className="w-full min-w-[900px] text-left text-sm">
         <thead className="bg-zinc-50 text-xs uppercase tracking-wide text-zinc-500 dark:bg-zinc-900 dark:text-zinc-400">
           <tr>
             <SortableHeader label="Date" column="date" query={query} />
@@ -469,6 +479,9 @@ export function TransactionsTable({
                       isRemoving={removingId === transaction.id}
                       onRemove={() => handleRemove(transaction)}
                       onEdit={() => openEditor(transaction)}
+                      editLocked={
+                        !canDelete && summary?.status === "Cleared"
+                      }
                     />
                   </div>
                 </td>

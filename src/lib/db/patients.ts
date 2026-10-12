@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray, like, notInArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, like, ne, notInArray, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { invoices, patients } from "@/lib/db/schema";
 
@@ -258,4 +258,47 @@ export async function computeVisitType(
   const first = await getFirstVisitDates([patientId], excludeInvoiceId ? [excludeInvoiceId] : []);
   const date = first.get(patientId);
   return date && date < visitDate ? "RETURNING" : "NEW";
+}
+
+/** The PWD / Senior ID a patient last used on a visit, if any. */
+export async function getSavedDiscountId(
+  patientId: string,
+): Promise<{ type: string; number: string } | undefined> {
+  const [row] = await db
+    .select({
+      type: invoices.discountIdType,
+      number: invoices.discountIdNumber,
+    })
+    .from(invoices)
+    .where(and(eq(invoices.patientId, patientId), ne(invoices.discountIdNumber, "")))
+    .orderBy(desc(invoices.visitDate), desc(invoices.createdAt))
+    .limit(1);
+  return row;
+}
+
+/**
+ * Names of OTHER patients who have used this same ID number. The same ID on
+ * two different names is usually a typo, and sometimes misuse, so the form
+ * warns (it does not block).
+ */
+export async function findOtherPatientsUsingId(
+  idNumber: string,
+  patientId: string | null,
+): Promise<string[]> {
+  const wanted = idNumber.trim().toLowerCase();
+  if (!wanted) {
+    return [];
+  }
+  const rows = await db
+    .selectDistinct({ id: patients.id, name: patients.fullName })
+    .from(invoices)
+    .innerJoin(patients, eq(patients.id, invoices.patientId))
+    .where(
+      and(
+        sql`lower(trim(${invoices.discountIdNumber})) = ${wanted}`,
+        patientId ? ne(invoices.patientId, patientId) : undefined,
+      ),
+    )
+    .limit(5);
+  return rows.map((row) => row.name);
 }

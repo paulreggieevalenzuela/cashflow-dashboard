@@ -72,6 +72,11 @@ export async function addPayment(input: {
 
 /** Removes a payment and returns the invoice it belonged to (so the
  * caller can refresh that visit's merchant fee). */
+export async function getPaymentById(id: string): Promise<Payment | undefined> {
+  const [row] = await db.select().from(payments).where(eq(payments.id, id)).limit(1);
+  return row ? toAppPayment(row) : undefined;
+}
+
 export async function deletePayment(id: string): Promise<string | null> {
   const [row] = await db
     .select({ invoiceId: payments.invoiceId })

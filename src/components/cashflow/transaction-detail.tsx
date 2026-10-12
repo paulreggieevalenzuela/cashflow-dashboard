@@ -7,6 +7,16 @@ import { removeInvoiceAction } from "@/app/cashflow/actions";
 import { AttachmentsPanel } from "@/components/cashflow/attachments-panel";
 import { EditTransactionModal } from "@/components/cashflow/edit-transaction-modal";
 import { PaymentsManager } from "@/components/cashflow/payments-manager";
+import { AuditTrail } from "@/components/cashflow/audit-trail";
+import { StatusHistory } from "@/components/cashflow/status-history";
+import { VisitStatusControl } from "@/components/cashflow/visit-status-control";
+import {
+  balanceDueOf,
+  isLocked,
+  isVisitStatus,
+} from "@/lib/cashflow/visit-status";
+import type { StatusHistoryEntry } from "@/lib/db/visit-status";
+import type { AuditEntry } from "@/lib/cashflow/audit-types";
 import {
   isStatutoryDiscount,
   round2,
@@ -37,6 +47,8 @@ export function TransactionDetail({
   discountTypes,
   canSeeIds = false,
   attachments,
+  statusHistory = [],
+  auditEntries,
 }: {
   detail: InvoiceDetail;
   openedLineId: string;
@@ -49,11 +61,19 @@ export function TransactionDetail({
   canSeeIds?: boolean;
   /** Invoice photos and proofs of payment attached to this visit. */
   attachments: AttachmentInfo[];
+  /** Every status change of this visit, oldest first. */
+  statusHistory?: StatusHistoryEntry[];
+  /** Admin only: who created and changed this visit. */
+  auditEntries?: AuditEntry[];
 }) {
   const router = useRouter();
   const [isRemoving, setIsRemoving] = useState(false);
   const { invoice, lines, payments, totalDue } = detail;
   const first = lines[0];
+  const status = isVisitStatus(invoice.status) ? invoice.status : "Cleared";
+  const balanceDue = balanceDueOf(totalDue, detail.collected);
+  // A Cleared visit is locked; only an admin can reopen or edit it.
+  const locked = isLocked(status) && !canDelete;
   const dentistNames = [
     ...new Set(lines.map((line) => line.dentist).filter(Boolean)),
   ].join(", ");
@@ -116,12 +136,29 @@ export function TransactionDetail({
             ← Back to transactions
           </Link>
           <h2 className="mt-2 text-xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
-            {first?.patientName}
+            {invoice.patientId ? (
+              <Link
+                href={`/cashflow/patients/${invoice.patientId}`}
+                className="hover:text-amber-700 hover:underline dark:hover:text-amber-400"
+              >
+                {first?.patientName}
+              </Link>
+            ) : (
+              first?.patientName
+            )}
           </h2>
           <p className="text-sm text-zinc-500 dark:text-zinc-400">
             {invoice.visitDate} ·{" "}
             {lines.length > 1 ? `${lines.length} procedures` : first?.procedure}
           </p>
+          <div className="mt-2">
+            <VisitStatusControl
+              invoiceId={invoice.id}
+              status={status}
+              balanceDue={balanceDue}
+              isAdmin={canDelete}
+            />
+          </div>
         </div>
         <div className="flex flex-wrap items-center gap-3 self-start">
           <Link
@@ -130,17 +167,26 @@ export function TransactionDetail({
           >
             Print invoice
           </Link>
-          <EditTransactionModal
-            invoice={invoice}
-            lines={lines}
-            dentistOptions={dentistOptions}
-            branches={branches}
-            procedures={procedures}
-            discountTypes={discountTypes}
-            payments={payments}
-            totalDue={totalDue}
-            canDelete={canDelete}
-          />
+          {locked ? (
+            <span
+              className="rounded-lg border border-dashed border-zinc-300 px-3.5 py-2 text-sm text-zinc-500 dark:border-zinc-700 dark:text-zinc-400"
+              title="Cleared visits are locked. An admin can reopen it."
+            >
+              Cleared · locked
+            </span>
+          ) : (
+            <EditTransactionModal
+              invoice={invoice}
+              lines={lines}
+              dentistOptions={dentistOptions}
+              branches={branches}
+              procedures={procedures}
+              discountTypes={discountTypes}
+              payments={payments}
+              totalDue={totalDue}
+              canDelete={canDelete}
+            />
+          )}
           {canDelete && (
             <button
               type="button"
@@ -303,6 +349,25 @@ export function TransactionDetail({
         readOnly
         attachments={attachments}
       />
+
+      <div className="rounded-xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-950">
+        <h3 className="mb-3 text-sm font-semibold text-zinc-900 dark:text-zinc-50">
+          Status history
+        </h3>
+        <StatusHistory entries={statusHistory} />
+      </div>
+
+      {auditEntries && (
+        <div className="rounded-xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-950">
+          <h3 className="mb-3 text-sm font-semibold text-zinc-900 dark:text-zinc-50">
+            Audit trail
+          </h3>
+          <AuditTrail
+            entries={auditEntries}
+            emptyText="No edits have been logged for this visit yet."
+          />
+        </div>
+      )}
 
       <div className="rounded-xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-950">
         <h3 className="mb-3 text-sm font-semibold text-zinc-900 dark:text-zinc-50">

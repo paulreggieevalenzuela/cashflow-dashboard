@@ -8,7 +8,11 @@ import {
   createInvoiceAction,
   updateInvoiceAction,
 } from "@/app/cashflow/actions";
-import { lookupPatientAction } from "@/app/cashflow/patient-actions";
+import {
+  checkDiscountIdAction,
+  getSavedDiscountIdAction,
+  lookupPatientAction,
+} from "@/app/cashflow/patient-actions";
 import { FormField } from "@/components/auth/form-field";
 import { FilePicker } from "@/components/cashflow/file-picker";
 import { PatientCombobox } from "@/components/cashflow/patient-combobox";
@@ -364,6 +368,9 @@ function withTrailingBlank(form: FormState): FormState {
 type FieldErrors = Record<string, string>;
 
 type TransactionFormProps = {
+  /** Start a new transaction with this patient already filled in (used by
+   * "New transaction for this patient" on the patient page). */
+  initialPatientName?: string;
   dentistOptions: string[];
   branches?: Branch[];
   /** Known procedures from the `procedures` table (with the price and VAT
@@ -390,7 +397,7 @@ export function TransactionForm(props: TransactionFormProps) {
   const [form, setForm] = useState<FormState>(
     props.mode === "edit"
       ? formStateFromInvoice(props.invoice, props.lines, discountTypes)
-      : blankFormState(),
+      : { ...blankFormState(), patientName: props.initialPatientName ?? "" },
   );
   const procedureOptions = props.procedures ?? [];
   const [errors, setErrors] = useState<FieldErrors>({});
@@ -407,7 +414,9 @@ export function TransactionForm(props: TransactionFormProps) {
     known: boolean;
     visitType: "NEW" | "RETURNING";
     lastVisitDate: string | null;
+    savedId: { type: string; last4: string } | null;
   } | null>(null);
+  const [idWarning, setIdWarning] = useState<string | null>(null);
 
   function updateField<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -608,6 +617,7 @@ export function TransactionForm(props: TransactionFormProps) {
             known: result.patient !== null,
             visitType: result.visitType,
             lastVisitDate: result.patient?.lastVisitDate ?? null,
+            savedId: result.savedId,
           });
         }
       } catch {
@@ -625,6 +635,49 @@ export function TransactionForm(props: TransactionFormProps) {
       ? lookup
       : null;
   const effectiveVisitType = form.visitType || activeLookup?.visitType || "";
+
+  /** Warns (does not block) when this PWD / Senior ID number was already
+   * used for a different patient. */
+  async function checkIdNumber() {
+    const number = form.discountIdNumber.trim();
+    if (!number) {
+      setIdWarning(null);
+      return;
+    }
+    try {
+      const result = await checkDiscountIdAction(number, form.patientName);
+      setIdWarning(
+        result.others.length > 0
+          ? `This ID number is already on file for ${result.others.join(", ")}. Check the name and the number before saving.`
+          : null,
+      );
+    } catch {
+      // A convenience check; failing quietly is fine.
+    }
+  }
+
+  /** Fills the ID fields from the ID this patient used last time. */
+  async function fillSavedId() {
+    try {
+      const result = await getSavedDiscountIdAction(form.patientName);
+      if (result.id) {
+        const saved = result.id;
+        setForm((prev) => ({
+          ...prev,
+          discountIdType: saved.type,
+          discountIdNumber: saved.number,
+        }));
+        setErrors((prev) => ({
+          ...prev,
+          discountIdType: "",
+          discountIdNumber: "",
+        }));
+        setIdWarning(null);
+      }
+    } catch {
+      // Leave the fields as they are.
+    }
+  }
 
   /** Checks the typed invoice number against the others at the same
    * branch. Returns the problem ("already used ...") or null when it is
@@ -1424,11 +1477,31 @@ export function TransactionForm(props: TransactionFormProps) {
               placeholder="As printed on the ID"
               value={form.discountIdNumber}
               error={errors.discountIdNumber}
-              onChange={(event) =>
-                updateField("discountIdNumber", event.target.value)
-              }
+              onChange={(event) => {
+                updateField("discountIdNumber", event.target.value);
+                setIdWarning(null);
+              }}
+              onBlur={() => void checkIdNumber()}
             />
           </div>
+          {activeLookup?.savedId && !form.discountIdNumber.trim() && (
+            <p className="text-xs text-zinc-600 dark:text-zinc-400">
+              An ID is on file for this patient (ending{" "}
+              {activeLookup.savedId.last4}).{" "}
+              <button
+                type="button"
+                onClick={() => void fillSavedId()}
+                className="font-medium text-amber-700 underline-offset-2 hover:underline dark:text-amber-400"
+              >
+                Use ID on file
+              </button>
+            </p>
+          )}
+          {idWarning && (
+            <p role="alert" className="text-xs text-red-600 dark:text-red-400">
+              {idWarning}
+            </p>
+          )}
           <p className="text-xs text-zinc-500 dark:text-zinc-400">
             The ID number is required for these discounts and is printed on the
             invoice.

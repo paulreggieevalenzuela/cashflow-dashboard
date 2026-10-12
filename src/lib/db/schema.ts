@@ -1,4 +1,4 @@
-import { boolean, integer, numeric, pgEnum, pgTable, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
+import { boolean, integer, jsonb, numeric, pgEnum, pgTable, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
 
 /**
  * A physical clinic location. Dentist/staff accounts and transactions can
@@ -499,9 +499,56 @@ export const invoices = pgTable("invoices", {
   // When the patient should come back, and why (optional). YYYY-MM-DD.
   recallDate: text("recall_date"),
   recallReason: text("recall_reason").notNull().default(""),
+  // Internal tracking: Arrived | On-going | For Payment | Cleared (see
+  // src/lib/cashflow/visit-status.ts). A work-flow label only — it never
+  // changes sales, collections or commission. Old visits are Cleared.
+  status: text("status").notNull().default("Cleared"),
+  statusChangedAt: timestamp("status_changed_at", { withTimezone: true }).notNull().defaultNow(),
   createdByUserId: uuid("created_by_user_id").references(() => users.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+/**
+ * Every status change of a visit: who, when, from, to and why. Gives the
+ * audit trail and the waiting times (arrival to treatment to payment).
+ * Removed with the visit.
+ */
+export const invoiceStatusHistory = pgTable("invoice_status_history", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  invoiceId: uuid("invoice_id")
+    .notNull()
+    .references(() => invoices.id, { onDelete: "cascade" }),
+  fromStatus: text("from_status"),
+  toStatus: text("to_status").notNull(),
+  changedByUserId: uuid("changed_by_user_id").references(() => users.id, { onDelete: "set null" }),
+  changedByName: text("changed_by_name").notNull().default(""),
+  changedAt: timestamp("changed_at", { withTimezone: true }).notNull().defaultNow(),
+  note: text("note").notNull().default(""),
+});
+
+/**
+ * Who did what, and when: visits created / edited / removed, payments added
+ * or removed, patients edited or merged, status changes. `invoiceId` and
+ * `patientId` are plain ids (no foreign key) so the trail survives the
+ * visit or patient being removed afterwards.
+ */
+export const auditLog = pgTable("audit_log", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  userId: uuid("user_id").references(() => users.id, { onDelete: "set null" }),
+  userName: text("user_name").notNull().default(""),
+  action: text("action").notNull(),
+  entityType: text("entity_type").notNull(),
+  entityId: text("entity_id").notNull().default(""),
+  invoiceId: uuid("invoice_id"),
+  patientId: uuid("patient_id"),
+  summary: text("summary").notNull().default(""),
+  details: jsonb("details"),
+});
+
+export type AuditLogRow = typeof auditLog.$inferSelect;
+
+export type InvoiceStatusHistoryRow = typeof invoiceStatusHistory.$inferSelect;
 
 export type InvoiceRow = typeof invoices.$inferSelect;
 export type NewInvoiceRow = typeof invoices.$inferInsert;

@@ -70,6 +70,7 @@ export function EditTransactionModal({
         open={open}
         onClose={() => setOpen(false)}
         title="Edit transaction"
+        size="wide"
         description={`${patientName} · ${invoice.visitDate}`}
       >
         <div className="space-y-6">

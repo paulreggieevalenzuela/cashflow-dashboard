@@ -8,6 +8,8 @@ import { getInvoiceDetail } from "@/lib/db/invoices";
 import { listActiveDiscountTypes } from "@/lib/db/discount-types";
 import { listProcedureOptions } from "@/lib/db/procedures";
 import { getTransactionById } from "@/lib/db/transactions";
+import { listStatusHistory } from "@/lib/db/visit-status";
+import { listAuditForInvoice } from "@/lib/db/audit";
 
 function NotFound({ message }: { message: string }) {
   return (
@@ -48,9 +50,12 @@ export default async function TransactionDetailPage({
   }
 
   // Any line of a visit opens the whole visit.
-  const [detail, attachments] = await Promise.all([
+  const isAdmin = session?.user.role === "admin";
+  const [detail, attachments, statusHistory, auditEntries] = await Promise.all([
     getInvoiceDetail(transaction.invoiceId),
     listAttachmentsForInvoice(transaction.invoiceId),
+    listStatusHistory(transaction.invoiceId),
+    isAdmin ? listAuditForInvoice(transaction.invoiceId) : Promise.resolve(undefined),
   ]);
   if (!detail || detail.lines.length === 0) {
     return <NotFound message="We couldn't find that transaction. It may have been removed." />;
@@ -67,6 +72,8 @@ export default async function TransactionDetailPage({
       procedures={procedures}
       discountTypes={discountTypes}
       attachments={attachments}
+      statusHistory={statusHistory}
+      auditEntries={auditEntries}
     />
   );
 }

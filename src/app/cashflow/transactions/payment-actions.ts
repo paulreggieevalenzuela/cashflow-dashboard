@@ -7,8 +7,14 @@ import {
   type PaymentInput,
 } from "@/lib/cashflow/payment-schema";
 import { appliedToBill } from "@/lib/cashflow/pricing";
-import { getInvoiceSummaries, recomputeInvoiceFees } from "@/lib/db/invoices";
-import { addPayment, deletePayment } from "@/lib/db/payments";
+import {
+  getInvoiceById,
+  getInvoiceSummaries,
+  recomputeInvoiceFees,
+} from "@/lib/db/invoices";
+import { logAudit } from "@/lib/db/audit";
+import { addPayment, deletePayment, getPaymentById } from "@/lib/db/payments";
+import { syncStatusWithPayments } from "@/lib/db/visit-status";
 
 type ActionResult = { ok: true } | { ok: false; message: string };
 
@@ -65,6 +71,19 @@ export async function addPaymentAction(
     notes: parsed.data.notes,
   });
   await recomputeInvoiceFees(invoiceId);
+  const actor = {
+    userId: session.user.id,
+    name: session.user.name ?? session.user.email ?? "",
+  };
+  await syncStatusWithPayments(invoiceId, actor);
+  await logAudit({
+    action: "payment.added",
+    entityType: "payment",
+    invoiceId,
+    patientId: (await getInvoiceById(invoiceId))?.patientId ?? null,
+    summary: `${parsed.data.amount.toFixed(2)} by ${parsed.data.paymentType || "unspecified method"}${parsed.data.referenceNo ? ` · ref ${parsed.data.referenceNo}` : ""}`,
+    actor,
+  });
 
   revalidate();
   return { ok: true };
@@ -78,9 +97,26 @@ export async function deletePaymentAction(
     return { ok: false, message: "Only admins can remove a payment." };
   }
 
+  const removed = await getPaymentById(paymentId);
   const invoiceId = await deletePayment(paymentId);
   if (invoiceId) {
     await recomputeInvoiceFees(invoiceId);
+    const actor = {
+      userId: session.user.id,
+      name: session.user.name ?? session.user.email ?? "",
+    };
+    await syncStatusWithPayments(invoiceId, actor);
+    await logAudit({
+      action: "payment.removed",
+      entityType: "payment",
+      entityId: paymentId,
+      invoiceId,
+      patientId: (await getInvoiceById(invoiceId))?.patientId ?? null,
+      summary: removed
+        ? `${removed.amount.toFixed(2)} by ${removed.paymentType || "unspecified method"}${removed.referenceNo ? ` · ref ${removed.referenceNo}` : ""}`
+        : "A payment was removed",
+      actor,
+    });
   }
   revalidate();
   return { ok: true };

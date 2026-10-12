@@ -1,9 +1,9 @@
 # Implementation Updates — Transactions, Patients, Invoices & Expenses
 
 **Project:** Cashflow application — ADT Dental Clinic
-**Date:** October 9, 2026
+**Date:** October 11, 2026
 **Follows:** `TRANSACTION_EXPENSE_UPDATES_PLAN.md` (the plan written before implementation)
-**Status:** Code written and checked (type check and lint both clean; the Day End file was run through the new importer; the Procedures tab and form changes were checked with number tests). **Not yet run against the database or tried in the browser** — see "Before you start the app" and "What to test".
+**Status (October 11 batch):** Expenses moved into Transactions, Patients page, visit status tracking, Queue board (own menu item), waiting times, audit trail and the ID extras are written; type check and lint are clean, the status / audit rules were run through 19 automated checks, and the Expenses tab, the redirect and the new menu were opened in the browser (nothing saved). **The Patients page, status, Today board and audit need `2026-10-patients-and-visit-status.sql` run first** (step 13). Earlier status: Code written and checked (type check and lint both clean; the Day End file was run through the new importer; the Procedures tab and form changes were checked with number tests). **Not yet run against the database or tried in the browser** — see "Before you start the app" and "What to test".
 
 ---
 
@@ -21,6 +21,7 @@
 
 10. **Run `scripts/sql/2026-10-procedures-settings-and-line-fields.sql`** (same place, safe to repeat) **after the procedure price list SQL and BEFORE starting the app.** It adds the Procedures-tab columns (price basis, hide, last changed), the price history table, the discount types (PWD, Senior citizen, Promo), quantity / unit price / teeth on every line, the PWD-Senior ID and recall columns on the visit, and sets the price basis of each procedure (per tooth / surface / arch / unit / flat). Existing lines keep their amounts: quantity 1 and unit price = the price they were sold at. The app reads these columns on every page, so **until the file is run the Transactions page shows "This page couldn't load".** The bottom of the file shows three checks (procedures per price basis, the three discount types, and lines still without a unit price — should be 0).
 12. **Run `scripts/sql/2026-10-hmo-prices.sql`** (same place, safe to repeat) **after step 10 and BEFORE starting the app.** It creates the HMO price table, adds a "price for" column to the price history, and loads the clinic's HMO prices for the six accepted HMOs (Maxicare, Intellicare, Avega, Valucare, Medicard, Elite Dental Network): Consultation, OP, PF, TF and Simple Extraction. A price already on file is never overwritten, so repeating it does not undo edits made on the Procedures tab. Until it is run the Transactions page shows "This page couldn't load".
+13. **Run `scripts/sql/2026-10-patients-and-visit-status.sql`** (same place, safe to repeat) **BEFORE using the app again.** It adds the visit **status** (Arrived / On-going / For Payment / Cleared) and **status history**, the **audit trail** table, and two indexes so a patient's invoices load fast. Existing visits get a status **once**: paid in full becomes **Cleared**, money still owed becomes **For Payment** (running the file again never changes a status). The app reads the status on every Transactions query, so **until it is run the Transactions, Patients and Overview pages show "This page couldn't load".** The bottom of the file shows how many visits are in each status.
 11. **Run `yarn db:backfill-links` again afterwards** (optional). Saved visits keep their own procedure link; the backfill now uses that link first and the name only for lines that have none.
 
 ---
@@ -93,6 +94,28 @@
 **Left for later phases (still in the plan only):** visit status (Arrived → On-going → For Payment → Cleared), front desk and cashier roles, clinical progress notes with voice transcription, putting payment before procedures, and drafts (decided: not for now; recorded in the plan to check afterwards).
 
 **Defaults used for the open points:** discount list is exactly PWD / Senior citizen / Promo (history keeps old wording); the ID is stored once per visit with its type; price edits are admin-only and apply to new transactions only; quantity follows the number of teeth and stays editable.
+
+### Expenses inside Transactions, Patients page, visit status, Today board, waiting times and audit (October 11)
+
+**Menu and tabs.** Patients replaces Expenses in the top menu. Expenses is now a tab inside **Transactions** (tabs: Transactions · Expenses · Procedures · Recalls due · Audit, the last one for admins only). The old `/cashflow/expenses` address redirects to the tab, and the header "Add Expenses" button is gone: **Add Expenses** now sits in the Expenses tab, which also has a search, a date range, a total of what is shown and paging at 200 rows.
+
+**Patients page** (`/cashflow/patients`). A searchable list with last visit, number of invoices (and how many are still open), balance due, the status of any open visit, and the recall date. Filters: has a balance, recall due, seen in the last 30 days, not seen in 6 months. **View invoices** opens the **patient page** (`/cashflow/patients/[id]`): summary cards (visits, total billed, total paid, balance due, last visit, next recall), the PWD / Senior ID on file (masked for non-admins), and **every invoice** of that patient with date, invoice number, procedures, dentist, branch, payment method, total, paid, balance and status, with filters by status and "with balance", and an **Open** link to the visit. Buttons: **New transaction for this patient** (the Add form opens with the name filled in) and **Edit patient** (name, contact number, notes). Admins also get the patient's **audit trail** and **Merge duplicate** (search the patient to keep; all invoices move across and the duplicate record is removed).
+
+**Visit status.** Every visit has one of **Arrived → On-going → For Payment → Cleared**, shown as a coloured label on the Queue page, the visit page and the patient page (the Transactions list has neither a Status column nor a Status filter).
+- **Move forward** with the arrow button (any signed-in user), one step at a time. **Cleared needs a zero balance, for everyone** — an admin cannot clear a visit that still owes money either; record the payment first (the visit then clears itself).
+- **Back, skip ahead or reopen** a Cleared visit: admin only ("Change…"), with a reason.
+- **Automatic:** a visit created today and unpaid starts as **Arrived**; paid in full → **Cleared**; a reservation → **Cleared**; a visit with a past date (typed from the booklet) is **Cleared** if paid, otherwise **For Payment**. A payment that brings a For Payment visit to zero **clears it**; removing a payment from a Cleared visit puts it back to For Payment. CSV imports set Cleared / For Payment from the payments imported.
+- **Cleared visits are locked** for everyone but admins (the Edit button is disabled and the server refuses the edit).
+- Status never changes sales, collection or commission, which still follow payments received.
+- The visit page shows the **status history** (who moved it and when, with the reason).
+
+**Queue board** (its own **Queue** item in the top menu, with the number of visits not yet Cleared shown beside it; the Overview page no longer has a queue section). The old Transactions → Today address now redirects to the Queue page. The page refreshes itself every 30 seconds while it is open, the menu number re-checks every 45 seconds on every page (through a plain request to `/api/cashflow/open-visits`, not a server action, because server actions run one at a time and a page click waits behind them), and a **New visit** button on the page opens the same Add transaction form, so the front desk can register an arrival without leaving it. The menu switches to the phone-style dropdown below 1024 px wide so the eight admin items still fit. Four columns, one per status, with each patient's procedures, dentist, branch, how long they have been in that status, and the balance due. Visits from earlier days that are still not Cleared stay on the board so an unpaid visit is not forgotten. The **Cleared** column lists everything cleared today, including an older visit that was just settled (it is matched on the day it was cleared, not the visit date).
+
+**Waiting times.** Average minutes **waiting to see the dentist** (Arrived → On-going), **in treatment** (On-going → For Payment) and **waiting to pay** (For Payment → Cleared), worked out from the status history: for today and for the last 30 days on the Queue page. A stage left open for more than 24 hours is left out of the averages. Visits entered after the fact skip the waiting steps, so only visits actually moved through the queue count.
+
+**Audit trail.** Every visit created, edited (with what changed: date, patient, branch, invoice number, procedures added / removed / re-priced, discounts, ID added or changed, total due), removed, every payment added or removed, every status change, every CSV import (one line per file) and every patient added / edited / merged is logged with who and when. Admins see it on the visit page, on the patient page and on the **Audit** tab (filter: everything, visits, payments, status, patients). The PWD / Senior ID number itself is never written to the log, only that it was added, changed or removed. On October 12 the Audit tab was opened in the browser: status changes are being recorded with time, user, from → to and reason; the Visits, Payments and Patients entries could not be seen yet because none had been made since the tables were created.
+
+**PWD / Senior ID extras.** The ID number was already mandatory. New: when the patient already has an ID on file the form offers **Use ID on file** (it shows only the last 4 characters until pressed), and typing an ID number that is **already on file for a different patient** shows a red warning (it does not block saving).
 
 ### One visit = one transaction
 
@@ -301,6 +324,16 @@ The old procedure list is **deleted** and replaced by the **Cash Paying** column
 | `src/components/cashflow/procedures-manager.tsx`, `transactions-tabs.tsx`, `recalls-list.tsx` | The Procedures tab, the tab row, and the Recalls due list. |
 | `src/components/cashflow/or-breakdown.tsx` | The official-receipt breakdown block shown on the form, the transaction page and the printed invoice. |
 
+**October 11 batch (new files):**
+
+| File | Purpose |
+|---|---|
+| `scripts/sql/2026-10-patients-and-visit-status.sql` | Visit status + status history + audit table + indexes; one-time status for existing visits. |
+| `src/lib/cashflow/visit-status.ts`, `audit-diff.ts` | The status rules (allowed moves, automatic status, waiting-time averages) and the "what changed" comparison for the audit trail. Pure, shared by screen and server. |
+| `src/lib/db/visit-status.ts`, `audit.ts`, `patient-admin.ts` | Status changes, history, Queue board, open-visit count for the menu and waiting times; the audit log; patient list, patient page data, add / edit / merge. |
+| `src/app/cashflow/transactions/status-actions.ts`, `src/app/cashflow/patients/actions.ts`, `patients/page.tsx`, `patients/[id]/page.tsx` | Status action; patient actions (add, edit, merge); the Patients list and patient pages. |
+| `src/components/cashflow/` `expenses-tab`, `status-pill`, `visit-status-control`, `status-history`, `today-board`, `auto-refresh`, `wait-stats`, `audit-trail`, `patient-form-modal`, `merge-patient` | The Expenses tab, status label and controls, history, Queue board, waiting-time card, audit list, patient add / edit dialog, merge tool. |
+
 ## 4. Files updated (63 earlier + latest batch)
 
 | File | What changed |
@@ -341,7 +374,12 @@ The old procedure list is **deleted** and replaced by the **Cash Paying** column
 | `src/components/cashflow/csv-upload.tsx`, `cashflow-overview.tsx` | Branch dropdown and fuller import summary. |
 | `scripts/backfill-payments.ts`, `scripts/seed-db.ts` | Updated to the invoice model. |
 
+**October 11 batch (changed):** `cashflow-nav.tsx` (Patients link, no header Add Expenses; Queue link with open-visit count; desktop menu from 1024 px), new `app/cashflow/queue/page.tsx` and `auto-refresh.tsx`, `status-actions.ts` (layout revalidated), `actions.ts` (CSV imports are written to the audit trail), `payment-actions.ts` (payment entries carry the patient), new `app/api/cashflow/open-visits/route.ts` (menu count), `layout.tsx` (no longer loads suppliers / branches for the header), `expenses/page.tsx` (redirect), `expense-actions.ts`, `transactions-tabs.tsx`, `transactions/page.tsx` (Expenses, Audit tabs; Today tab redirects; status filter removed from the toolbar, `transactions-toolbar.tsx`, `transactions-query.ts` and `db/transactions.ts`), `transactions-table.tsx` (no Status column; Edit locked for Cleared visits), `ui/modal.tsx` (new `wide` size, about 1000 px instead of 670 px) used by the Add and Edit transaction pop-ups, `transactions-toolbar.tsx`, `transactions-query.ts`, `transaction-detail.tsx` and `[id]/page.tsx` and `[id]/edit/page.tsx` (status, history, audit, lock), `transaction-form.tsx` and `add-transaction-modal.tsx` (patient prefill, ID on file, duplicate-ID warning), `cashflow-overview.tsx` and `app/cashflow/page.tsx` (queue section removed again; `queue-summary.tsx` deleted), `schema.ts`, `invoices.ts` (status on create / edit / import, audit), `transactions.ts`, `patients.ts`, `payments.ts`, `payment-actions.ts`, `actions.ts`, `patient-actions.ts`.
+
 ## 5. What the SQL file changes in your data
+
+**Patients / status SQL (`2026-10-patients-and-visit-status.sql`):** adds `status` and `status_changed_at` to every visit (existing visits: paid in full → Cleared, otherwise For Payment, set once), a check so only the four status names can be saved, the `invoice_status_history` and `audit_log` tables, and indexes on status and on (patient, visit date). Nothing is dropped.
+
 
 - Creates `patients`, `suppliers`, `invoices`; adds the new columns (nothing is dropped).
 - **Patients:** one per distinct name, matched ignoring capitals and extra spaces.
@@ -376,6 +414,11 @@ The old procedure list is **deleted** and replaced by the **Cash Paying** column
 
 ## 8. What was checked, and what to test
 
+**Checked (October 11 batch):** type check and lint — no errors. 19 automated checks on the status rules pass: today unpaid → Arrived; today paid → Cleared; past unpaid → For Payment; reservation → Cleared; staff can move forward one step but not clear with a balance, back or skip; admin can go back or skip with a reason but also cannot clear with a balance; payment to zero auto-clears and a removed payment reopens; the waiting-time averages (Arrived 15 min, On-going 45 min, For Payment 10 min on a test set, a visit left open 50 hours ignored); the audit comparison names an added ID, a discount change, an added procedure and the total change. The patients list query was printed (not run) to check its SQL. In the browser (nothing saved): the old Expenses address lands on the Expenses tab with the list, search, dates, total and Add Expenses; the menu shows Patients in the old Expenses position with no Add Expenses button; the tab row scrolls on a phone. **October 12, in the browser (nothing saved):** the new Queue page (first called Today) loads with the live visits (1 On-going, 12 For Payment), the menu shows the queue link with the open-visit count (13) and all eight admin items fit at 1024 px. **Not confirmed:** that the old Transactions → Today address redirects (the browser pane was hidden during the check; the code is a plain redirect), the 30-second refresh and the phone layout of the new menu.
+
+**Test after running the status SQL:** (1) Transactions list has no Status column; there is no Status filter either; every old visit is Cleared or For Payment, and status is moved and seen on the Queue page or the visit page. (2) Add a transaction for today with no payment → Arrived; move it → On-going → For Payment; try *Cleared* as staff → refused with the balance; record the payment on the visit → it clears itself; staff cannot edit it; as admin edit it and see the **Audit trail** list the change. (3) **Queue** (top menu) shows the visit in the right column, the number beside it matches the open visits, **New visit** adds one that lands in Arrived, and a status change on another screen appears within 30 seconds; the old Transactions → Today link lands on Queue; the Overview page has no queue section; after a couple of moves the average waits appear on Queue. (4) **Patients**: search a name, open **View invoices** for a patient with several visits and check the totals match the Transactions list; **New transaction for this patient** opens with the name filled in. (5) Pick PWD for a patient who had one before: **Use ID on file** appears; type another patient's ID number → red warning. (6) Admin: merge a test duplicate patient and see the audit line.
+
+
 **Checked (HMO prices):** type check and lint — no errors. **Not yet opened in the browser**: the page reads the new HMO price table, so it shows "This page couldn't load" until `2026-10-hmo-prices.sql` is run. Suggested test: Add transaction → payment method **Maxicare** → procedure *Oral Prophylaxis (MILD)* fills ₱250 (cash price is ₱1,200); *Root Canal Treatment (Anterior)* stays blank with "No Maxicare price…"; change the method to **Cash** → the OP price becomes ₱1,200 again; type a price by hand and change the method → your price stays. On the Procedures tab open *Consultation* → six HMO boxes show 150 / 200 / 200 / 150 / 150 / 100; change one and see it in History with the HMO name.
 
 **Checked (Procedures tab and form changes):** type check and lint — no errors; number checks give 3 × ₱6,000 = ₱18,000 (VAT ₱1,928.57 inside), quantity 0 treated as 1, ₱800 for a ₱1,120 VAT item with PWD, the discount type's flag winning over the reason's wording, a Promo 10% on 2 × ₱1,200 = ₱2,160, and the OR total equal to the sum of the lines; the teeth reader accepts 11, 12 and "11 and 12", rejects 19 and 56, and suggests quantity 3 for three teeth per tooth and 2 for upper + lower arch. **The screens could not be opened in the browser** — the database does not have the new columns until `2026-10-procedures-settings-and-line-fields.sql` is run, so the page shows "This page couldn't load" until then. Nothing was saved anywhere.
@@ -406,5 +449,8 @@ The old procedure list is **deleted** and replaced by the **Cash Paying** column
 6. Print an invoice with a discount and a VAT line.
 
 ## 9. Not done yet (deferred)
+
+**From the October 11 plan, waiting for your decision:** `front_desk` / `cashier` roles (today any signed-in user moves a visit forward; admin goes back) · ID **photo** and an **admin override with a reason** for a patient with no ID · HMO member / approval number and co-pay · birth date on the patient · a printable patient statement · month-end close · notifications. The audit trail does not record CSV imports line by line, only the visits and payments they create through the normal screens.
+
 
 Showing the last invoice number used as a hint · a "missing invoice no." filter · changing the Visit ID format · Head Office branch · switching the dashboard's patient card to use the patients table · importing the expenses spreadsheet.

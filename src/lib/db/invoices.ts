@@ -2,6 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import {
+  branches,
   invoices,
   patients,
   transactions,
@@ -52,6 +53,24 @@ import {
   type ProcedureInfo,
 } from "@/lib/db/procedures";
 import {
+  defaultStatusOnCreate,
+  isLocked,
+  isVisitStatus,
+  todayInManila,
+  type VisitStatus,
+} from "@/lib/cashflow/visit-status";
+import {
+  diffVisit,
+  summarizeChanges,
+  type AuditSnapshot,
+} from "@/lib/cashflow/audit-diff";
+import { logAudit } from "@/lib/db/audit";
+import {
+  reconcileImportedStatuses,
+  recordInitialStatus,
+  syncStatusWithPayments,
+} from "@/lib/db/visit-status";
+import {
   generateTransactionNumbers,
   generateVisitId,
   toAppTransaction,
@@ -70,6 +89,10 @@ export type InvoiceSummary = {
   lineCount: number;
   totalDue: number;
   collected: number;
+  /** Internal tracking status of the visit. */
+  status: VisitStatus;
+  /** When the status last changed (ISO). */
+  statusChangedAt: string;
 };
 
 export type InvoiceDetail = {
@@ -152,7 +175,12 @@ export async function getInvoiceSummaries(
 
   const [headers, lineTotals, collected] = await Promise.all([
     db
-      .select({ id: invoices.id, invoiceNumber: invoices.invoiceNumber })
+      .select({
+        id: invoices.id,
+        invoiceNumber: invoices.invoiceNumber,
+        status: invoices.status,
+        statusChangedAt: invoices.statusChangedAt,
+      })
       .from(invoices)
       .where(inArray(invoices.id, ids)),
     db
@@ -176,6 +204,8 @@ export async function getInvoiceSummaries(
       lineCount: totals?.lineCount ?? 0,
       totalDue: Number(totals?.totalDue ?? 0),
       collected: collected.get(header.id) ?? 0,
+      status: isVisitStatus(header.status) ? header.status : "Cleared",
+      statusChangedAt: header.statusChangedAt.toISOString(),
     };
   }
   return result;
@@ -516,6 +546,53 @@ async function checkInvoiceNumber(
   return `Invoice number ${invoiceNumber} is already used${who} on ${clash.visitDate}.`;
 }
 
+async function loadBranchName(branchId: string | null | undefined): Promise<string> {
+  if (!branchId) return "";
+  const [row] = await db
+    .select({ name: branches.name })
+    .from(branches)
+    .where(eq(branches.id, branchId))
+    .limit(1);
+  return row?.name ?? "";
+}
+
+function snapshotOf(
+  header: {
+    visitDate: string;
+    invoiceNumber: string;
+    transactionType: string;
+    visitType: string;
+    discountIdType: string;
+    discountIdNumber: string;
+    recallDate: string | null;
+  },
+  extra: { patientName: string; branchName: string; dentist: string },
+  lines: CashflowTransaction[],
+): AuditSnapshot {
+  return {
+    visitDate: header.visitDate,
+    patientName: extra.patientName,
+    branchName: extra.branchName,
+    invoiceNumber: header.invoiceNumber,
+    transactionType: header.transactionType,
+    visitType: header.visitType,
+    dentist: extra.dentist,
+    discountIdType: header.discountIdType,
+    discountIdNumber: header.discountIdNumber,
+    recallDate: header.recallDate ?? "",
+    totalDue: round2(lines.reduce((sum, line) => sum + line.amountPaid, 0)),
+    lines: lines.map((line) => ({
+      id: line.id,
+      procedure: line.procedure,
+      quantity: line.quantity ?? 1,
+      unitPrice: line.unitPrice ?? 0,
+      teeth: line.teeth ?? "",
+      discount: line.discountReason ?? "",
+      total: line.amountPaid,
+    })),
+  };
+}
+
 /**
  * Saves a brand-new visit: one invoice, its procedure lines, the patient
  * link, and — when money was taken — the first payment. The Neon HTTP
@@ -525,7 +602,7 @@ async function checkInvoiceNumber(
  */
 export async function createInvoice(
   input: InvoiceInput,
-  context: { userId: string | null },
+  context: { userId: string | null; userName?: string },
 ): Promise<SaveInvoiceResult> {
   const branchId = input.branchId || null;
   const priced = priceLines(input.lines, {
@@ -606,6 +683,14 @@ export async function createInvoice(
     }),
   );
 
+  const startStatus = defaultStatusOnCreate({
+    visitDate: input.date,
+    today: todayInManila(),
+    transactionType: input.transactionType,
+    totalDue,
+    collected: appliedToBill(paidNow, input.payment?.paymentType),
+  });
+
   const header: NewInvoiceRow = {
     id: invoiceId,
     invoiceNumber: input.invoiceNumber,
@@ -615,6 +700,8 @@ export async function createInvoice(
     transactionType: input.transactionType,
     visitType,
     ...visitHeaderFields(input, priced),
+    status: startStatus,
+    statusChangedAt: now,
     createdByUserId: context.userId,
   };
 
@@ -648,6 +735,18 @@ export async function createInvoice(
     };
   }
 
+  const actor = { userId: context.userId, name: context.userName ?? "" };
+  await recordInitialStatus(invoiceId, startStatus, actor);
+  await logAudit({
+    action: "visit.created",
+    entityType: "invoice",
+    entityId: invoiceId,
+    invoiceId,
+    patientId: patient?.id ?? null,
+    summary: `${patientName} · ${priced.length} ${priced.length === 1 ? "procedure" : "procedures"} · total ${totalDue.toFixed(2)}${paidNow > 0 ? ` · ${paidNow.toFixed(2)} received` : ""}`,
+    actor,
+  });
+
   return { ok: true, invoiceId, firstLineId: lines[0].id };
 }
 
@@ -662,11 +761,18 @@ export async function createInvoice(
 export async function updateInvoice(
   invoiceId: string,
   input: InvoiceInput,
-  context: { userId: string | null },
+  context: { userId: string | null; userName?: string; isAdmin?: boolean },
 ): Promise<SaveInvoiceResult> {
   const existing = await getInvoiceById(invoiceId);
   if (!existing) {
     return { ok: false, message: "That transaction no longer exists." };
+  }
+  if (isLocked(isVisitStatus(existing.status) ? existing.status : "Cleared") && !context.isAdmin) {
+    return {
+      ok: false,
+      message:
+        "This visit is Cleared, so it is locked. Ask an admin to reopen it if something needs correcting.",
+    };
   }
   const existingLines = await listLinesForInvoice(invoiceId);
   if (existingLines.length === 0) {
@@ -784,6 +890,20 @@ export async function updateInvoice(
     return built;
   });
 
+  const [beforeBranch, afterBranch] = await Promise.all([
+    loadBranchName(existing.branchId),
+    loadBranchName(branchId),
+  ]);
+  const beforeSnapshot = snapshotOf(
+    existing,
+    {
+      patientName: existingLines[0].patientName,
+      branchName: beforeBranch,
+      dentist: existingLines[0].dentist,
+    },
+    existingLines,
+  );
+
   try {
     await upsertTransactions(lines);
 
@@ -810,6 +930,39 @@ export async function updateInvoice(
       .where(eq(invoices.id, invoiceId));
 
     await rememberDefaults(invoiceId);
+    // A changed total can mean the visit is now paid in full (or owes money
+    // again), so let the status follow.
+    await syncStatusWithPayments(invoiceId, {
+      userId: context.userId,
+      name: context.userName ?? "",
+    });
+    const afterSnapshot = snapshotOf(
+      {
+        visitDate: input.date,
+        invoiceNumber: input.invoiceNumber,
+        transactionType: input.transactionType,
+        visitType,
+        discountIdType: visitHeaderFields(input, priced).discountIdType ?? "",
+        discountIdNumber:
+          visitHeaderFields(input, priced).discountIdNumber ?? "",
+        recallDate: visitHeaderFields(input, priced).recallDate ?? null,
+      },
+      { patientName, branchName: afterBranch, dentist: input.dentist },
+      lines,
+    );
+    const changes = diffVisit(beforeSnapshot, afterSnapshot);
+    if (changes.length > 0) {
+      await logAudit({
+        action: "visit.updated",
+        entityType: "invoice",
+        entityId: invoiceId,
+        invoiceId,
+        patientId: patient?.id ?? null,
+        summary: summarizeChanges(changes).slice(0, 300),
+        changes,
+        actor: { userId: context.userId, name: context.userName ?? "" },
+      });
+    }
   } catch (error) {
     console.error("updateInvoice failed", error);
     return {
@@ -826,7 +979,27 @@ export async function updateInvoice(
  * Removes a whole visit: every procedure line on the invoice, the invoice
  * itself and (through the foreign key cascade) its payments.
  */
-export async function deleteInvoice(invoiceId: string): Promise<void> {
+export async function deleteInvoice(
+  invoiceId: string,
+  actor?: { userId: string | null; name: string },
+): Promise<void> {
+  // Written first, so the trail still says what was removed.
+  const [header, lines] = await Promise.all([
+    getInvoiceById(invoiceId),
+    listLinesForInvoice(invoiceId),
+  ]);
+  if (header && actor) {
+    const total = round2(lines.reduce((sum, line) => sum + line.amountPaid, 0));
+    await logAudit({
+      action: "visit.deleted",
+      entityType: "invoice",
+      entityId: invoiceId,
+      invoiceId,
+      patientId: header.patientId,
+      summary: `${lines[0]?.patientName ?? "Visit"} of ${header.visitDate} · ${lines.length} ${lines.length === 1 ? "procedure" : "procedures"} · total ${total.toFixed(2)}${header.invoiceNumber ? ` · invoice ${header.invoiceNumber}` : ""}`,
+      actor,
+    });
+  }
   await db.delete(transactions).where(eq(transactions.invoiceId, invoiceId));
   await db.delete(invoices).where(eq(invoices.id, invoiceId));
 }
@@ -1027,6 +1200,7 @@ export async function importTransactionsWithInvoices(
     groupList.map((group) => group.invoiceId),
     paymentRows,
   );
+  await reconcileImportedStatuses(groupList.map((group) => group.invoiceId));
 
   return {
     lineCount: lines.length,

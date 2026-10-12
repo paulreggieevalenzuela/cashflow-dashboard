@@ -7,11 +7,9 @@ import type { Branch } from "@/lib/db/branches";
 import type { Supplier } from "@/lib/db/suppliers";
 
 /**
- * The header's "Add Expenses" CTA (see cashflow-nav.tsx) — same
- * button-opens-modal-with-form pattern as AddTransactionModal, just for
- * the outflow side. Rendered in the site header so it's reachable from
- * every page, not just a dedicated expenses page (which doesn't exist
- * yet — see docs/PROPOSAL_GAP_ANALYSIS.md, "Expense Management").
+ * The "Add Expenses" button on the Expenses tab (see expenses-tab.tsx) — same
+ * button-opens-modal-with-form pattern as AddTransactionModal, just for the
+ * outflow side.
  */
 export function AddExpenseModal({
   branches,

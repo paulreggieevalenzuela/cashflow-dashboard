@@ -119,7 +119,7 @@ export async function addExpenseAction(
 
   await createExpense(result.data);
   revalidatePath("/cashflow");
-  revalidatePath("/cashflow/expenses");
+  revalidatePath("/cashflow/transactions");
 
   return { ok: true, data: { expenseId: result.data.id } };
 }

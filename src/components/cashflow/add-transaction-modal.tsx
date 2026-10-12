@@ -8,11 +8,16 @@ import type { DiscountTypeOption } from "@/lib/db/discount-types";
 import type { ProcedureOption } from "@/lib/db/procedures";
 
 export function AddTransactionModal({
+  initialPatientName,
+  buttonLabel = "Add transaction",
   dentistOptions,
   branches,
   procedures,
   discountTypes,
 }: {
+  /** Pre-fill the patient (used from the patient page). */
+  initialPatientName?: string;
+  buttonLabel?: string;
   dentistOptions: string[];
   branches: Branch[];
   procedures: ProcedureOption[];
@@ -36,16 +41,18 @@ export function AddTransactionModal({
         >
           <path d="M10.75 4.75a.75.75 0 0 0-1.5 0v4.5h-4.5a.75.75 0 0 0 0 1.5h4.5v4.5a.75.75 0 0 0 1.5 0v-4.5h4.5a.75.75 0 0 0 0-1.5h-4.5v-4.5Z" />
         </svg>
-        Add transaction
+        {buttonLabel}
       </button>
 
       <Modal
         open={open}
         onClose={() => setOpen(false)}
         title="Add transaction"
+        size="wide"
         description="Record a visit with one or more procedures. It will appear in the table once saved."
       >
         <TransactionForm
+          initialPatientName={initialPatientName}
           dentistOptions={dentistOptions}
           branches={branches}
           procedures={procedures}

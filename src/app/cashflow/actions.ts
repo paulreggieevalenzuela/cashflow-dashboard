@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { auth } from "@/auth";
 import { InvoiceInputSchema, type InvoiceInput } from "@/lib/cashflow/invoice-schema";
 import { parseCashflowCsv, type CsvRowError } from "@/lib/cashflow/parse-csv";
+import { logAudit } from "@/lib/db/audit";
 import { listBranches } from "@/lib/db/branches";
 import {
   createInvoice,
@@ -79,7 +80,10 @@ export async function createInvoiceAction(
     return parsed.result;
   }
 
-  const result = await createInvoice(parsed.data, { userId: session.user.id });
+  const result = await createInvoice(parsed.data, {
+    userId: session.user.id,
+    userName: session.user.name ?? session.user.email ?? "",
+  });
   if (!result.ok) {
     return result;
   }
@@ -101,7 +105,11 @@ export async function updateInvoiceAction(
     return parsed.result;
   }
 
-  const result = await updateInvoice(invoiceId, parsed.data, { userId: session.user.id });
+  const result = await updateInvoice(invoiceId, parsed.data, {
+    userId: session.user.id,
+    userName: session.user.name ?? session.user.email ?? "",
+    isAdmin: session.user.role === "admin",
+  });
   if (!result.ok) {
     return result;
   }
@@ -212,6 +220,15 @@ export async function importCsvAction(
       userId: session.user.id,
     });
     revalidateCashflowPaths();
+    await logAudit({
+      action: "visit.imported",
+      entityType: "invoice",
+      summary: `Imported ${summary.invoiceCount} ${summary.invoiceCount === 1 ? "visit" : "visits"} (${summary.lineCount} procedure ${summary.lineCount === 1 ? "line" : "lines"}, ${summary.paymentCount} ${summary.paymentCount === 1 ? "payment" : "payments"}) from a CSV file${branchName ? ` into ${branchName}` : ""}.`,
+      actor: {
+        userId: session.user.id,
+        name: session.user.name ?? session.user.email ?? "",
+      },
+    });
   }
 
   return {
@@ -252,7 +269,10 @@ export async function removeInvoiceAction(invoiceId: string): Promise<ActionResu
     return { ok: false, message: "Only admins can remove transactions." };
   }
 
-  await deleteInvoice(invoiceId);
+  await deleteInvoice(invoiceId, {
+    userId: session.user.id,
+    name: session.user.name ?? session.user.email ?? "",
+  });
   revalidateCashflowPaths();
   return { ok: true, data: null };
 }

@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { auth } from "@/auth";
+import { isLocked, isVisitStatus } from "@/lib/cashflow/visit-status";
 import { TransactionForm } from "@/components/cashflow/transaction-form";
 import { listBranches } from "@/lib/db/branches";
 import { listDentistUsers } from "@/lib/db/dentists";
@@ -27,7 +29,8 @@ export default async function EditTransactionPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const [transaction, dentists, branches, procedures, discountTypes] = await Promise.all([
+  const [session, transaction, dentists, branches, procedures, discountTypes] = await Promise.all([
+    auth(),
     getTransactionById(decodeURIComponent(id)),
     listDentistUsers(),
     listBranches(),
@@ -47,6 +50,15 @@ export default async function EditTransactionPage({
   const detail = await getInvoiceDetail(transaction.invoiceId);
   if (!detail || detail.lines.length === 0) {
     return <NotFound message="We couldn't find that transaction. It may have been removed." />;
+  }
+
+  if (
+    isLocked(isVisitStatus(detail.invoice.status) ? detail.invoice.status : "Cleared") &&
+    session?.user.role !== "admin"
+  ) {
+    return (
+      <NotFound message="This visit is Cleared, so it is locked. Ask an admin to reopen it if something needs correcting." />
+    );
   }
 
   return (

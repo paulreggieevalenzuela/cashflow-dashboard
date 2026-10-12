@@ -8,12 +8,15 @@ export function Modal({
   onClose,
   title,
   description,
+  size = "default",
   children,
 }: {
   open: boolean;
   onClose: () => void;
   title: string;
   description?: string;
+  /** "wide" gives long forms (like the transaction form) room to breathe. */
+  size?: "default" | "wide";
   children: ReactNode;
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
@@ -75,7 +78,7 @@ export function Modal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="modal-title"
-        className="animate-modal-panel-in relative my-auto w-full max-w-2xl rounded-2xl border border-zinc-200/80 bg-white p-6 shadow-xl dark:border-zinc-800 dark:bg-zinc-950 sm:p-8"
+        className={`animate-modal-panel-in relative my-auto w-full ${size === "wide" ? "max-w-5xl" : "max-w-2xl"} rounded-2xl border border-zinc-200/80 bg-white p-6 shadow-xl dark:border-zinc-800 dark:bg-zinc-950 sm:p-8`}
       >
         <div className="mb-6 flex items-start justify-between gap-4">
           <div>

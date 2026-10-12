@@ -2,18 +2,16 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AccountAvatar, AccountMenu } from "@/components/cashflow/account-menu";
-import { AddExpenseModal } from "@/components/cashflow/add-expense-modal";
 import { SignOutButton } from "@/components/cashflow/sign-out-button";
 import { USER_ROLE_LABELS, type UserRole } from "@/lib/cashflow/user-schema";
-import type { Branch } from "@/lib/db/branches";
-import type { Supplier } from "@/lib/db/suppliers";
 
 const BASE_LINKS = [
   { href: "/cashflow", label: "Overview" },
+  { href: "/cashflow/queue", label: "Queue" },
   { href: "/cashflow/transactions", label: "Transactions" },
-  { href: "/cashflow/expenses", label: "Expenses" },
+  { href: "/cashflow/patients", label: "Patients" },
 ] as const;
 
 // A dentist sees their own priority/commission here; a staff member sees
@@ -35,8 +33,7 @@ const ADMIN_LINKS = [
 ] as const;
 
 /**
- * The whole right-hand side of the app header: the nav links, the "Add
- * Expenses" CTA, the profile link, and the sign-out button. Below `md` the
+ * The whole right-hand side of the app header: the nav links, the profile link, and the sign-out button. Below `md` the
  * admin link set (6 items total with Overview/Transactions) doesn't come
  * close to fitting a phone screen in one row, so this collapses into a
  * hamburger toggle and a full-width dropdown panel instead of overflowing
@@ -48,17 +45,17 @@ export function CashflowNav({
   role,
   displayName,
   email,
-  branches,
-  suppliers,
+  openVisits = null,
 }: {
   role: UserRole;
   displayName?: string;
   email?: string;
-  branches: Branch[];
-  suppliers: Supplier[];
+  /** Visits not Cleared yet (null = unknown). Shown next to "Queue". */
+  openVisits?: number | null;
 }) {
   const pathname = usePathname();
   const [isOpen, setIsOpen] = useState(false);
+  const openCount = useOpenVisitCount(openVisits);
 
   const links =
     role === "admin"
@@ -67,30 +64,36 @@ export function CashflowNav({
         ? [...BASE_LINKS, ...DENTIST_LINKS]
         : [...BASE_LINKS, ...STAFF_LINKS];
 
+  function badgeFor(href: string) {
+    return href === "/cashflow/queue" && openCount !== null && openCount > 0
+      ? openCount
+      : null;
+  }
+
   function isActive(href: string) {
     return href === "/cashflow" ? pathname === href : pathname.startsWith(href);
   }
 
   return (
     <>
-      <nav className="hidden items-center gap-1 md:flex">
+      <nav className="hidden items-center gap-0.5 lg:flex">
         {links.map((link) => (
           <Link
             key={link.href}
             href={link.href}
-            className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+            className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm font-medium transition-colors ${
               isActive(link.href)
                 ? "bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300"
                 : "text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
             }`}
           >
             {link.label}
+            <CountBadge count={badgeFor(link.href)} />
           </Link>
         ))}
       </nav>
 
-      <div className="hidden items-center gap-3 md:flex">
-        <AddExpenseModal branches={branches} suppliers={suppliers} />
+      <div className="hidden items-center gap-3 lg:flex">
         {displayName ? (
           <AccountMenu role={role} displayName={displayName} email={email} />
         ) : (
@@ -104,7 +107,7 @@ export function CashflowNav({
         aria-expanded={isOpen}
         aria-controls="mobile-nav-panel"
         aria-label={isOpen ? "Close menu" : "Open menu"}
-        className="inline-flex items-center justify-center rounded-lg p-2 text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100 md:hidden"
+        className="inline-flex items-center justify-center rounded-lg p-2 text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100 lg:hidden"
       >
         <svg
           viewBox="0 0 24 24"
@@ -133,24 +136,24 @@ export function CashflowNav({
       {isOpen && (
         <div
           id="mobile-nav-panel"
-          className="absolute inset-x-0 top-full z-40 border-b border-zinc-200 bg-white px-6 py-4 shadow-lg dark:border-zinc-800 dark:bg-zinc-950 md:hidden"
+          className="absolute inset-x-0 top-full z-40 border-b border-zinc-200 bg-white px-6 py-4 shadow-lg dark:border-zinc-800 dark:bg-zinc-950 lg:hidden"
         >
           <div className="mb-3">
-            <AddExpenseModal branches={branches} suppliers={suppliers} />
-          </div>
+              </div>
           <nav className="flex flex-col gap-1">
             {links.map((link) => (
               <Link
                 key={link.href}
                 href={link.href}
                 onClick={() => setIsOpen(false)}
-                className={`rounded-md px-3 py-2.5 text-sm font-medium transition-colors ${
+                className={`flex items-center gap-2 rounded-md px-3 py-2.5 text-sm font-medium transition-colors ${
                   isActive(link.href)
                     ? "bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300"
                     : "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
                 }`}
               >
                 {link.label}
+                <CountBadge count={badgeFor(link.href)} />
               </Link>
             ))}
           </nav>
@@ -184,5 +187,62 @@ export function CashflowNav({
         </div>
       )}
     </>
+  );
+}
+
+const POLL_MS = 45_000;
+
+/**
+ * The count of visits still open. Starts from the server-rendered number,
+ * then re-checks every 45 seconds while the tab is visible, so the menu
+ * stays roughly live on every page without a full refresh. A newer
+ * server-rendered number (after a status change) always wins over an older
+ * polled one.
+ */
+function useOpenVisitCount(initial: number | null): number | null {
+  const [polled, setPolled] = useState<{
+    value: number;
+    base: number | null;
+  } | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function check() {
+      if (document.visibilityState !== "visible") return;
+      try {
+        const response = await fetch("/api/cashflow/open-visits", {
+          cache: "no-store",
+          signal: AbortSignal.timeout(8000),
+        });
+        if (!response.ok) return;
+        const data = (await response.json()) as { count: number | null };
+        if (!cancelled && typeof data.count === "number") {
+          setPolled({ value: data.count, base: initial });
+        }
+      } catch {
+        // Offline, slow or signed out — keep showing the last number.
+      }
+    }
+    const timer = window.setInterval(check, POLL_MS);
+    document.addEventListener("visibilitychange", check);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", check);
+    };
+  }, [initial]);
+
+  return polled && polled.base === initial ? polled.value : initial;
+}
+
+function CountBadge({ count }: { count: number | null }) {
+  if (count === null) return null;
+  return (
+    <span
+      className="inline-flex min-w-5 items-center justify-center rounded-full bg-amber-600 px-1.5 text-xs font-semibold leading-5 tabular-nums text-white"
+      aria-label={`${count} open ${count === 1 ? "visit" : "visits"}`}
+    >
+      {count}
+    </span>
   );
 }
