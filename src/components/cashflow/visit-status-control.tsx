@@ -25,12 +25,18 @@ export function VisitStatusControl({
   status,
   balanceDue,
   isAdmin,
+  loaMissing = false,
+  visitIssue = null,
   layout = "inline",
 }: {
   invoiceId: string;
   status: VisitStatus;
   balanceDue: number;
   isAdmin: boolean;
+  /** HMO visit with no LOA number yet: "Cleared" is refused. */
+  loaMissing?: boolean;
+  /** Why the visit can't go on to payment yet (no procedure / no dentist). */
+  visitIssue?: string | null;
   layout?: "inline" | "stacked";
 }) {
   const router = useRouter();
@@ -44,7 +50,7 @@ export function VisitStatusControl({
 
   const next = nextStatus(status);
   const nextCheck = next
-    ? canMove({ from: status, to: next, isAdmin, balanceDue })
+    ? canMove({ from: status, to: next, isAdmin, balanceDue, loaMissing, visitIssue })
     : null;
 
   function submit(to: VisitStatus, reason?: string) {
@@ -71,7 +77,7 @@ export function VisitStatusControl({
   }
 
   const dialogCheck = dialog
-    ? canMove({ from: status, to: dialog.to, isAdmin, balanceDue })
+    ? canMove({ from: status, to: dialog.to, isAdmin, balanceDue, loaMissing, visitIssue })
     : null;
 
   return (

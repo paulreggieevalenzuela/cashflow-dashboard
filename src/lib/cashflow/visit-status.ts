@@ -7,6 +7,8 @@
  * commission, which keep following the payments actually received.
  */
 
+import { LOA_MISSING_MESSAGE } from "@/lib/cashflow/hmo";
+
 export const VISIT_STATUSES = [
   "Arrived",
   "On-going",
@@ -21,6 +23,35 @@ export function isVisitStatus(value: unknown): value is VisitStatus {
     typeof value === "string" &&
     (VISIT_STATUSES as readonly string[]).includes(value)
   );
+}
+
+/**
+ * A patient can be checked in before any procedure is chosen. The visit then
+ * holds one placeholder line with this name (price 0). It is replaced as
+ * soon as real procedures are saved, is hidden from the form, and is left
+ * out of procedure statistics.
+ */
+export const CHECK_IN_PLACEHOLDER = "No procedures yet";
+
+export function isCheckInPlaceholder(procedure: string | null | undefined) {
+  return (procedure ?? "").trim() === CHECK_IN_PLACEHOLDER;
+}
+
+/**
+ * Why a visit can't go to For Payment or Cleared yet, or null when it can:
+ * it needs at least one real procedure and a dentist.
+ */
+export function visitReadinessIssue(input: {
+  procedureCount: number;
+  hasDentist: boolean;
+}): string | null {
+  if (input.procedureCount <= 0) {
+    return "Add at least one procedure (Edit transaction) before moving this visit on to payment.";
+  }
+  if (!input.hasDentist) {
+    return "Choose the dentist (Edit transaction) before moving this visit on to payment.";
+  }
+  return null;
 }
 
 /** Today's date (YYYY-MM-DD) in the clinic's timezone. */
@@ -71,12 +102,25 @@ export function defaultStatusOnCreate(input: {
   transactionType: string;
   totalDue: number;
   collected: number;
+  /** An HMO visit whose LOA number is not entered yet: it cannot be Cleared. */
+  loaMissing?: boolean;
+  /** False for a check-in with no procedures yet: it starts as Arrived. */
+  hasProcedures?: boolean;
 }): VisitStatus {
   if (input.transactionType === "Reservation") {
     return "Cleared";
   }
+  if (input.hasProcedures === false) {
+    return "Arrived";
+  }
   const balance = balanceDueOf(input.totalDue, input.collected);
   const paidInFull = input.totalDue > EPSILON && balance === 0;
+  if (input.loaMissing) {
+    // Paid up but still waiting for the LOA: stays open as For Payment.
+    // Not paid yet: follows the normal flow.
+    if (paidInFull) return "For Payment";
+    return input.visitDate < input.today ? "For Payment" : "Arrived";
+  }
   if (input.visitDate < input.today) {
     return paidInFull || input.totalDue <= EPSILON ? "Cleared" : "For Payment";
   }
@@ -92,6 +136,9 @@ export type MoveCheck =
  * - Forward, one step at a time, is open to every signed-in role.
  * - A visit can only be Cleared when nothing is owed. This holds for
  *   everyone, admins included: record the payment first.
+ * - A visit needs a procedure and a dentist before For Payment or Cleared.
+ * - An HMO visit can only be Cleared once its LOA number is entered (the
+ *   LOA often arrives the next day, so it never blocks anything earlier).
  * - Going backwards, or jumping ahead, is admin-only and needs a reason.
  */
 export function canMove(input: {
@@ -99,16 +146,31 @@ export function canMove(input: {
   to: VisitStatus;
   isAdmin: boolean;
   balanceDue: number;
+  /** HMO visit with no LOA number yet: it cannot be Cleared. */
+  loaMissing?: boolean;
+  /** Set when the visit has no procedure or no dentist: it can't go on to
+   * For Payment or Cleared (see `visitReadinessIssue`). */
+  visitIssue?: string | null;
 }): MoveCheck {
   const { from, to, isAdmin, balanceDue } = input;
   if (from === to) {
     return { ok: false, message: "The visit is already " + to + "." };
+  }
+  if (
+    input.visitIssue &&
+    indexOf(to) > indexOf(from) &&
+    indexOf(to) >= indexOf("For Payment")
+  ) {
+    return { ok: false, message: input.visitIssue };
   }
   if (to === "Cleared" && balanceDue > EPSILON) {
     return {
       ok: false,
       message: `A balance of ${balanceDue.toFixed(2)} is still due. Record the full payment first — a visit can only be Cleared when nothing is owed.`,
     };
+  }
+  if (to === "Cleared" && input.loaMissing) {
+    return { ok: false, message: LOA_MISSING_MESSAGE };
   }
   const step = indexOf(to) - indexOf(from);
 
@@ -137,8 +199,14 @@ export function canMove(input: {
 export function statusAfterPaymentChange(input: {
   current: VisitStatus;
   balanceDue: number;
+  /** HMO visit with no LOA number yet: it is never cleared automatically. */
+  loaMissing?: boolean;
 }): VisitStatus | null {
-  if (input.current === "For Payment" && input.balanceDue <= EPSILON) {
+  if (
+    input.current === "For Payment" &&
+    input.balanceDue <= EPSILON &&
+    !input.loaMissing
+  ) {
     return "Cleared";
   }
   if (input.current === "Cleared" && input.balanceDue > EPSILON) {

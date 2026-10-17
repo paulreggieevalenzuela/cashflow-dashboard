@@ -1,4 +1,5 @@
 import type { CashflowTransaction } from "@/lib/cashflow/schema";
+import { isCheckInPlaceholder } from "@/lib/cashflow/visit-status";
 import type { Expense } from "@/lib/cashflow/expense-schema";
 
 /**
@@ -343,6 +344,7 @@ export function topProcedures(
 ): { top: ProcedureStat[]; otherCount: number; otherRevenue: number } {
   const byProcedure = new Map<string, ProcedureStat>();
   for (const transaction of transactions) {
+    if (isCheckInPlaceholder(transaction.procedure)) continue;
     const key = transaction.procedure.trim() || "Unspecified";
     const existing = byProcedure.get(key);
     if (existing) {

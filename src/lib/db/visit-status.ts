@@ -4,10 +4,14 @@ import {
   canMove,
   computeWaitStats,
   type WaitStat,
+  isCheckInPlaceholder,
   isVisitStatus,
   statusAfterPaymentChange,
   type VisitStatus,
 } from "@/lib/cashflow/visit-status";
+import { getHmoInfo, getHmoInfoByInvoice } from "@/lib/db/hmo";
+import { getReadinessIssue, getReadinessIssues } from "@/lib/db/visit-readiness";
+import { isLoaMissing, isLoaPending } from "@/lib/cashflow/hmo";
 import { logAudit } from "@/lib/db/audit";
 import { db } from "@/lib/db/client";
 import { getCollectedTotalsByInvoice } from "@/lib/db/payments";
@@ -126,13 +130,19 @@ export async function setVisitStatus(input: {
     return { ok: false, message: "That visit no longer exists." };
   }
   const from = asStatus(invoice.status);
-  const { balanceDue } = await totalsFor(input.invoiceId);
+  const [{ balanceDue }, hmo, visitIssue] = await Promise.all([
+    totalsFor(input.invoiceId),
+    getHmoInfo(input.invoiceId),
+    getReadinessIssue(input.invoiceId),
+  ]);
 
   const check = canMove({
     from,
     to: input.to,
     isAdmin: input.actor.isAdmin,
     balanceDue,
+    loaMissing: isLoaMissing(hmo),
+    visitIssue,
   });
   if (!check.ok) {
     return { ok: false, message: check.message };
@@ -192,8 +202,15 @@ export async function syncStatusWithPayments(
     return null;
   }
   const current = asStatus(invoice.status);
-  const { balanceDue } = await totalsFor(invoiceId);
-  const next = statusAfterPaymentChange({ current, balanceDue });
+  const [{ balanceDue }, hmo] = await Promise.all([
+    totalsFor(invoiceId),
+    getHmoInfo(invoiceId),
+  ]);
+  const next = statusAfterPaymentChange({
+    current,
+    balanceDue,
+    loaMissing: isLoaMissing(hmo),
+  });
   if (!next) {
     return null;
   }
@@ -306,6 +323,13 @@ export type BoardVisit = {
   visitDate: string;
   totalDue: number;
   balanceDue: number;
+  /** HMO visit still waiting for its LOA number. */
+  loaPending: boolean;
+  /** HMO visit with no LOA number (also true once Cleared) — what the
+   * status control needs to refuse "Cleared". */
+  loaMissing: boolean;
+  /** Why the visit can't go on to payment yet (no procedure / no dentist). */
+  visitIssue: string | null;
 };
 
 /**
@@ -338,7 +362,7 @@ export async function listBoardVisits(today: string): Promise<BoardVisit[]> {
   }
   const ids = headers.map((header) => header.id);
 
-  const [lineRows, collected] = await Promise.all([
+  const [lineRows, collected, hmoById, issueById] = await Promise.all([
     db
       .select({
         invoiceId: transactions.invoiceId,
@@ -353,6 +377,8 @@ export async function listBoardVisits(today: string): Promise<BoardVisit[]> {
       .where(inArray(transactions.invoiceId, ids))
       .orderBy(asc(transactions.lineNumber), asc(transactions.createdAt)),
     getCollectedTotalsByInvoice(ids),
+    getHmoInfoByInvoice(ids),
+    getReadinessIssues(ids),
   ]);
 
   const linesByInvoice = new Map<string, typeof lineRows>();
@@ -371,6 +397,12 @@ export async function listBoardVisits(today: string): Promise<BoardVisit[]> {
     const totalDue = round2(
       lines.reduce((sum, line) => sum + Number(line.amountPaid), 0),
     );
+    const hmo = hmoById.get(header.id) ?? {
+      isHmo: false,
+      loaNumber: "",
+      loeNumber: "",
+    };
+    const status = asStatus(header.status);
     return [
       {
         invoiceId: header.id,
@@ -378,12 +410,17 @@ export async function listBoardVisits(today: string): Promise<BoardVisit[]> {
         patientName: lines[0].patientName,
         dentist: lines[0].dentist,
         branchName: header.branchName ?? "",
-        procedures: lines.map((line) => line.procedure),
-        status: asStatus(header.status),
+        procedures: lines
+          .map((line) => line.procedure)
+          .filter((name) => !isCheckInPlaceholder(name)),
+        status,
         statusChangedAt: header.statusChangedAt.toISOString(),
         visitDate: header.visitDate,
         totalDue,
         balanceDue: balanceDueOf(totalDue, collected.get(header.id) ?? 0),
+        loaPending: isLoaPending({ ...hmo, status }),
+        loaMissing: isLoaMissing(hmo),
+        visitIssue: issueById.get(header.id) ?? null,
       },
     ];
   });

@@ -9,11 +9,15 @@ import { EditTransactionModal } from "@/components/cashflow/edit-transaction-mod
 import { PaymentsManager } from "@/components/cashflow/payments-manager";
 import { AuditTrail } from "@/components/cashflow/audit-trail";
 import { StatusHistory } from "@/components/cashflow/status-history";
+import { LoaPendingBadge } from "@/components/cashflow/loa-pending-badge";
+import { hasHmoPayment, isLoaMissing, isLoaPending } from "@/lib/cashflow/hmo";
 import { VisitStatusControl } from "@/components/cashflow/visit-status-control";
 import {
   balanceDueOf,
+  isCheckInPlaceholder,
   isLocked,
   isVisitStatus,
+  visitReadinessIssue,
 } from "@/lib/cashflow/visit-status";
 import type { StatusHistoryEntry } from "@/lib/db/visit-status";
 import type { AuditEntry } from "@/lib/cashflow/audit-types";
@@ -72,6 +76,20 @@ export function TransactionDetail({
   const first = lines[0];
   const status = isVisitStatus(invoice.status) ? invoice.status : "Cleared";
   const balanceDue = balanceDueOf(totalDue, detail.collected);
+  const isHmo = hasHmoPayment([
+    ...lines.map((line) => line.paymentType),
+    ...payments.map((payment) => payment.paymentType),
+  ]);
+  const visitIssue = visitReadinessIssue({
+    procedureCount: lines.filter((line) => !isCheckInPlaceholder(line.procedure))
+      .length,
+    hasDentist: lines.some((line) => line.dentist.trim() !== ""),
+  });
+  const loaPending = isLoaPending({
+    isHmo,
+    loaNumber: invoice.loaNumber,
+    status,
+  });
   // A Cleared visit is locked; only an admin can reopen or edit it.
   const locked = isLocked(status) && !canDelete;
   const dentistNames = [
@@ -157,7 +175,13 @@ export function TransactionDetail({
               status={status}
               balanceDue={balanceDue}
               isAdmin={canDelete}
+              loaMissing={isLoaMissing({
+                isHmo,
+                loaNumber: invoice.loaNumber,
+              })}
+              visitIssue={visitIssue}
             />
+            {loaPending && <LoaPendingBadge className="mt-2" />}
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-3 self-start">
@@ -228,6 +252,23 @@ export function TransactionDetail({
             }
             mono
           />
+        )}
+        {(isHmo || invoice.loaNumber || invoice.loeNumber) && (
+          <>
+            <DetailField
+              label="LOA number"
+              value={
+                invoice.loaNumber ||
+                (status === "Cleared" ? "—" : "Pending — not received yet")
+              }
+              mono={Boolean(invoice.loaNumber)}
+            />
+            <DetailField
+              label="LOE number"
+              value={invoice.loeNumber || "—"}
+              mono={Boolean(invoice.loeNumber)}
+            />
+          </>
         )}
         {invoice.recallDate && (
           <DetailField

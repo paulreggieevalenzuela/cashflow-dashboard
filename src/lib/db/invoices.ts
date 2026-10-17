@@ -54,6 +54,7 @@ import {
 } from "@/lib/db/procedures";
 import {
   defaultStatusOnCreate,
+  isCheckInPlaceholder,
   isLocked,
   isVisitStatus,
   todayInManila,
@@ -64,6 +65,9 @@ import {
   summarizeChanges,
   type AuditSnapshot,
 } from "@/lib/cashflow/audit-diff";
+import { hasHmoPayment, isLoaMissing, isLoaPending } from "@/lib/cashflow/hmo";
+import { getHmoInfoByInvoice } from "@/lib/db/hmo";
+import { getReadinessIssues } from "@/lib/db/visit-readiness";
 import { logAudit } from "@/lib/db/audit";
 import {
   reconcileImportedStatuses,
@@ -93,6 +97,12 @@ export type InvoiceSummary = {
   status: VisitStatus;
   /** When the status last changed (ISO). */
   statusChangedAt: string;
+  /** HMO visit still waiting for its LOA number (not yet Cleared). */
+  loaPending: boolean;
+  /** HMO visit with no LOA number (also true once Cleared). */
+  loaMissing: boolean;
+  /** Why the visit can't go on to payment yet (no procedure / no dentist). */
+  visitIssue: string | null;
 };
 
 export type InvoiceDetail = {
@@ -173,7 +183,8 @@ export async function getInvoiceSummaries(
     return result;
   }
 
-  const [headers, lineTotals, collected] = await Promise.all([
+  const [headers, lineTotals, collected, hmoById, issueById] =
+    await Promise.all([
     db
       .select({
         id: invoices.id,
@@ -193,19 +204,30 @@ export async function getInvoiceSummaries(
       .where(inArray(transactions.invoiceId, ids))
       .groupBy(transactions.invoiceId),
     getCollectedTotalsByInvoice(ids),
+    getHmoInfoByInvoice(ids),
+    getReadinessIssues(ids),
   ]);
 
   const totalsById = new Map(lineTotals.map((row) => [row.invoiceId, row]));
   for (const header of headers) {
     const totals = totalsById.get(header.id);
+    const status = isVisitStatus(header.status) ? header.status : "Cleared";
+    const hmo = hmoById.get(header.id) ?? {
+      isHmo: false,
+      loaNumber: "",
+      loeNumber: "",
+    };
     result[header.id] = {
       id: header.id,
       invoiceNumber: header.invoiceNumber,
       lineCount: totals?.lineCount ?? 0,
       totalDue: Number(totals?.totalDue ?? 0),
       collected: collected.get(header.id) ?? 0,
-      status: isVisitStatus(header.status) ? header.status : "Cleared",
+      status,
       statusChangedAt: header.statusChangedAt.toISOString(),
+      loaPending: isLoaPending({ ...hmo, status }),
+      loaMissing: isLoaMissing(hmo),
+      visitIssue: issueById.get(header.id) ?? null,
     };
   }
   return result;
@@ -395,6 +417,8 @@ function visitHeaderFields(input: InvoiceInput, priced: PricedLine[]) {
     discountIdNumber: keepId ? input.discountIdNumber.trim() : "",
     recallDate: input.recallDate || null,
     recallReason: input.recallDate ? input.recallReason.trim() : "",
+    loaNumber: input.loaNumber.trim(),
+    loeNumber: input.loeNumber.trim(),
   };
 }
 
@@ -565,6 +589,8 @@ function snapshotOf(
     discountIdType: string;
     discountIdNumber: string;
     recallDate: string | null;
+    loaNumber: string;
+    loeNumber: string;
   },
   extra: { patientName: string; branchName: string; dentist: string },
   lines: CashflowTransaction[],
@@ -580,6 +606,8 @@ function snapshotOf(
     discountIdType: header.discountIdType,
     discountIdNumber: header.discountIdNumber,
     recallDate: header.recallDate ?? "",
+    loaNumber: header.loaNumber,
+    loeNumber: header.loeNumber,
     totalDue: round2(lines.reduce((sum, line) => sum + line.amountPaid, 0)),
     lines: lines.map((line) => ({
       id: line.id,
@@ -622,8 +650,17 @@ export async function createInvoice(
     fieldErrors.invoiceNumber = numberProblem;
   }
   const paidNow = round2(input.payment?.amount ?? 0);
+  const hasProcedures = input.lines.some(
+    (line) => !isCheckInPlaceholder(line.procedure),
+  );
   // A card payment's merchant fee is inside the amount paid.
-  if (appliedToBill(paidNow, input.payment?.paymentType) > totalDue + 0.005) {
+  if (!hasProcedures && paidNow > 0) {
+    fieldErrors.paymentAmount =
+      "Add the procedures first, then record the payment. (A check-in without procedures can't take a payment yet.)";
+  } else if (
+    appliedToBill(paidNow, input.payment?.paymentType) >
+    totalDue + 0.005
+  ) {
     fieldErrors.paymentAmount = `That is more than the total due (${totalDue.toFixed(2)}).`;
   }
   if (Object.keys(fieldErrors).length > 0) {
@@ -689,6 +726,11 @@ export async function createInvoice(
     transactionType: input.transactionType,
     totalDue,
     collected: appliedToBill(paidNow, input.payment?.paymentType),
+    loaMissing: isLoaMissing({
+      isHmo: hasHmoPayment([input.payment?.paymentType]),
+      loaNumber: input.loaNumber,
+    }),
+    hasProcedures,
   });
 
   const header: NewInvoiceRow = {
@@ -743,7 +785,7 @@ export async function createInvoice(
     entityId: invoiceId,
     invoiceId,
     patientId: patient?.id ?? null,
-    summary: `${patientName} · ${priced.length} ${priced.length === 1 ? "procedure" : "procedures"} · total ${totalDue.toFixed(2)}${paidNow > 0 ? ` · ${paidNow.toFixed(2)} received` : ""}`,
+    summary: `${patientName} · ${hasProcedures ? `${priced.length} ${priced.length === 1 ? "procedure" : "procedures"}` : "checked in, no procedures yet"} · total ${totalDue.toFixed(2)}${paidNow > 0 ? ` · ${paidNow.toFixed(2)} received` : ""}`,
     actor,
   });
 
@@ -946,6 +988,8 @@ export async function updateInvoice(
         discountIdNumber:
           visitHeaderFields(input, priced).discountIdNumber ?? "",
         recallDate: visitHeaderFields(input, priced).recallDate ?? null,
+        loaNumber: visitHeaderFields(input, priced).loaNumber,
+        loeNumber: visitHeaderFields(input, priced).loeNumber,
       },
       { patientName, branchName: afterBranch, dentist: input.dentist },
       lines,

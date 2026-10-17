@@ -27,6 +27,8 @@ export type AuditSnapshot = {
   discountIdType: string;
   discountIdNumber: string;
   recallDate: string;
+  loaNumber: string;
+  loeNumber: string;
   totalDue: number;
   lines: AuditLine[];
 };
@@ -56,6 +58,8 @@ export function diffVisit(
     ["Visit type", "visitType"],
     ["Dentist", "dentist"],
     ["Recall date", "recallDate"],
+    ["LOA number", "loaNumber"],
+    ["LOE number", "loeNumber"],
     ["ID type", "discountIdType"],
   ];
   for (const [label, key] of simple) {

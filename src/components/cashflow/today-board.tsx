@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { LoaPendingBadge } from "@/components/cashflow/loa-pending-badge";
 import { VisitStatusControl } from "@/components/cashflow/visit-status-control";
 import {
   VISIT_STATUSES,
@@ -155,12 +156,17 @@ export function TodayBoard({
                         .filter(Boolean)
                         .join(" · ")}
                     </p>
+                    {visit.loaPending && (
+                      <LoaPendingBadge className="mt-1.5" />
+                    )}
                     <div className="mt-2">
                       <VisitStatusControl
                         invoiceId={visit.invoiceId}
                         status={visit.status}
                         balanceDue={visit.balanceDue}
                         isAdmin={isAdmin}
+                        loaMissing={visit.loaMissing}
+                        visitIssue={visit.visitIssue}
                       />
                     </div>
                   </li>

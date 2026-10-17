@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gte, ilike, lte, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, ilike, lte, ne, or, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { getCommissionRateMap } from "@/lib/db/commission-rates";
 import { findDentistUserByName } from "@/lib/db/dentists";
@@ -12,6 +12,7 @@ import {
   type TransactionRow,
 } from "@/lib/db/schema";
 import { computeCommission, round2 } from "@/lib/cashflow/pricing";
+import { CHECK_IN_PLACEHOLDER } from "@/lib/cashflow/visit-status";
 import type { CashflowTransaction } from "@/lib/cashflow/schema";
 import type {
   TransactionSortKey,
@@ -629,7 +630,12 @@ export async function getDentistProcedureBreakdown(
       commissionAmount: sql<string>`coalesce(sum(${transactions.commissionAmount}), 0)`,
     })
     .from(transactions)
-    .where(eq(transactions.dentistUserId, dentistUserId))
+    .where(
+      and(
+        eq(transactions.dentistUserId, dentistUserId),
+        ne(transactions.procedure, CHECK_IN_PLACEHOLDER),
+      ),
+    )
     .groupBy(transactions.procedure)
     .orderBy(desc(sql`sum(${transactions.netCollection})`));
 

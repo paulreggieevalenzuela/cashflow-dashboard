@@ -2,7 +2,11 @@ import Link from "next/link";
 import { auth } from "@/auth";
 
 const TABS = [
-  { key: "transactions", label: "Transactions", href: "/cashflow/transactions" },
+  {
+    key: "transactions",
+    label: "Transactions",
+    href: "/cashflow/transactions",
+  },
   {
     key: "expenses",
     label: "Expenses",
@@ -19,6 +23,11 @@ const TABS = [
     href: "/cashflow/transactions?tab=recalls",
   },
   {
+    key: "dayend",
+    label: "Day end",
+    href: "/cashflow/day-end",
+  },
+  {
     key: "audit",
     label: "Audit",
     href: "/cashflow/transactions?tab=audit",
@@ -29,7 +38,11 @@ const TABS = [
 export type TransactionsTab = (typeof TABS)[number]["key"];
 
 /** The tab row at the top of the Transactions page. */
-export async function TransactionsTabs({ active }: { active: TransactionsTab }) {
+export async function TransactionsTabs({
+  active,
+}: {
+  active: TransactionsTab;
+}) {
   const session = await auth();
   const isAdmin = session?.user.role === "admin";
   const visible = TABS.filter(
@@ -38,7 +51,7 @@ export async function TransactionsTabs({ active }: { active: TransactionsTab }) 
   return (
     <nav
       aria-label="Transactions sections"
-      className="flex gap-1 overflow-x-auto border-b border-zinc-200 dark:border-zinc-800"
+      className="flex gap-1 overflow-x-auto overflow-y-hidden border-b border-zinc-200 [scrollbar-width:none] dark:border-zinc-800 [&::-webkit-scrollbar]:hidden"
     >
       {visible.map((tab) => (
         <Link

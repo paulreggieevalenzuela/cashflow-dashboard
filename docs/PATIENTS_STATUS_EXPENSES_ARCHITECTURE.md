@@ -4,6 +4,7 @@
 **Date:** October 11, 2026
 **Updated:** October 11 — your decision applied: the **Expenses menu item becomes Patients**, and **Expenses moves inside Transactions as a new tab**.
 **Status (updated October 11):** Phases 1, 2 and 3 and the PWD / Senior ID pre-fill and duplicate warning are **built** (see `IMPLEMENTATION_UPDATES.md`), together with the Today board on Overview, waiting-time numbers and the audit trail you added. Still waiting on your decisions: roles, ID photo, admin override, birth date. The rest of this document is the original design.
+**Updated October 17:** HMO authorization (LOA / LOE), the end-of-day report, the commission report and check-in without procedures are built; their design is in section 15.
 **Based on:** your four requests (move Expenses inside Transactions; a Patients page with each patient's invoices; internal tracking status On-going / Arrived / For Payment / Cleared; mandatory ID number for PWD / Senior) and the code as it is today. It builds on `TRANSACTION_WORKFLOW_AND_PRICELIST_PLAN.md` (sections 3.2 and 3.3 described status and roles in outline; this document replaces them with a full design).
 
 ---
@@ -457,3 +458,32 @@ Phases 1, 2 and 4 are independent. Because the Expenses menu spot becomes Patien
 | 3 | Pure-function cases: create today unpaid → Arrived; create paid in full → Cleared; past date unpaid → For Payment; Cleared with balance 500 refused for staff and for admin; payment to zero on For Payment auto-clears; back-step by non-admin refused on the server; edit of a Cleared visit by non-admin refused; history rows written for each move. |
 | 4 | Pre-fill appears for a returning patient; the same ID on another name warns. |
 | 5 | Front desk recording a payment is refused on the server; cashier editing a Cleared visit is refused. |
+
+---
+
+## 15. October 17 additions — design notes
+
+### 15.1 HMO authorization (LOA / LOE)
+
+- **Data:** two text columns on `invoices` (`loa_number`, `loe_number`, blank by default). A visit is an **HMO visit** when any of its payments or lines has an HMO provider as the payment method; this is worked out when needed (no stored flag), so a payment recorded later from the Payments panel counts too.
+- **Why a rule on Cleared, not on check-in:** the LOA often arrives the day after the visit. Requiring it at check-in would block the queue; requiring it at billing is too late to chase. Cleared is the point where the visit is closed for editing, so that is where the LOA is mandatory. Everything before it (Arrived, On-going, For Payment, taking the HMO payment) works without it.
+- **Where the rule lives:** `canMove`, `statusAfterPaymentChange` and `defaultStatusOnCreate` in `src/lib/cashflow/visit-status.ts` take a `loaMissing` flag. The server computes it from the database (`getHmoInfo`) on every status change and after every payment change, and the screens compute the same flag so the button explains the refusal before the click. An admin is not exempt: the LOA is part of the claim.
+- **Old data:** a Cleared visit is never shown as "LOA pending", and the Cleared status of imported history is not touched.
+- **Open:** the meaning of LOE; an LOA worklist and reminder; an LOA scan (the existing invoice attachments can hold it today).
+
+### 15.2 End-of-day report
+
+- **Source of rows:** `payments` received in the Manila day (00:00–24:00, UTC+8) for the branch, joined to the visit's lines for patient, dentist, procedures and the VAT / withholding tax shares; plus the day's visits with no payment (0.00) and the branch's expenses. Collections follow the **payment date**; charges follow the visit date.
+- **Shared by the screen and both downloads:** `src/lib/cashflow/day-end.ts` builds one grid of cells; the page, the CSV and the Excel file all come from it, so they cannot disagree. The Excel writer (`xlsx.ts`) is a few dozen lines of XML in a stored zip — no new package.
+- **Access:** any signed-in user; an admin may pick any branch or all, a user who belongs to a branch is kept to it (checked on the server, also for the download link).
+- **Not built:** *Close day* (it would lock payments, which means a check in every place a payment can be saved, because the database service has no multi-step transactions), cash count and variance, PDF.
+
+### 15.3 Commission report
+
+- **Source:** the commission stored on each procedure line when it was saved (`commission_amount`), so rate changes never rewrite history. Filter by visit date, dentist and branch; admin only.
+- **Open question for the clinic:** whether commission should be owed when the line is saved (today) or only as cash is collected (the spec's proposal). The second needs commission entries per payment and a backfill; it is not done.
+
+### 15.4 Check-in without procedures
+
+- **Why a placeholder line and not an empty visit:** the visit's patient, dentist and branch live on its procedure lines, and every list, board and report is built from lines. A visit with no lines would vanish from all of them. One placeholder line named "No procedures yet" (price 0) keeps the visit visible everywhere; it is replaced when real lines are saved, hidden from the form, and excluded from procedure statistics.
+- **Gate:** For Payment and Cleared need a real procedure and a dentist (`visitReadinessIssue`), enforced by the server and mirrored on the buttons. A check-in always starts Arrived. A payment can't be taken until there are procedures.

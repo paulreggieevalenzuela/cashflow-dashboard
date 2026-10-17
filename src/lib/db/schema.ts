@@ -499,6 +499,11 @@ export const invoices = pgTable("invoices", {
   // When the patient should come back, and why (optional). YYYY-MM-DD.
   recallDate: text("recall_date"),
   recallReason: text("recall_reason").notNull().default(""),
+  // HMO authorization. The LOA (Letter of Authorization) often arrives the
+  // day after the visit, so it starts blank: an HMO visit with no LOA is
+  // "LOA pending" and cannot be Cleared. The LOE is optional.
+  loaNumber: text("loa_number").notNull().default(""),
+  loeNumber: text("loe_number").notNull().default(""),
   // Internal tracking: Arrived | On-going | For Payment | Cleared (see
   // src/lib/cashflow/visit-status.ts). A work-flow label only — it never
   // changes sales, collections or commission. Old visits are Cleared.

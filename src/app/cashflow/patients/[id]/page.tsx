@@ -5,6 +5,7 @@ import { AddTransactionModal } from "@/components/cashflow/add-transaction-modal
 import { AuditTrail } from "@/components/cashflow/audit-trail";
 import { MergePatient } from "@/components/cashflow/merge-patient";
 import { PatientFormModal } from "@/components/cashflow/patient-form-modal";
+import { LoaPendingBadge } from "@/components/cashflow/loa-pending-badge";
 import { VisitStatusControl } from "@/components/cashflow/visit-status-control";
 import { maskId } from "@/lib/cashflow/mask";
 import { VISIT_STATUSES, isVisitStatus } from "@/lib/cashflow/visit-status";
@@ -296,8 +297,13 @@ export default async function PatientPage({
                         status={row.status}
                         balanceDue={row.balanceDue}
                         isAdmin={isAdmin}
+                        loaMissing={row.loaMissing}
+                        visitIssue={row.visitIssue}
                         layout="stacked"
                       />
+                      {row.loaPending && (
+                        <LoaPendingBadge className="mt-1" />
+                      )}
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 text-right">
                       <Link

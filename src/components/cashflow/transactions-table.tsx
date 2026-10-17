@@ -7,6 +7,7 @@ import {
   getInvoiceForEditAction,
   removeInvoiceAction,
 } from "@/app/cashflow/actions";
+import { LoaPendingBadge } from "@/components/cashflow/loa-pending-badge";
 import { TransactionForm } from "@/components/cashflow/transaction-form";
 import {
   buildTransactionsSearch,
@@ -449,6 +450,11 @@ export function TransactionsTable({
                           : ""}
                       </span>
                     )}
+                  {summary?.loaPending && (
+                    <span className="mt-1 block">
+                      <LoaPendingBadge />
+                    </span>
+                  )}
                 </td>
                 <td className="whitespace-nowrap px-4 py-3">
                   {transaction.dentist || "—"}

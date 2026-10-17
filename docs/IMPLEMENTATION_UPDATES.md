@@ -1,8 +1,9 @@
 # Implementation Updates — Transactions, Patients, Invoices & Expenses
 
 **Project:** Cashflow application — ADT Dental Clinic
-**Date:** October 11, 2026
+**Date:** October 11, 2026 (updated October 17)
 **Follows:** `TRANSACTION_EXPENSE_UPDATES_PLAN.md` (the plan written before implementation)
+**Status (October 17 batch):** LOA / LOE on HMO visits (with an "LOA pending" flag), the **end-of-day report** with Excel / CSV download, the **dentist commission report** with Excel / CSV download, and **check-in without procedures** are written; type check and lint are clean and the rules and both exports were run through automated checks. **Run `scripts/sql/2026-10-hmo-loa-loe.sql` first** (step 14). **Not yet opened in the browser** — see section 2, "October 17 batch".
 **Status (October 11 batch):** Expenses moved into Transactions, Patients page, visit status tracking, Queue board (own menu item), waiting times, audit trail and the ID extras are written; type check and lint are clean, the status / audit rules were run through 19 automated checks, and the Expenses tab, the redirect and the new menu were opened in the browser (nothing saved). **The Patients page, status, Today board and audit need `2026-10-patients-and-visit-status.sql` run first** (step 13). Earlier status: Code written and checked (type check and lint both clean; the Day End file was run through the new importer; the Procedures tab and form changes were checked with number tests). **Not yet run against the database or tried in the browser** — see "Before you start the app" and "What to test".
 
 ---
@@ -22,11 +23,57 @@
 10. **Run `scripts/sql/2026-10-procedures-settings-and-line-fields.sql`** (same place, safe to repeat) **after the procedure price list SQL and BEFORE starting the app.** It adds the Procedures-tab columns (price basis, hide, last changed), the price history table, the discount types (PWD, Senior citizen, Promo), quantity / unit price / teeth on every line, the PWD-Senior ID and recall columns on the visit, and sets the price basis of each procedure (per tooth / surface / arch / unit / flat). Existing lines keep their amounts: quantity 1 and unit price = the price they were sold at. The app reads these columns on every page, so **until the file is run the Transactions page shows "This page couldn't load".** The bottom of the file shows three checks (procedures per price basis, the three discount types, and lines still without a unit price — should be 0).
 12. **Run `scripts/sql/2026-10-hmo-prices.sql`** (same place, safe to repeat) **after step 10 and BEFORE starting the app.** It creates the HMO price table, adds a "price for" column to the price history, and loads the clinic's HMO prices for the six accepted HMOs (Maxicare, Intellicare, Avega, Valucare, Medicard, Elite Dental Network): Consultation, OP, PF, TF and Simple Extraction. A price already on file is never overwritten, so repeating it does not undo edits made on the Procedures tab. Until it is run the Transactions page shows "This page couldn't load".
 13. **Run `scripts/sql/2026-10-patients-and-visit-status.sql`** (same place, safe to repeat) **BEFORE using the app again.** It adds the visit **status** (Arrived / On-going / For Payment / Cleared) and **status history**, the **audit trail** table, and two indexes so a patient's invoices load fast. Existing visits get a status **once**: paid in full becomes **Cleared**, money still owed becomes **For Payment** (running the file again never changes a status). The app reads the status on every Transactions query, so **until it is run the Transactions, Patients and Overview pages show "This page couldn't load".** The bottom of the file shows how many visits are in each status.
+14. **Run `scripts/sql/2026-10-hmo-loa-loe.sql`** (same place, safe to repeat) **BEFORE starting the app.** It adds two text columns to the visit (`loa_number`, `loe_number`, blank by default). The app reads them on every page that lists visits, so **until it is run the Transactions, Queue and Patients pages show "This page couldn't load".** Nothing else is needed for the two reports or for check-in without procedures.
 11. **Run `yarn db:backfill-links` again afterwards** (optional). Saved visits keep their own procedure link; the backfill now uses that link first and the name only for lines that have none.
 
 ---
 
 ## 2. What the system does now
+
+### October 17 batch — LOA / LOE, end-of-day report, commission report, check-in without procedures
+
+#### HMO: LOA and LOE
+
+| What | How it works |
+|---|---|
+| **Fields** | Two text fields on the visit: **LOA number** and **LOE number**. Both are optional when saving. They sit in a new **HMO authorization** box on the Add / Edit transaction form (open by default for an HMO payment, folded away otherwise). |
+| **What counts as an HMO visit** | Any payment on the visit, or any line, whose payment method is Maxicare, Intellicare, Avega, Valucare, Medicard or Elite Dental Network. |
+| **LOA arrives the next day** | Save the visit without it. An HMO visit with no LOA number shows an orange **LOA pending** chip on the Queue card, the Transactions list, the patient page and the visit page. The visit page shows "LOA number: Pending — not received yet". |
+| **When the LOA is mandatory** | Before the visit can be **Cleared**. Check-in, treatment, **For Payment** and recording the HMO payment all work without it. *Cleared* is refused (for staff and admin alike) with "This HMO visit has no LOA number yet. Enter it (Edit transaction → HMO authorization) before clearing the visit." |
+| **Automatic clearing** | A visit paid in full by the HMO but still missing the LOA stays **For Payment**; saving the LOA number clears it by itself. A new HMO visit saved already paid, with no LOA, starts as **For Payment** instead of Cleared. |
+| **Old visits** | A visit that is already Cleared never shows "LOA pending", so imported history is not chased. Only if an admin reopens one (or a payment is removed) is the LOA asked for. |
+| **LOE** | Optional free text, shown on the visit page when filled in. Its exact meaning still has to be confirmed with the clinic. |
+| **Audit** | Entering or changing the LOA / LOE appears in the visit's audit trail (who, when, from, to). |
+
+#### End-of-day report (per branch)
+
+- **Where:** Transactions → **Day end** tab (`/cashflow/day-end`). Pick a **date** and a **branch** (admins also get *All branches*; someone who belongs to a branch sees only their own). Shows today by default.
+- **Layout:** the clinic's own "Day End" sheet — Visit ID, Patient, Dentist, Procedure, Payment Type, Amount Paid, VAT Exclusive, VAT Amount, Invoice Number, Remarks, Merchant Fee, Withholding Tax, Net Collection — then the **breakdown by payment method** (Cash, GCash, GoTyme, POS - Debit, POS - Credit, BDO and the HMOs) and the totals. Tested on the clinic's October 3 file: **total ₱3,965.00 and the same breakdown** as their sheet.
+- **Rows:** one row per **payment received that day** (clinic time, UTC+8). A visit of that day with **no payment** is listed with 0.00 and "No payment recorded", like "Follow up Check Up - no payment" on their sheet. Reservation fees are included and counted separately.
+- **Totals shown:** total collected (like their sheet — HMO included), **of which HMO** (billed to the HMO, not cash in hand), **of which reservation fees**, merchant fees, withholding tax and **net collection**. Expenses recorded that day for the branch are listed below.
+- **Download:** **Excel (.xlsx)** and **CSV**, named `ADT_EOD_<branch>_<date>`. The Excel file is built without any new package.
+- **How a payment's VAT and tax are worked out:** VAT and withholding tax are kept on the visit's procedure lines, so a payment carries the share that matches its share of the bill; the merchant fee comes from the payment's own amount and method.
+- **Not included yet:** *Close day* (locking the day's payments), the cash count with variance, and a PDF. Close day needs the lock checked in every place that saves a payment; it is waiting for the clinic to say they want it.
+
+#### Dentist commission report
+
+- **Where:** Commissions page → **Commission report** button (admin only; `/cashflow/commissions/report`).
+- **Filters:** from / to date (this month so far by default), dentist, branch. Shows a **summary per dentist** (procedures, net collection, commission, and how many lines had money collected but no commission because no rate is set) and the **line-by-line detail**.
+- **Download:** Excel (a Summary sheet and a Detail sheet) and CSV, named `ADT_Commission_<from>_to_<to>`.
+- **How it counts:** the commission on each line is the amount saved when the line was recorded (the existing rule: % of net collection, or the HMO % / fixed peso value), so a later rate change does not rewrite past periods. The report groups by **visit date**. Staff bonuses are computed live and stay on the Performance page.
+- **Not included yet:** payout batches ("mark as paid") and a dentist-only view of their own rows (dentists already see their own commission on the Performance page).
+
+#### Check-in without procedures (Queue)
+
+- The **procedures are always on the form now**; payment method is optional ("can be added later"). The old "Not paid yet — continue to the procedures" step is gone. Choosing an HMO after picking procedures re-prices the lines you haven't priced by hand.
+- Leave the procedures empty and the button reads **Check in (add procedures later)**. The visit is saved with one placeholder line named **"No procedures yet"** (price 0). It is hidden from the form, left out of the procedure statistics, and **replaced automatically** when procedures are saved with *Edit transaction*. A payment can't be recorded until there are procedures.
+- A check-in starts as **Arrived** (even if dated earlier). Arrived → On-going works as before. **For Payment and Cleared need at least one real procedure and a dentist**; otherwise the move is refused with a message saying what is missing (this also stops an admin jumping ahead).
+- Procedures stay editable while the visit is Arrived or On-going; a Cleared visit is still locked for everyone except an admin.
+
+#### Decisions still open
+
+LOE meaning · whether HMO payments belong in the day's collection total (they are today, with a separate "of which HMO" line) · whether commission should be owed when cash is collected rather than when the line is saved (today: when saved) · Close day · payout batches.
+
 
 ### The two problems from the plan
 
@@ -324,6 +371,20 @@ The old procedure list is **deleted** and replaced by the **Cash Paying** column
 | `src/components/cashflow/procedures-manager.tsx`, `transactions-tabs.tsx`, `recalls-list.tsx` | The Procedures tab, the tab row, and the Recalls due list. |
 | `src/components/cashflow/or-breakdown.tsx` | The official-receipt breakdown block shown on the form, the transaction page and the printed invoice. |
 
+**October 17 batch (new files):**
+
+| File | Purpose |
+|---|---|
+| `scripts/sql/2026-10-hmo-loa-loe.sql` | Adds `loa_number` and `loe_number` to the visit. |
+| `src/lib/cashflow/hmo.ts`, `src/lib/db/hmo.ts` | The LOA rules (what is an HMO visit, "LOA pending", the message) and the lookup of HMO / LOA state for a batch of visits. |
+| `src/components/cashflow/loa-pending-badge.tsx` | The orange "LOA pending" chip. |
+| `src/lib/cashflow/day-end.ts`, `src/lib/db/day-end.ts` | End-of-day report: layout, breakdown, totals, file name (pure); the day's payments, unpaid visits and expenses, and which branch a person may see. |
+| `src/app/cashflow/day-end/page.tsx`, `src/app/api/cashflow/day-end/route.ts` | The Day end screen and its Excel / CSV download. |
+| `src/lib/cashflow/xlsx.ts` | A small writer for .xlsx and CSV (no package needed). |
+| `src/lib/cashflow/commission-report.ts`, `src/lib/db/commission-report.ts` | Commission report: grouping, subtotals, sheets and filters (pure); the query. |
+| `src/app/cashflow/commissions/report/page.tsx`, `src/app/api/cashflow/commissions/report/route.ts` | The Commission report screen and its Excel / CSV download (admin only). |
+| `src/lib/db/visit-readiness.ts` | Why a visit can't go on to payment yet (no real procedure / no dentist). |
+
 **October 11 batch (new files):**
 
 | File | Purpose |
@@ -338,6 +399,10 @@ The old procedure list is **deleted** and replaced by the **Cash Paying** column
 
 | File | What changed |
 |---|---|
+| *October 17:* `src/lib/db/schema.ts`, `invoice-schema.ts`, `audit-diff.ts`, `src/lib/db/invoices.ts` | LOA / LOE columns, validation and saving; both appear in the audit comparison; a new HMO visit saved paid with no LOA starts For Payment; a check-in with no procedures starts Arrived and can't take a payment. |
+| *October 17:* `src/lib/cashflow/visit-status.ts`, `src/lib/db/visit-status.ts` | New rules: no Cleared (and no automatic clearing) without the LOA of an HMO visit; no For Payment / Cleared without a real procedure and a dentist; the check-in placeholder; the Queue cards carry the LOA flag and the readiness message. |
+| *October 17:* `transaction-form.tsx`, `transaction-detail.tsx`, `today-board.tsx`, `transactions-table.tsx`, `visit-status-control.tsx`, `patients/[id]/page.tsx`, `patient-admin.ts` | HMO authorization box; procedures always visible, payment optional, "Check in (add procedures later)"; LOA fields and chip; the status buttons refuse a move the server would refuse. |
+| *October 17:* `transactions-tabs.tsx`, `commissions/page.tsx`, `src/lib/db/transactions.ts`, `dashboard-metrics.ts` | The Day end tab; the Commission report button; the placeholder is left out of procedure statistics. |
 | *Latest batch:* `src/lib/db/schema.ts`, `src/lib/cashflow/schema.ts`, `invoice-schema.ts`, `pricing.ts`, `constants.ts` | New columns and tables; line input is now unit price + quantity + teeth + discount type (visit input adds ID type / number and recall date / reason, with a check that PWD/Senior needs an ID); `priceLine` takes the discount type's statutory flag and `computeListPrice` was added; the discount presets were replaced by the ID types list. |
 | *Latest batch:* `src/lib/db/invoices.ts`, `transactions.ts`, `procedures.ts` | Server prices each line from unit price × quantity, keeps a saved line's own VAT and procedure link, applies the discount type rules, checks the ID, saves the ID and recall on the visit; the commission link uses the saved procedure first; procedures carry price basis and hidden status. |
 | *Latest batch:* `transaction-form.tsx`, `add-/edit-transaction-modal.tsx`, `transactions-list.tsx`, `transactions-table.tsx`, `transaction-detail.tsx`, `invoice-view.tsx`, `transactions/page.tsx`, `[id]/page.tsx`, `[id]/edit/page.tsx` | New line layout, ID and recall sections, multi-line remarks, tabs on the Transactions page, teeth / quantity / ID shown on the transaction page and printed invoice. |
@@ -374,7 +439,7 @@ The old procedure list is **deleted** and replaced by the **Cash Paying** column
 | `src/components/cashflow/csv-upload.tsx`, `cashflow-overview.tsx` | Branch dropdown and fuller import summary. |
 | `scripts/backfill-payments.ts`, `scripts/seed-db.ts` | Updated to the invoice model. |
 
-**October 11 batch (changed):** `cashflow-nav.tsx` (Patients link, no header Add Expenses; Queue link with open-visit count; desktop menu from 1024 px), new `app/cashflow/queue/page.tsx` and `auto-refresh.tsx`, `status-actions.ts` (layout revalidated), `actions.ts` (CSV imports are written to the audit trail), `payment-actions.ts` (payment entries carry the patient), new `app/api/cashflow/open-visits/route.ts` (menu count), `layout.tsx` (no longer loads suppliers / branches for the header), `expenses/page.tsx` (redirect), `expense-actions.ts`, `transactions-tabs.tsx`, `transactions/page.tsx` (Expenses, Audit tabs; Today tab redirects; status filter removed; `transactions-toolbar.tsx` rebuilt: the search box stays and a funnel button beside it opens a **Filters** pop-up (type, payment method, dentist, date range; Apply / Reset / Cancel) with the applied filters shown as removable chips under the search box, `transactions-query.ts` and `db/transactions.ts`), `transactions-table.tsx` (no Status column; Edit locked for Cleared visits), `ui/modal.tsx` (new `wide` size, about 1000 px instead of 670 px) used by the Add and Edit transaction pop-ups, `transactions-toolbar.tsx`, `transactions-query.ts`, `transaction-detail.tsx` and `[id]/page.tsx` and `[id]/edit/page.tsx` (status, history, audit, lock), `transaction-form.tsx` and `add-transaction-modal.tsx` (patient prefill, ID on file, duplicate-ID warning), `cashflow-overview.tsx` and `app/cashflow/page.tsx` (queue section removed again; `queue-summary.tsx` deleted), `schema.ts`, `invoices.ts` (status on create / edit / import, audit), `transactions.ts`, `patients.ts`, `payments.ts`, `payment-actions.ts`, `actions.ts`, `patient-actions.ts`.
+**October 11 batch (changed):** `cashflow-nav.tsx` (Patients link, no header Add Expenses; Queue link with open-visit count; desktop menu from 1024 px), new `app/cashflow/queue/page.tsx` and `auto-refresh.tsx`, `status-actions.ts` (layout revalidated), `actions.ts` (CSV imports are written to the audit trail), `payment-actions.ts` (payment entries carry the patient), new `app/api/cashflow/open-visits/route.ts` (menu count), `layout.tsx` (no longer loads suppliers / branches for the header), `expenses/page.tsx` (redirect), `expense-actions.ts`, `transactions-tabs.tsx` (tab row scrolls sideways on phones without showing a scrollbar), `transactions/page.tsx` (Expenses, Audit tabs; Today tab redirects; status filter removed; `transactions-toolbar.tsx` rebuilt: the search box stays and a funnel button beside it opens a **Filters** pop-up (type, payment method, dentist, date range; Apply / Reset / Cancel) with the applied filters shown as removable chips under the search box, `transactions-query.ts` and `db/transactions.ts`), `transactions-table.tsx` (no Status column; Edit locked for Cleared visits), `ui/modal.tsx` (new `wide` size, about 1000 px instead of 670 px) used by the Add and Edit transaction pop-ups, `transactions-toolbar.tsx`, `transactions-query.ts`, `transaction-detail.tsx` and `[id]/page.tsx` and `[id]/edit/page.tsx` (status, history, audit, lock), `transaction-form.tsx` and `add-transaction-modal.tsx` (patient prefill, ID on file, duplicate-ID warning), `cashflow-overview.tsx` and `app/cashflow/page.tsx` (queue section removed again; `queue-summary.tsx` deleted), `schema.ts`, `invoices.ts` (status on create / edit / import, audit), `transactions.ts`, `patients.ts`, `payments.ts`, `payment-actions.ts`, `actions.ts`, `patient-actions.ts`.
 
 ## 5. What the SQL file changes in your data
 
@@ -414,6 +479,10 @@ The old procedure list is **deleted** and replaced by the **Cash Paying** column
 
 ## 8. What was checked, and what to test
 
+**Checked (October 17 batch):** type check and lint — no errors. Automated checks pass for: HMO detection from payment methods; "LOA pending" never shown on a Cleared visit; Cleared refused without the LOA even for an admin, other moves unaffected; no automatic clearing without the LOA and clearing once it is entered; a paid HMO visit without LOA starts For Payment, an unpaid one today starts Arrived; a check-in with no procedures starts Arrived (also when dated earlier); For Payment / Cleared refused without a procedure or a dentist (an admin can still reopen an old Cleared visit); the form's validation accepts a placeholder-only check-in, trims the LOA and rejects one over 60 characters. The end-of-day figures were run on the clinic's October 3 sheet: **total ₱3,965.00; Cash 300, GCash 600, GoTyme 1,300, POS credit 1,615, Maxicare 150; HMO 150; reservation fees 600; card fee 45.22 and tax 8.08**. The Excel files were opened with a spreadsheet reader (sheet names, bold headings, two-decimal numbers, commas and quotes in text). The commission grouping, totals, rate percentage and the filter fallbacks (swapped dates, unknown branch, default month) were checked. **Not done:** opening the new screens in the browser or against the database — the new columns must be added first — so the layout of the Day end and Commission report pages, the form and the Queue chip have not been seen.
+
+**Test after running the LOA SQL:** (1) Add transaction → payment method **Maxicare**: the HMO authorization box opens. Save with no LOA → the visit shows **LOA pending** on Queue, Transactions and its own page. Move it forward to For Payment; try **Cleared** → refused with the LOA message. Edit transaction, type an LOA number, save → the chip goes and (if paid in full) the visit clears. (2) A **Cash** visit never shows the chip. (3) **Queue → New visit**: leave procedures empty and press **Check in (add procedures later)** → card in Arrived showing no procedures; try to move it to For Payment (after On-going) → refused, asking for a procedure; Edit transaction, add procedures and a dentist → the placeholder disappears; move on normally. (4) **Transactions → Day end**: pick a day with payments, check the total and the method breakdown against the clinic's sheet, download Excel and CSV and open them. (5) **Commissions → Commission report**: a month, then one dentist; the total matches the Performance page; download the Excel (Summary and Detail sheets).
+
 **Checked (October 11 batch):** type check and lint — no errors. 19 automated checks on the status rules pass: today unpaid → Arrived; today paid → Cleared; past unpaid → For Payment; reservation → Cleared; staff can move forward one step but not clear with a balance, back or skip; admin can go back or skip with a reason but also cannot clear with a balance; payment to zero auto-clears and a removed payment reopens; the waiting-time averages (Arrived 15 min, On-going 45 min, For Payment 10 min on a test set, a visit left open 50 hours ignored); the audit comparison names an added ID, a discount change, an added procedure and the total change. The patients list query was printed (not run) to check its SQL. In the browser (nothing saved): the old Expenses address lands on the Expenses tab with the list, search, dates, total and Add Expenses; the menu shows Patients in the old Expenses position with no Add Expenses button; the tab row scrolls on a phone. **October 12, in the browser (nothing saved):** the new Queue page (first called Today) loads with the live visits (1 On-going, 12 For Payment), the menu shows the queue link with the open-visit count (13) and all eight admin items fit at 1024 px. **Not confirmed:** that the old Transactions → Today address redirects (the browser pane was hidden during the check; the code is a plain redirect), the 30-second refresh and the phone layout of the new menu.
 
 **Test after running the status SQL:** (1) Transactions list has no Status column; there is no Status filter either; every old visit is Cleared or For Payment, and status is moved and seen on the Queue page or the visit page. (2) Add a transaction for today with no payment → Arrived; move it → On-going → For Payment; try *Cleared* as staff → refused with the balance; record the payment on the visit → it clears itself; staff cannot edit it; as admin edit it and see the **Audit trail** list the change. (3) **Queue** (top menu) shows the visit in the right column, the number beside it matches the open visits, **New visit** adds one that lands in Arrived, and a status change on another screen appears within 30 seconds; the old Transactions → Today link lands on Queue; the Overview page has no queue section; after a couple of moves the average waits appear on Queue. (4) **Patients**: search a name, open **View invoices** for a patient with several visits and check the totals match the Transactions list; **New transaction for this patient** opens with the name filled in. (5) Pick PWD for a patient who had one before: **Use ID on file** appears; type another patient's ID number → red warning. (6) Admin: merge a test duplicate patient and see the audit line.
@@ -449,6 +518,8 @@ The old procedure list is **deleted** and replaced by the **Cash Paying** column
 6. Print an invoice with a discount and a VAT line.
 
 ## 9. Not done yet (deferred)
+
+**From the October 17 spec, waiting for the clinic:** *Close day* with a lock, the cash count with variance, a PDF of the day-end report, commission **payout batches** and a dentist-only commission view, an LOA **worklist** (a filter for visits still waiting, oldest first) and a daily reminder, the **LOE** meaning and any rule for it.
 
 **From the October 11 plan, waiting for your decision:** `front_desk` / `cashier` roles (today any signed-in user moves a visit forward; admin goes back) · ID **photo** and an **admin override with a reason** for a patient with no ID · HMO member / approval number and co-pay · birth date on the patient · a printable patient statement · month-end close · notifications. The audit trail does not record CSV imports line by line, only the visits and payments they create through the normal screens.
 

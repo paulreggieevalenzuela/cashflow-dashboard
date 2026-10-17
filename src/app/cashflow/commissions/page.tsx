@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { CommissionRatesManager } from "@/components/cashflow/commission-rates-manager";
@@ -26,6 +27,12 @@ export default async function CommissionsPage() {
   return (
     <div className="space-y-6">
       <div>
+        <Link
+          href="/cashflow/commissions/report"
+          className="float-right ml-4 rounded-lg border border-zinc-300 px-3.5 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+        >
+          Commission report
+        </Link>
         <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-50">
           Commission &amp; bonus rates
         </h2>

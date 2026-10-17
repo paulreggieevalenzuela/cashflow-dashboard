@@ -1,5 +1,5 @@
 import { and, asc, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
-import { balanceDueOf } from "@/lib/cashflow/visit-status";
+import { balanceDueOf, isCheckInPlaceholder } from "@/lib/cashflow/visit-status";
 import { db } from "@/lib/db/client";
 import { getInvoiceSummaries } from "@/lib/db/invoices";
 import { cleanDisplayName, normalizeNameKey } from "@/lib/db/patients";
@@ -215,6 +215,9 @@ export type PatientInvoiceRow = {
   collected: number;
   balanceDue: number;
   status: VisitStatus;
+  loaPending: boolean;
+  loaMissing: boolean;
+  visitIssue: string | null;
 };
 
 export type PatientProfile = {
@@ -306,7 +309,9 @@ export async function getPatientProfile(
         visitDate: header.visitDate,
         invoiceNumber: header.invoiceNumber,
         transactionType: header.transactionType,
-        procedures: lines.map((line) => line.procedure),
+        procedures: lines
+          .map((line) => line.procedure)
+          .filter((name) => !isCheckInPlaceholder(name)),
         dentist: [
           ...new Set(lines.map((line) => line.dentist).filter(Boolean)),
         ].join(", "),
@@ -316,6 +321,9 @@ export async function getPatientProfile(
         collected: summary.collected,
         balanceDue: balanceDueOf(summary.totalDue, summary.collected),
         status: summary.status,
+        loaPending: summary.loaPending,
+        loaMissing: summary.loaMissing,
+        visitIssue: summary.visitIssue,
       },
     ];
   });
