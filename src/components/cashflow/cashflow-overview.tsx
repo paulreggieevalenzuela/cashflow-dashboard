@@ -245,7 +245,7 @@ export function CashflowOverview({
         />
       </section>
 
-      <section className="rounded-xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-950">
+      <section className="rounded-xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-950 hidden">
         <h2 className="mb-4 text-base font-semibold text-zinc-900 dark:text-zinc-50">
           Import CSV
         </h2>

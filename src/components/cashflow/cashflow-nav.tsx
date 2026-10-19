@@ -65,9 +65,8 @@ export function CashflowNav({
         : [...BASE_LINKS, ...STAFF_LINKS];
 
   function badgeFor(href: string) {
-    return href === "/cashflow/queue" && openCount !== null && openCount > 0
-      ? openCount
-      : null;
+    // Always shown for the Queue (0 included) so the menu stays an indicator.
+    return href === "/cashflow/queue" && openCount !== null ? openCount : null;
   }
 
   function isActive(href: string) {
@@ -239,7 +238,11 @@ function CountBadge({ count }: { count: number | null }) {
   if (count === null) return null;
   return (
     <span
-      className="inline-flex min-w-5 items-center justify-center rounded-full bg-amber-600 px-1.5 text-xs font-semibold leading-5 tabular-nums text-white"
+      className={`inline-flex min-w-5 items-center justify-center rounded-full px-1.5 text-xs font-semibold leading-5 tabular-nums ${
+        count > 0
+          ? "bg-amber-600 text-white"
+          : "bg-zinc-200 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400"
+      }`}
       aria-label={`${count} open ${count === 1 ? "visit" : "visits"}`}
     >
       {count}

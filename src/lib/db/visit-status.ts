@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gte, inArray, ne, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, exists, gte, inArray, ne, or, sql } from "drizzle-orm";
 import {
   balanceDueOf,
   canMove,
@@ -462,13 +462,28 @@ export async function getWaitStats(fromDate: string): Promise<WaitStat[]> {
  * How many visits are not Cleared yet. Feeds the count next to "Queue" in
  * the menu. Returns null (never throws) so a missing table or a database
  * hiccup cannot take the whole page layout down with it.
+ *
+ * Only visits that still have at least one procedure line are counted: the
+ * Queue board is built from the lines (it needs the patient and procedures)
+ * and cannot show a visit that has none, so counting such a leftover header
+ * made the menu say "9" above an empty board.
  */
 export async function countOpenVisits(): Promise<number | null> {
   try {
     const [row] = await db
       .select({ value: sql<number>`count(*)::int` })
       .from(invoices)
-      .where(ne(invoices.status, "Cleared"));
+      .where(
+        and(
+          ne(invoices.status, "Cleared"),
+          exists(
+            db
+              .select({ one: sql`1` })
+              .from(transactions)
+              .where(eq(transactions.invoiceId, invoices.id)),
+          ),
+        ),
+      );
     return row?.value ?? 0;
   } catch {
     return null;
