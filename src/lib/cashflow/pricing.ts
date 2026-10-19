@@ -57,6 +57,11 @@ export type CommissionRateSetting = {
   hmoRatePercent: number | null;
   /** HMO commission as a fixed peso amount per procedure (null = none). */
   hmoPesoValue: number | null;
+  /**
+   * A fixed peso amount per procedure that applies to every payment type
+   * (tier X-ray rates). Optional: individual rates never set it.
+   */
+  pesoValue?: number | null;
 };
 
 /**
@@ -76,6 +81,7 @@ export function computeCommission(
   if (!rate) {
     return 0;
   }
+  const flatPeso = rate.pesoValue ?? null;
   if (isHmoPayment(paymentType)) {
     if (rate.hmoPesoValue !== null) {
       return round2(rate.hmoPesoValue);
@@ -83,7 +89,12 @@ export function computeCommission(
     if (rate.hmoRatePercent !== null) {
       return round2(netCollection * (rate.hmoRatePercent / 100));
     }
-    return 0;
+    // No HMO-specific setting: a flat peso (X-ray) still applies, a plain
+    // cash percentage does not.
+    return flatPeso !== null ? round2(flatPeso) : 0;
+  }
+  if (flatPeso !== null) {
+    return round2(flatPeso);
   }
   return round2(netCollection * (rate.ratePercent / 100));
 }

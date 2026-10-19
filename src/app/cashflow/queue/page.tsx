@@ -55,7 +55,10 @@ export default async function QueuePage() {
           </p>
         </div>
         <AddTransactionModal
-          buttonLabel="New visit"
+          buttonLabel="Add to Queue"
+          title="Add to Queuing"
+          description="Check the patient in. Payment and procedures can be added later."
+          queueMode
           dentistOptions={dentists.map((dentist) => dentist.name)}
           branches={branches}
           procedures={procedures}

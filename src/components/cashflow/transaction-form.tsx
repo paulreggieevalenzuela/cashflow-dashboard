@@ -383,6 +383,14 @@ function withTrailingBlank(form: FormState): FormState {
 
 type FieldErrors = Record<string, string>;
 
+/** The fields that stay visible in the Queue's "Add to Queuing" pop-up. */
+const QUEUE_HEADER_FIELDS = new Set([
+  "date",
+  "patientName",
+  "visitType",
+  "branchId",
+]);
+
 type TransactionFormProps = {
   /** Start a new transaction with this patient already filled in (used by
    * "New transaction for this patient" on the patient page). */
@@ -396,7 +404,14 @@ type TransactionFormProps = {
   /** The discounts staff can pick (PWD, Senior citizen, Promo). */
   discountTypes?: DiscountTypeOption[];
 } & (
-  | { mode?: "create"; onSuccess?: () => void }
+  | {
+      mode?: "create";
+      onSuccess?: () => void;
+      /** The Queue's "Add to Queue" pop-up: only the visit details show, the
+       * payment, procedures and other details stay folded away so the
+       * button is in view straight away. */
+      queueMode?: boolean;
+    }
   | {
       mode: "edit";
       invoice: Invoice;
@@ -410,10 +425,17 @@ export function TransactionForm(props: TransactionFormProps) {
   const router = useRouter();
   const editingInvoiceId = props.mode === "edit" ? props.invoice.id : undefined;
   const discountTypes = props.discountTypes ?? [];
+  const queueMode = props.mode !== "edit" && Boolean(props.queueMode);
+  const [showMore, setShowMore] = useState(!queueMode);
   const [form, setForm] = useState<FormState>(
     props.mode === "edit"
       ? formStateFromInvoice(props.invoice, props.lines, discountTypes)
-      : { ...blankFormState(), patientName: props.initialPatientName ?? "" },
+      : {
+          ...blankFormState(),
+          patientName: props.initialPatientName ?? "",
+          // A queue check-in is a visit; no need to ask.
+          transactionType: queueMode ? "Visit" : "",
+        },
   );
   const procedureOptions = props.procedures ?? [];
   const [errors, setErrors] = useState<FieldErrors>({});
@@ -838,6 +860,13 @@ export function TransactionForm(props: TransactionFormProps) {
         }
       }
       setErrors(nextErrors);
+      // An error on a folded-away field: open the details so it is seen.
+      if (
+        queueMode &&
+        Object.keys(nextErrors).some((key) => !QUEUE_HEADER_FIELDS.has(key))
+      ) {
+        setShowMore(true);
+      }
       return;
     }
 
@@ -985,30 +1014,37 @@ export function TransactionForm(props: TransactionFormProps) {
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <SelectField
-          label="Dentist"
-          placeholder={
-            props.dentistOptions.length > 0
-              ? "Select dentist"
-              : "No dentist accounts yet"
-          }
-          options={dentistChoicesFor(form.dentist)}
-          value={form.dentist}
-          error={errors.dentist}
-          disabled={props.dentistOptions.length === 0}
-          onChange={(event) => updateField("dentist", event.target.value)}
-        />
-        <SelectField
-          label="Transaction type"
-          required
-          placeholder="Select transaction type"
-          options={TRANSACTION_TYPES}
-          value={form.transactionType}
-          error={errors.transactionType}
-          onChange={(event) =>
-            updateField("transactionType", event.target.value)
-          }
-        />
+        {/* In the Queue's pop-up these two are folded away with the other
+            details: the dentist can be set later and the type defaults to
+            Visit. They stay mounted so their values are kept. */}
+        <div className={queueMode && !showMore ? "hidden" : undefined}>
+          <SelectField
+            label="Dentist"
+            placeholder={
+              props.dentistOptions.length > 0
+                ? "Select dentist"
+                : "No dentist accounts yet"
+            }
+            options={dentistChoicesFor(form.dentist)}
+            value={form.dentist}
+            error={errors.dentist}
+            disabled={props.dentistOptions.length === 0}
+            onChange={(event) => updateField("dentist", event.target.value)}
+          />
+        </div>
+        <div className={queueMode && !showMore ? "hidden" : undefined}>
+          <SelectField
+            label="Transaction type"
+            required
+            placeholder="Select transaction type"
+            options={TRANSACTION_TYPES}
+            value={form.transactionType}
+            error={errors.transactionType}
+            onChange={(event) =>
+              updateField("transactionType", event.target.value)
+            }
+          />
+        </div>
         {props.branches && props.branches.length > 0 && (
           <div className="flex flex-col gap-1.5">
             <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
@@ -1034,6 +1070,21 @@ export function TransactionForm(props: TransactionFormProps) {
         )}
       </div>
 
+      {queueMode && (
+        <button
+          type="button"
+          onClick={() => setShowMore((open) => !open)}
+          aria-expanded={showMore}
+          className="text-sm font-medium text-amber-700 hover:text-amber-800 dark:text-amber-400 dark:hover:text-amber-300"
+        >
+          {showMore
+            ? "Hide dentist, payment, procedures and other details"
+            : "Add dentist, payment, procedures or other details (optional)"}
+        </button>
+      )}
+
+      {showMore && (
+        <>
       <section className="space-y-3 rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
         <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">
           {mode === "create" ? "Payment method & invoice" : "Invoice"}
@@ -1581,6 +1632,8 @@ export function TransactionForm(props: TransactionFormProps) {
           className="w-full rounded-lg border border-zinc-300 bg-white px-3.5 py-2.5 text-sm text-zinc-900 shadow-sm outline-none transition-colors placeholder:text-zinc-400 focus:border-amber-500 focus:ring-2 focus:ring-amber-100 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50 dark:focus:ring-amber-900/40"
         />
       </div>
+        </>
+      )}
 
       <div className="flex items-center gap-3">
         <button
@@ -1595,7 +1648,9 @@ export function TransactionForm(props: TransactionFormProps) {
             : status === "submitting"
               ? "Adding..."
               : noProcedures
-                ? "Check in (add procedures later)"
+                ? queueMode
+                  ? "Add to queue"
+                  : "Check in (add procedures later)"
                 : "Add transaction"}
         </button>
         {props.mode === "edit" &&

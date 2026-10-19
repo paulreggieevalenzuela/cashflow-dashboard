@@ -1,6 +1,8 @@
 import { and, asc, desc, eq, gte, ilike, lte, ne, or, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
+import { resolveRateSetting } from "@/lib/cashflow/commission-tiers";
 import { getCommissionRateMap } from "@/lib/db/commission-rates";
+import { getDentistTierMap, getTierRateMap } from "@/lib/db/commission-tiers";
 import { findDentistUserByName } from "@/lib/db/dentists";
 import { findProcedureByName } from "@/lib/db/procedures";
 import {
@@ -268,7 +270,13 @@ async function resolveCommissionLinks(rows: CashflowTransaction[]) {
     ),
   ];
 
-  const [dentistMatches, procedureMatches, rateMap] = await Promise.all([
+  const [
+    dentistMatches,
+    procedureMatches,
+    rateMap,
+    tierRateMap,
+    dentistTierMap,
+  ] = await Promise.all([
     Promise.all(
       distinctDentistNames.map((name) => findDentistUserByName(name)),
     ),
@@ -276,6 +284,8 @@ async function resolveCommissionLinks(rows: CashflowTransaction[]) {
       distinctProcedureNames.map((name) => findProcedureByName(name)),
     ),
     getCommissionRateMap(),
+    getTierRateMap(),
+    getDentistTierMap(),
   ]);
 
   const dentistIdByName = new Map<string, string>();
@@ -302,16 +312,26 @@ async function resolveCommissionLinks(rows: CashflowTransaction[]) {
       procedureIdByName.get(row.procedure.trim().toLowerCase()) ??
       null;
 
+    // The dentist's own individual rate wins; otherwise the rate their
+    // commission tier gives this procedure.
+    const tier = dentistUserId ? dentistTierMap.get(dentistUserId) : undefined;
+    const rate =
+      dentistUserId && procedureId
+        ? resolveRateSetting({
+            individual: rateMap.get(`${dentistUserId}:${procedureId}`),
+            tierRate:
+              tier !== undefined
+                ? tierRateMap.get(`${tier}:${procedureId}`)
+                : undefined,
+          })
+        : undefined;
+
     // Commission is on (total - discount - fees): the line total after any
     // discount, less card fees and withholding tax (= net collection). Cash
     // visits use the cash-paying %; HMO visits use the HMO % / peso value.
     const commissionAmount =
       dentistUserId && procedureId
-        ? computeCommission(
-            row.netCollection,
-            row.paymentType,
-            rateMap.get(`${dentistUserId}:${procedureId}`),
-          )
+        ? computeCommission(row.netCollection, row.paymentType, rate)
         : 0;
 
     return { dentistUserId, procedureId, commissionAmount };

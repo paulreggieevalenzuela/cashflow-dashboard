@@ -487,3 +487,24 @@ Phases 1, 2 and 4 are independent. Because the Expenses menu spot becomes Patien
 
 - **Why a placeholder line and not an empty visit:** the visit's patient, dentist and branch live on its procedure lines, and every list, board and report is built from lines. A visit with no lines would vanish from all of them. One placeholder line named "No procedures yet" (price 0) keeps the visit visible everywhere; it is replaced when real lines are saved, hidden from the form, and excluded from procedure statistics.
 - **Gate:** For Payment and Cleared need a real procedure and a dentist (`visitReadinessIssue`), enforced by the server and mirrored on the buttons. A check-in always starts Arrived. A payment can't be taken until there are procedures.
+
+## 16. October 19 additions — tier-based commission
+
+### 16.1 Model
+
+- **`dentist_commission_tiers`** (dentist → tier 1–3) is its own table, not a column on `users`: the sign-in query reads every `users` column, so a column there would break login until the migration was run.
+- **`commission_tier_rates`** (tier × procedure → percent, HMO percent, flat peso, HMO flat peso), unique per tier and procedure.
+- **`dentist_commission_rates`** stays as the **individual override** table and the staff bonus table.
+
+### 16.2 Resolution at save time
+
+`resolveCommissionLinks` loads the individual rates, the tier rates and the dentist tiers in one parallel batch, then per line: individual rate for (dentist, procedure) if present, else the tier rate for (dentist's tier, procedure), else none. `computeCommission` gained an optional flat peso: it pays on any payment type; on an HMO visit the HMO peso, then HMO percent, then the flat peso apply; on a cash visit the flat peso replaces the percent. Individual rates never set a flat peso, so they behave as before.
+
+### 16.3 Why individual rates still exist
+
+Staff bonuses are computed live from that table and have no tier, and one dentist may need an exception. Because an override silently wins over the tier, the page warns when tiered dentists still hold individual rates and offers a one-click removal; the migration deletes the old dentist rates for a clean start.
+
+### 16.4 Not changed
+
+Commission is still stored per line when saved (rate changes do not rewrite history; `yarn db:backfill-links` re-prices). The commission report reads the stored amounts, so it follows the tiers automatically.
+

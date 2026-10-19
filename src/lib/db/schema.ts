@@ -1,4 +1,4 @@
-import { boolean, integer, jsonb, numeric, pgEnum, pgTable, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
+import { boolean, integer, jsonb, numeric, pgEnum, pgTable, smallint, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
 
 /**
  * A physical clinic location. Dentist/staff accounts and transactions can
@@ -310,6 +310,52 @@ export const dentistCommissionRates = pgTable(
 
 export type DentistCommissionRateRow = typeof dentistCommissionRates.$inferSelect;
 export type NewDentistCommissionRateRow = typeof dentistCommissionRates.$inferInsert;
+
+/**
+ * Which commission tier (1, 2 or 3) a dentist belongs to. Kept in its own
+ * table rather than as a column on `users` so the sign-in query (which reads
+ * every `users` column) never depends on this migration. A dentist with no
+ * row here has no tier and only earns from individual rates.
+ */
+export const dentistCommissionTiers = pgTable("dentist_commission_tiers", {
+  dentistUserId: uuid("dentist_user_id")
+    .primaryKey()
+    .references(() => users.id, { onDelete: "cascade" }),
+  tier: smallint("tier").notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type DentistCommissionTierRow = typeof dentistCommissionTiers.$inferSelect;
+
+/**
+ * The commission a procedure earns for every dentist in a tier — the
+ * clinic's "LIST - TIER" sheet. Same four settings as an individual rate
+ * (cash %, HMO %, HMO peso) plus `pesoValue`, a flat peso amount that
+ * applies to every payment type (the X-rays: ₱70 panoramic, ₱30 periapical).
+ *
+ * At save time a dentist's own row in `dentist_commission_rates` (an
+ * individual override) wins; otherwise the tier's rate for the procedure is
+ * used. Adding a procedure here gives it to every dentist in that tier.
+ */
+export const commissionTierRates = pgTable(
+  "commission_tier_rates",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    tier: smallint("tier").notNull(),
+    procedureId: uuid("procedure_id")
+      .notNull()
+      .references(() => procedures.id, { onDelete: "cascade" }),
+    ratePercent: numeric("rate_percent", { precision: 5, scale: 2 }).notNull(),
+    hmoRatePercent: numeric("hmo_rate_percent", { precision: 5, scale: 2 }),
+    pesoValue: numeric("peso_value", { precision: 12, scale: 2 }),
+    hmoPesoValue: numeric("hmo_peso_value", { precision: 12, scale: 2 }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [unique().on(table.tier, table.procedureId)],
+);
+
+export type CommissionTierRateRow = typeof commissionTierRates.$inferSelect;
 /**
  * One transaction can be paid off in more than one installment (different
  * dates, different methods) rather than fully paid in one shot. Each row

@@ -2,8 +2,10 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
+import { CommissionTiersManager } from "@/components/cashflow/commission-tiers-manager";
 import { CommissionRatesManager } from "@/components/cashflow/commission-rates-manager";
 import { listCommissionRates } from "@/lib/db/commission-rates";
+import { listDentistTiers, listTierRates } from "@/lib/db/commission-tiers";
 import { listCommissionEligibleUsers } from "@/lib/db/dentists";
 import { listProcedures } from "@/lib/db/procedures";
 
@@ -18,11 +20,18 @@ export default async function CommissionsPage() {
     redirect("/cashflow");
   }
 
-  const [dentists, procedures, rates] = await Promise.all([
-    listCommissionEligibleUsers(),
-    listProcedures(),
-    listCommissionRates(),
-  ]);
+  const [dentists, procedures, rates, tierRates, dentistTiers] =
+    await Promise.all([
+      listCommissionEligibleUsers(),
+      listProcedures(),
+      listCommissionRates(),
+      listTierRates(),
+      listDentistTiers(),
+    ]);
+  const tieredIds = new Set(dentistTiers.map((entry) => entry.dentistUserId));
+  const overrideCount = rates.filter((rate) =>
+    tieredIds.has(rate.dentistUserId),
+  ).length;
 
   return (
     <div className="space-y-6">
@@ -37,16 +46,30 @@ export default async function CommissionsPage() {
           Commission &amp; bonus rates
         </h2>
         <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-          Set what percentage of net collection each dentist or staff member
-          earns per procedure. For a dentist this is their commission (linked to
-          transactions performed by them); for staff it&apos;s a bonus (linked
-          to transactions they recorded). A dentist&apos;s rate applies to
-          transactions saved after it&apos;s set &mdash; a staff bonus is
-          computed live, so changing their rate updates past periods too. Visits
-          paid through an HMO (Maxicare, Medicard, Intellicare, Avega, Valucare,
-          Elite Dental Network) use the HMO column instead: a percentage (e.g.
-          OP) or a fixed peso value per procedure (X-rays). An HMO visit for a
-          procedure with no HMO rate earns no commission.
+          Dentist commission is set by <strong>tier</strong>: put each dentist
+          in a tier, and every procedure earns the tier&apos;s rate. A new
+          procedure only needs to be added to a tier once. Visits paid through
+          an HMO (Maxicare, Medicard, Intellicare, Avega, Valucare, Elite
+          Dental Network) use the HMO columns, and an HMO visit for a
+          procedure with no HMO rate earns no commission. A rate applies to
+          transactions saved after it is set.
+        </p>
+      </div>
+      <CommissionTiersManager
+        dentists={dentists}
+        dentistTiers={dentistTiers}
+        procedures={procedures}
+        tierRates={tierRates}
+        overrideCount={overrideCount}
+      />
+      <div>
+        <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">
+          Individual rates &amp; staff bonuses
+        </h3>
+        <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+          Use this only for staff bonuses, or for one dentist who needs a
+          different rate than their tier. An individual rate takes priority
+          over the tier.
         </p>
       </div>
       <CommissionRatesManager

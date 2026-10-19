@@ -10,6 +10,9 @@ import type { ProcedureOption } from "@/lib/db/procedures";
 export function AddTransactionModal({
   initialPatientName,
   buttonLabel = "Add transaction",
+  title = "Add transaction",
+  description = "Record a visit with one or more procedures. It will appear in the table once saved.",
+  queueMode = false,
   dentistOptions,
   branches,
   procedures,
@@ -18,6 +21,11 @@ export function AddTransactionModal({
   /** Pre-fill the patient (used from the patient page). */
   initialPatientName?: string;
   buttonLabel?: string;
+  /** Pop-up heading (the Queue's "Add to Queue" button uses "Add to Queuing"). */
+  title?: string;
+  description?: string;
+  /** Show only the visit details; see TransactionForm's `queueMode`. */
+  queueMode?: boolean;
   dentistOptions: string[];
   branches: Branch[];
   procedures: ProcedureOption[];
@@ -47,11 +55,12 @@ export function AddTransactionModal({
       <Modal
         open={open}
         onClose={() => setOpen(false)}
-        title="Add transaction"
-        size="wide"
-        description="Record a visit with one or more procedures. It will appear in the table once saved."
+        title={title}
+        size={queueMode ? "default" : "wide"}
+        description={description}
       >
         <TransactionForm
+          queueMode={queueMode}
           initialPatientName={initialPatientName}
           dentistOptions={dentistOptions}
           branches={branches}
