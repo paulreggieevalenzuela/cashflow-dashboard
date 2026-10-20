@@ -3,6 +3,7 @@
 **Project:** Cashflow application — ADT Dental Clinic
 **Date:** October 11, 2026 (updated October 19)
 **Follows:** `TRANSACTION_EXPENSE_UPDATES_PLAN.md` (the plan written before implementation)
+**Status (October 19 batch, login expiry):** the login now ends after **30 minutes without activity**. In the last **5 minutes** a pop-up with a live countdown and a **Stay signed in** button appears; if the screen is being used it is extended quietly instead. A login can never be extended past **12 hours**. No SQL is needed. Type check and lint are clean and the timing rules were run through 25 automated checks; **not yet tried in the browser** (see "What to test" for the quick way using a 3-minute timeout).
 **Status (October 19 batch, queue pop-up):** the Queue's button is now **Add to Queue** and opens a pop-up titled **Add to Queuing** that shows only date, patient, visit type and branch so the button is in view at once. Dentist, transaction type (defaults to Visit), payment, procedures, discounts, LOA / LOE, recall and remarks are folded under a link and open on demand (or by themselves if one of them has an error). Other **Add transaction** forms (Transactions, patient page) are unchanged. Type check and lint are clean; **not yet opened in the browser**.
 **Status (October 19 batch):** **Tier-based dentist commission** is written (dentist tiers, tier rates per procedure, editor on the Commissions page); type check and lint are clean and the commission rules were run through 11 automated checks. **Run `scripts/sql/2026-10-commission-tiers.sql`** (step 15): it also **deletes the old one-by-one commission rates of dentist accounts**. **Not yet opened in the browser.**
 **Status (October 17 batch):** LOA / LOE on HMO visits (with an "LOA pending" flag), the **end-of-day report** with Excel / CSV download, the **dentist commission report** with Excel / CSV download, and **check-in without procedures** are written; type check and lint are clean and the rules and both exports were run through automated checks. **Run `scripts/sql/2026-10-hmo-loa-loe.sql` first** (step 14). **Not yet opened in the browser** — see section 2, "October 17 batch".
@@ -29,9 +30,35 @@
 11. **Run `yarn db:backfill-links` again afterwards** (optional). Saved visits keep their own procedure link; the backfill now uses that link first and the name only for lines that have none.
 15. **Run `scripts/sql/2026-10-commission-tiers.sql`** (same place, safe to repeat; run after the price-list file in step 10) **before opening the Commissions page**, then run `yarn db:backfill-links` once so saved visits are re-priced. It creates two tables, **deletes every old individual commission rate that belongs to a dentist account** (staff bonus rates are kept) as you asked for a clean start, puts the 7 dentists in their tier and loads the tier rates. The bottom shows three checks: each dentist's tier, how many procedures each tier got, and the sheet procedures that are not on the price list (nothing was loaded for those).
 
+16. **Login expiry needs no SQL.** Restart the app once after pulling the change (`NEXT_PUBLIC_` settings are read at start). Everyone who is already signed in gets a fresh 30 minutes at their next page load instead of being signed out. **Security, please do now:** the example settings file (`.env.example`) contained what looked like a real database address with its password and the real login-signing secret. I replaced both with placeholders in the file, but anything that was in it should be treated as exposed — **rotate the Neon database password and generate a new `AUTH_SECRET` in `.env.local`** (this signs everyone out once). `.env.example` was not under version control here, so check your repository history if it was ever pushed.
+
 ---
 
 ## 2. What the system does now
+
+### October 19 batch — login expiry (30 minutes, 5-minute warning)
+
+**What changed.** Before, a login lasted about 30 days and the screens had no idea when it would end. Now:
+
+- **30 minutes without activity ends the login**, the same for admin, dentist and staff. Activity means a click, key press, touch or scroll. The Queue's automatic 30-second refresh and the menu's Queue counter do **not** count, otherwise a screen left open would never expire.
+- **In the last 5 minutes** (from minute 25), if the screen was used in the last minute, the login is **extended quietly** by another 30 minutes and nothing is shown. If nobody has touched the screen, a pop-up appears: **"Still there?"** with a live countdown (for example 4:07) and a **Stay signed in** button. It stays until a button is pressed (a stray click elsewhere does not dismiss it); there is also a **Sign out** button. Pressing **Stay signed in** adds another 30 minutes.
+- **If the countdown reaches zero** the person is signed out and lands on the login page with the message **"You were signed out after 30 minutes of inactivity. Please sign in again."** After signing in they return to the page they were on (only pages inside the app are accepted).
+- **Absolute limit of 12 hours:** even someone who is always active must enter the password again after 12 hours. When the limit is what ends the login, the pop-up says so and offers **Sign in again** instead of Stay signed in.
+- **Several tabs:** an extension in one tab updates the others, and signing out in one tab sends the others to the login page.
+- **Account check on every extension:** when a login is extended the server checks the account again. A deleted user is signed out and a changed role takes effect right away; before, a role stayed as it was at sign-in until the cookie expired.
+- **Time left is counted from the server's figure**, not from the computer's clock, so a wrong clock on the front-desk PC cannot make the warning early or late. A computer that wakes from sleep checks straight away.
+- If the server cannot be reached when extending, the pop-up stays with "Couldn't reach the server. Check your connection and try again."
+- A person who comes back after the time ran out with no page open is sent to the login page with the same inactivity message.
+
+**How it works (for the developer).** The timing lives in the signed login token (`signedInAt`, `activeUntil`), not in the cookie, because the cookie slides forward on every page load. `src/auth.ts` sets both at sign-in, returns *no session* once `activeUntil` has passed, and moves `activeUntil` forward **only** when the browser sends an explicit refresh (the Auth.js "update" call). A bare `update()` in this library version is sent as a plain read and extends nothing, so the guard sends `update({ extend: true })`. All numbers and decisions are in one pure file, `src/lib/auth/session-policy.ts`. A client component, `SessionGuard`, is mounted in the Cashflow layout and runs the 1-second clock, the activity listeners and the pop-up.
+
+**Files.** New: `src/lib/auth/session-policy.ts`, `src/components/auth/session-guard.tsx`. Changed: `src/auth.ts`, `src/types/next-auth.d.ts`, `src/middleware.ts` (adds the inactivity message when an old cookie is present), `src/app/cashflow/layout.tsx`, `src/app/login/page.tsx`, `src/components/auth/login-form.tsx`, `.env.example` (placeholders, and an optional test setting).
+
+**Testing setting.** In a development build only, `NEXT_PUBLIC_SESSION_IDLE_MINUTES=3` in `.env.local` shortens the timeout to 3 minutes (the warning then opens at 1 minute left). It is ignored in production builds.
+
+**Checks done:** type check and lint clean; 25 automated checks of the timing rules (30-minute window; warning window of 5 minutes; quiet extension only when the screen was used in the last minute; the pop-up is not dismissed by other activity and closes when time is added from another tab; the 12-hour cap and the "cannot extend" case; countdown format; test setting ignored in production). **Not checked:** the pop-up in a browser and the real sign-out (the app was not started).
+
+**Left for later.** Signing in again *inside* the pop-up without leaving a half-filled form (today the person is warned before it happens, and the page they were on is reopened after sign-in); one common message when a save is refused with "You must be signed in"; limiting failed password attempts; recording sign-in and sign-out in the audit trail.
 
 ### October 19 batch — tier-based dentist commission
 
@@ -384,10 +411,11 @@ The old procedure list is **deleted** and replaced by the **Cash Paying** column
 
 ---
 
-## 3. Files created (22 earlier + 12 + 4 in the latest batches)
+## 3. Files created (22 earlier + 12 + 6 in the latest batches)
 
 | File | Purpose |
 |---|---|
+| `src/lib/auth/session-policy.ts`, `src/components/auth/session-guard.tsx` | October 19: the login-expiry timing rules (pure, testable) and the browser component that runs the clock, the quiet extension and the "Stay signed in" pop-up. |
 | `scripts/sql/2026-10-commission-tiers.sql`, `src/lib/cashflow/commission-tiers.ts`, `src/lib/db/commission-tiers.ts`, `src/components/cashflow/commission-tiers-manager.tsx` | October 19: the tier tables, cleanup and tier rates; tier rules (resolve, labels); tier queries; the tier editor on the Commissions page. |
 | `scripts/sql/2026-10-invoices-patients-suppliers.sql` | Creates the new tables and columns, and fills them from existing data (see section 5). |
 | `scripts/sql/2026-10-commission-rates-unique.sql` | Adds the missing unique (dentist, procedure) rule on commission rates; if the same pair somehow has two rates, keeps the latest. |
@@ -442,6 +470,7 @@ The old procedure list is **deleted** and replaced by the **Cash Paying** column
 
 | File | What changed |
 |---|---|
+| *October 19 (login expiry):* `src/auth.ts`, `src/types/next-auth.d.ts`, `src/middleware.ts`, `src/app/cashflow/layout.tsx`, `src/app/login/page.tsx`, `src/components/auth/login-form.tsx`, `.env.example` | 30-minute idle clock in the login token, extension only on an explicit refresh, account re-check on extension; session carries time left; guard mounted in the layout; login page shows the inactivity message and returns to the page the person was on; example settings file has placeholders instead of real values. |
 | *October 19:* `src/lib/db/schema.ts`, `src/lib/cashflow/pricing.ts`, `src/lib/db/transactions.ts`, `src/app/cashflow/commissions/page.tsx`, `actions.ts` | Two tier tables; `computeCommission` supports a flat peso on any payment; the save-time lookup uses the individual rate, else the tier rate; the Commissions page shows tiers first; tier actions. |
 | *October 17:* `src/lib/db/schema.ts`, `invoice-schema.ts`, `audit-diff.ts`, `src/lib/db/invoices.ts` | LOA / LOE columns, validation and saving; both appear in the audit comparison; a new HMO visit saved paid with no LOA starts For Payment; a check-in with no procedures starts Arrived and can't take a payment. |
 | *October 17:* `src/lib/cashflow/visit-status.ts`, `src/lib/db/visit-status.ts` | New rules: no Cleared (and no automatic clearing) without the LOA of an HMO visit; no For Payment / Cleared without a real procedure and a dentist; the check-in placeholder; the Queue cards carry the LOA flag and the readiness message. |
@@ -510,6 +539,7 @@ The old procedure list is **deleted** and replaced by the **Cash Paying** column
 
 ## 7. Things to know
 
+- **Login expiry:** the 30-minute rule is the same for every role and for the Queue screen. A front-desk screen that is only watched (not touched) will show the pop-up at minute 25 and sign out at minute 30; if that is too strict for the Queue screen, tell me after a week of real use and we can lengthen it for that page. The 12-hour limit means a login started at 8:00 always ends by 20:00. A cookie older than this change is given a fresh 30 minutes at its first request.
 - **CSV re-imports and old data:** imported rows now use the Visit ID as their id. Data imported *before* this update used a different id, so importing the same old file again would add duplicates next to the existing rows rather than update them. New imports of the Day End report can be repeated safely (same file twice = same result).
 - **Editing a visit** cannot lower its total below what has already been paid; the form says to remove a payment first.
 - **Saving is not one atomic step** (the database service used does not support that). If saving fails part-way, a new visit is removed again so no half-saved visit is left behind; an edit that fails part-way shows an error and should be re-checked.
@@ -522,6 +552,10 @@ The old procedure list is **deleted** and replaced by the **Cash Paying** column
 - **The sample sheet's first block has numbers that do not add up** (see "PWD / Senior discount and VAT"). The system follows the arithmetic and the second block; please confirm with the accountant.
 
 ## 8. What was checked, and what to test
+
+**Checked (October 19, login expiry):** type check and lint — no errors; 25 automated checks of the timing rules pass (details in the login expiry section).
+
+**Test (login expiry):** (1) put `NEXT_PUBLIC_SESSION_IDLE_MINUTES=3` in `.env.local`, restart, sign in. (2) Keep clicking for 3 minutes: no pop-up, still signed in. (3) Stop touching the screen: after 2 idle minutes (1 minute left) the pop-up "Still there?" appears with a countdown; press **Stay signed in** — it closes and you have 3 more minutes. (4) Let the countdown reach 0:00: you land on the login page with the inactivity message, and signing in returns you to the page you were on. (5) Open the Queue and leave it untouched: it must still expire (auto-refresh does not extend). (6) Two tabs: extend in one, the other's pop-up closes; sign out in one, the other goes to login. (7) Remove the setting, restart, confirm a normal login shows no pop-up for the first 25 minutes.
 
 **Checked (October 17 batch):** type check and lint — no errors. Automated checks pass for: HMO detection from payment methods; "LOA pending" never shown on a Cleared visit; Cleared refused without the LOA even for an admin, other moves unaffected; no automatic clearing without the LOA and clearing once it is entered; a paid HMO visit without LOA starts For Payment, an unpaid one today starts Arrived; a check-in with no procedures starts Arrived (also when dated earlier); For Payment / Cleared refused without a procedure or a dentist (an admin can still reopen an old Cleared visit); the form's validation accepts a placeholder-only check-in, trims the LOA and rejects one over 60 characters. The end-of-day figures were run on the clinic's October 3 sheet: **total ₱3,965.00; Cash 300, GCash 600, GoTyme 1,300, POS credit 1,615, Maxicare 150; HMO 150; reservation fees 600; card fee 45.22 and tax 8.08**. The Excel files were opened with a spreadsheet reader (sheet names, bold headings, two-decimal numbers, commas and quotes in text). The commission grouping, totals, rate percentage and the filter fallbacks (swapped dates, unknown branch, default month) were checked. **Not done:** opening the new screens in the browser or against the database — the new columns must be added first — so the layout of the Day end and Commission report pages, the form and the Queue chip have not been seen.
 
@@ -562,6 +596,8 @@ The old procedure list is **deleted** and replaced by the **Cash Paying** column
 6. Print an invoice with a discount and a VAT line.
 
 ## 9. Not done yet (deferred)
+
+**From October 19, login expiry:** sign in again inside the pop-up without losing a half-filled form · one shared message for saves refused with "You must be signed in" · limit on failed password attempts · sign-in / sign-out in the audit trail · a longer limit for the Queue screen if the clinic asks.
 
 **From October 19:** screenshot-based mapping of the sheet to the price list should be confirmed by Kim (see the assumptions above) · commission is still saved per line at save time, so a tier change needs `yarn db:backfill-links` for older visits.
 

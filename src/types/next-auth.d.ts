@@ -7,6 +7,10 @@ declare module "next-auth" {
       id: string;
       role: UserRole;
     } & DefaultSession["user"];
+    /** Seconds left before the login ends (30-minute idle rule). */
+    expiresInSeconds: number;
+    /** False when the 12-hour limit, not inactivity, is what ends the login. */
+    canExtend: boolean;
   }
 
   interface User {
@@ -18,5 +22,9 @@ declare module "next-auth/jwt" {
   interface JWT {
     id: string;
     role: UserRole;
+    /** ms since epoch the person originally signed in (for the 12 h limit). */
+    signedInAt: number;
+    /** ms since epoch the login ends unless it is extended. */
+    activeUntil: number;
   }
 }

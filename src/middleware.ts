@@ -19,6 +19,15 @@ export default auth((request) => {
   if (!isSignedIn && pathname.startsWith(DASHBOARD_PATH)) {
     const loginUrl = new URL(LOGIN_PATH, request.url);
     loginUrl.searchParams.set("from", pathname);
+    // A session cookie is present but no longer valid: the login timed out
+    // (or hit the 12-hour limit) while no page was open. Say so on the login
+    // page instead of leaving the person wondering.
+    const hadSession = request.cookies
+      .getAll()
+      .some((cookie) => cookie.name.includes("authjs.session-token"));
+    if (hadSession) {
+      loginUrl.searchParams.set("reason", "expired");
+    }
     return NextResponse.redirect(loginUrl);
   }
 

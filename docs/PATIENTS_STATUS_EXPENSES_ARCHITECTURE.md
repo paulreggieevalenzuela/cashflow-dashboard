@@ -508,3 +508,38 @@ Staff bonuses are computed live from that table and have no tier, and one dentis
 
 Commission is still stored per line when saved (rate changes do not rewrite history; `yarn db:backfill-links` re-prices). The commission report reads the stored amounts, so it follows the tiers automatically.
 
+
+## 17. October 19 additions — login expiry
+
+### 17.1 Where the rule lives
+
+The 30-minute clock is stored **in the signed login token** (`signedInAt`, `activeUntil`), not in the cookie. The cookie slides forward on every request that passes through Auth.js (page loads, the Queue's 30-second `router.refresh`, the middleware), so tying the expiry to it would let a Queue screen left open stay signed in forever. The token fields only change in the `jwt` callback of `src/auth.ts`.
+
+### 17.2 Server side (`src/auth.ts`)
+
+- At sign-in: `signedInAt = now`, `activeUntil = now + 30 min`.
+- On every later request: if `activeUntil` has passed, the callback returns `null` — Auth.js then clears the cookie and `auth()` / the middleware see no session.
+- **The only extension** is `trigger === "update"`, which Auth.js sets for a POST to `/api/auth/session`. It re-reads the user (deleted → `null`; role and name refreshed) and sets `activeUntil = min(now + 30 min, signedInAt + 12 h)`. Data sent with the update is ignored.
+- A token without the new fields (created before this change) is given a fresh clock instead of being rejected.
+- The `session` callback exposes `expiresInSeconds` and `canExtend` (false when the 12-hour limit is what ends the login).
+
+### 17.3 Browser side (`SessionGuard`)
+
+Mounted in `src/app/cashflow/layout.tsx` with a `SessionProvider` seeded from the server session. It anchors `expiresInSeconds` to the moment it was received (no dependence on the computer's clock), listens for pointerdown / keydown / touchstart / scroll, and ticks once a second. `decideGuardAction` (pure, in `session-policy.ts`) returns one of: none, expired, refresh-quietly, show-warning, close-warning.
+
+- More than 5 minutes left: nothing (and a pop-up that is open closes, because time was added elsewhere).
+- 5 minutes or less and activity within the last minute: extend quietly.
+- 5 minutes or less and no recent activity: show the pop-up; once open it only closes by its buttons or by time being added in another tab.
+- Zero: `signOut`, then a full page load of `/login?reason=expired&from=…`.
+
+Library detail that matters: `useSession().update()` with no argument is sent as a plain GET and extends nothing. The guard calls `update({ extend: true })`, which `next-auth/react` sends as the POST. When `update` returns `null` the guard asks `/api/auth/session` directly to tell "the server ended the session" (go to login) from "network error" (keep the pop-up and show a message).
+
+### 17.4 Other pieces
+
+- **Middleware:** when a request to `/cashflow/*` has no valid session but still carries a session cookie, the redirect to `/login` adds `reason=expired`.
+- **Login page:** reads `reason` (`expired` or `limit`, anything else ignored) and `from` (accepted only when it starts with `/cashflow`, not `//`, no backslash) and passes a message and a safe return path to the form.
+- **Testing:** `NEXT_PUBLIC_SESSION_IDLE_MINUTES` shortens the timeout outside production; the warning window is then a third of it (capped at 5 minutes).
+
+### 17.5 Not changed / known limits
+
+Server actions that run after the login ended still answer "You must be signed in." (the guard normally signs the person out before that can happen). A half-filled form is not preserved across a sign-out; the person is warned five minutes ahead instead. A signed login cookie from before the change keeps working under the new clock.

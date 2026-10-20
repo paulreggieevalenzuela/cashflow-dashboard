@@ -13,7 +13,15 @@ type FieldErrors = {
   password?: string | null;
 };
 
-export function LoginForm() {
+export function LoginForm({
+  notice,
+  returnTo = "/cashflow",
+}: {
+  /** Shown above the form, e.g. "You were signed out after 30 minutes…". */
+  notice?: string;
+  /** Where to go after signing in (already checked to be inside the app). */
+  returnTo?: string;
+}) {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -50,7 +58,7 @@ export function LoginForm() {
         return;
       }
 
-      router.push("/cashflow");
+      router.push(returnTo);
       router.refresh();
     } catch {
       setStatus("idle");
@@ -69,6 +77,15 @@ export function LoginForm() {
           practice.
         </p>
       </div>
+
+      {notice && !formError && (
+        <div
+          role="status"
+          className="mb-6 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200"
+        >
+          {notice}
+        </div>
+      )}
 
       {formError && (
         <div
