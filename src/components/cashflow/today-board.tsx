@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { LoaPendingBadge } from "@/components/cashflow/loa-pending-badge";
+import { RemoveFromQueueButton } from "@/components/cashflow/remove-from-queue-button";
 import { VisitStatusControl } from "@/components/cashflow/visit-status-control";
 import {
   VISIT_STATUSES,
+  canRemoveFromQueue,
   formatMinutes,
   type VisitStatus,
 } from "@/lib/cashflow/visit-status";
@@ -159,7 +161,7 @@ export function TodayBoard({
                     {visit.loaPending && (
                       <LoaPendingBadge className="mt-1.5" />
                     )}
-                    <div className="mt-2">
+                    <div className="mt-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
                       <VisitStatusControl
                         invoiceId={visit.invoiceId}
                         status={visit.status}
@@ -168,6 +170,15 @@ export function TodayBoard({
                         loaMissing={visit.loaMissing}
                         visitIssue={visit.visitIssue}
                       />
+                      {canRemoveFromQueue({
+                        status: visit.status,
+                        collected: visit.collected,
+                      }).ok && (
+                        <RemoveFromQueueButton
+                          invoiceId={visit.invoiceId}
+                          patientName={visit.patientName}
+                        />
+                      )}
                     </div>
                   </li>
                 ))}

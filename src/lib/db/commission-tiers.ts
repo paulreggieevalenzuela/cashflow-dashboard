@@ -53,11 +53,49 @@ export async function listTierRates(): Promise<TierRate[]> {
   }));
 }
 
+/** True when the database says a table does not exist yet (the tier SQL
+ * file has not been run). */
+function isMissingTable(error: unknown): boolean {
+  const e = error as { code?: unknown; message?: unknown; cause?: unknown } | null;
+  if (!e) return false;
+  if (e.code === "42P01") return true;
+  if (typeof e.message === "string" && /relation .* does not exist/i.test(e.message)) {
+    return true;
+  }
+  return e.cause ? isMissingTable(e.cause) : false;
+}
+
+let warnedMissingTiers = false;
+
+/**
+ * Saving a visit must never fail because the tier tables are missing: until
+ * `2026-10-commission-tiers.sql` is run there are simply no tiers, and only
+ * individual rates apply. Any other database error still surfaces.
+ */
+async function orEmptyIfTiersMissing<T>(read: () => Promise<T>, empty: T): Promise<T> {
+  try {
+    return await read();
+  } catch (error) {
+    if (!isMissingTable(error)) throw error;
+    if (!warnedMissingTiers) {
+      warnedMissingTiers = true;
+      console.warn(
+        "Commission tier tables are missing — run scripts/sql/2026-10-commission-tiers.sql. Using individual rates only.",
+      );
+    }
+    return empty;
+  }
+}
+
 /** Every tier rate as a `tier:procedureId -> setting` map (one query, for
  * resolving commission on a whole batch of lines). */
 export async function getTierRateMap(): Promise<
   Map<string, CommissionRateSetting>
 > {
+  return orEmptyIfTiersMissing(readTierRateMap, new Map());
+}
+
+async function readTierRateMap(): Promise<Map<string, CommissionRateSetting>> {
   const rows = await db
     .select({
       tier: commissionTierRates.tier,
@@ -84,8 +122,10 @@ export async function getTierRateMap(): Promise<
 
 /** `dentistUserId -> tier` for every dentist that has one. */
 export async function getDentistTierMap(): Promise<Map<string, number>> {
-  const rows = await db.select().from(dentistCommissionTiers);
-  return new Map(rows.map((row) => [row.dentistUserId, row.tier]));
+  return orEmptyIfTiersMissing(async () => {
+    const rows = await db.select().from(dentistCommissionTiers);
+    return new Map(rows.map((row) => [row.dentistUserId, row.tier] as const));
+  }, new Map<string, number>());
 }
 
 export async function listDentistTiers(): Promise<DentistTier[]> {

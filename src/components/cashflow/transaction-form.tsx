@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import {
   checkInvoiceNumberAction,
   createInvoiceAction,
@@ -440,6 +440,15 @@ export function TransactionForm(props: TransactionFormProps) {
   const procedureOptions = props.procedures ?? [];
   const [errors, setErrors] = useState<FieldErrors>({});
   const [formError, setFormError] = useState<string | null>(null);
+  const formErrorRef = useRef<HTMLDivElement>(null);
+
+  // Bring a failed save into view (the form is long; the message sits above
+  // the submit button).
+  useEffect(() => {
+    if (formError) {
+      formErrorRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    }
+  }, [formError]);
   const [status, setStatus] = useState<"idle" | "submitting">("idle");
   const [justAdded, setJustAdded] = useState(false);
   const [numberWarning, setNumberWarning] = useState<string | null>(null);
@@ -949,14 +958,6 @@ export function TransactionForm(props: TransactionFormProps) {
 
   return (
     <form onSubmit={handleSubmit} noValidate className="space-y-5">
-      {formError && (
-        <div
-          role="alert"
-          className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300"
-        >
-          {formError}
-        </div>
-      )}
       {justAdded && (
         <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
           {mode === "edit" ? "Transaction updated." : "Transaction added."}
@@ -1633,6 +1634,17 @@ export function TransactionForm(props: TransactionFormProps) {
         />
       </div>
         </>
+      )}
+
+      {/* Right above the button, where the eye is after pressing it. */}
+      {formError && (
+        <div
+          ref={formErrorRef}
+          role="alert"
+          className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300"
+        >
+          {formError}
+        </div>
       )}
 
       <div className="flex items-center gap-3">

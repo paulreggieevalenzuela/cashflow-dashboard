@@ -308,6 +308,27 @@ export async function listStatusHistory(
   }));
 }
 
+/** What the Queue's "Remove" needs to decide: the visit's current status and
+ * how much has been paid. Null when the visit no longer exists. */
+export async function getQueueRemovalFacts(
+  invoiceId: string,
+): Promise<{ status: VisitStatus; collected: number } | null> {
+  const [[row], collectedMap] = await Promise.all([
+    db
+      .select({ status: invoices.status })
+      .from(invoices)
+      .where(eq(invoices.id, invoiceId)),
+    getCollectedTotalsByInvoice([invoiceId]),
+  ]);
+  if (!row) {
+    return null;
+  }
+  return {
+    status: asStatus(row.status),
+    collected: collectedMap.get(invoiceId) ?? 0,
+  };
+}
+
 // ── Today board ──────────────────────────────────────────────────────
 
 export type BoardVisit = {
@@ -323,6 +344,8 @@ export type BoardVisit = {
   visitDate: string;
   totalDue: number;
   balanceDue: number;
+  /** Money already collected on the visit (the Queue's "Remove" needs it). */
+  collected: number;
   /** HMO visit still waiting for its LOA number. */
   loaPending: boolean;
   /** HMO visit with no LOA number (also true once Cleared) — what the
@@ -418,6 +441,7 @@ export async function listBoardVisits(today: string): Promise<BoardVisit[]> {
         visitDate: header.visitDate,
         totalDue,
         balanceDue: balanceDueOf(totalDue, collected.get(header.id) ?? 0),
+        collected: collected.get(header.id) ?? 0,
         loaPending: isLoaPending({ ...hmo, status }),
         loaMissing: isLoaMissing(hmo),
         visitIssue: issueById.get(header.id) ?? null,

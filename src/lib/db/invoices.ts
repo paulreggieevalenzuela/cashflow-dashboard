@@ -681,7 +681,7 @@ export async function createInvoice(
   const now = new Date();
   const [visitId, transactionNumbers] = await Promise.all([
     generateVisitId(input.date),
-    generateTransactionNumbers(priced.length, now),
+    generateTransactionNumbers(priced.length, now, branchId),
   ]);
 
   // Merchant fee follows the payment type of what was received now.
@@ -877,7 +877,7 @@ export async function updateInvoice(
   ).length;
   const newNumbers =
     newLineCount > 0
-      ? await generateTransactionNumbers(newLineCount, new Date())
+      ? await generateTransactionNumbers(newLineCount, new Date(), branchId)
       : [];
   let newNumberIndex = 0;
 

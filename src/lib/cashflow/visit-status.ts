@@ -127,6 +127,33 @@ export function defaultStatusOnCreate(input: {
   return paidInFull ? "Cleared" : "Arrived";
 }
 
+/**
+ * May a visit be taken off the Queue? Only while the patient is still
+ * Arrived or On-going (a check-in made by mistake, a patient who left) and
+ * nothing has been paid. Once a visit is For Payment or Cleared it is a
+ * financial record: it can only be removed by an admin from Transactions.
+ */
+export function canRemoveFromQueue(input: {
+  status: VisitStatus;
+  collected: number;
+}): { ok: true } | { ok: false; message: string } {
+  if (input.status !== "Arrived" && input.status !== "On-going") {
+    return {
+      ok: false,
+      message:
+        "Only visits that are Arrived or On-going can be removed from the Queue.",
+    };
+  }
+  if (input.collected > EPSILON) {
+    return {
+      ok: false,
+      message:
+        "This visit already has a payment. Remove the payment first, or ask an admin to remove the visit from Transactions.",
+    };
+  }
+  return { ok: true };
+}
+
 export type MoveCheck =
   { ok: true; needsNote: boolean } | { ok: false; message: string };
 

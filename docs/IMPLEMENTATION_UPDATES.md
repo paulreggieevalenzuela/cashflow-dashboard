@@ -1,8 +1,11 @@
 # Implementation Updates — Transactions, Patients, Invoices & Expenses
 
 **Project:** Cashflow application — ADT Dental Clinic
-**Date:** October 11, 2026 (updated October 19)
+**Date:** October 11, 2026 (updated October 21)
 **Follows:** `TRANSACTION_EXPENSE_UPDATES_PLAN.md` (the plan written before implementation)
+**Status (October 21, transaction numbers and form errors):** transaction numbers are now **MMDDYYHHMM-BRANCH-RANDOM**, for example `1021261430-MAR-K7M3Q` (date, 24-hour clinic time, branch code, random 5-character code), checked against the table before use, so deleting visits or saving two at once cannot repeat one. A failed save now shows its error in red **right above the submit button** (and scrolls it into view). Earlier today: the "Couldn't save the transaction" error was a repeated transaction number (see the fix below). Type check and lint are clean and the number rules were run through automated checks; **the new number format has not been saved in the browser yet.**
+**Status (October 21 fix, saving a transaction):** saving a visit failed with "Couldn't save the transaction. Nothing was recorded". The real cause (from the app's log) was a **duplicate transaction number**: numbers were handed out by counting the day's rows, which repeats a number once a visit has been deleted. Numbers and Visit IDs now continue after the highest one used. A test visit ("Gozun, Daniel Leon Petronio", Consultation) was saved in the browser after the fix and appears in Transactions. Type check and lint are clean.
+**Status (October 20 batch, remove from Queue):** a **Remove** link now shows on Queue cards that are **Arrived** or **On-going**. It asks for confirmation, then deletes the visit and records it in the audit trail. It is refused for For Payment and Cleared visits, and for any visit that already has a payment. No SQL is needed. Type check and lint are clean; **not yet tried in the browser**, and the small rule check could not be run because the connection to the Mac dropped (see "What to test").
 **Status (October 19 batch, login expiry):** the login now ends after **30 minutes without activity**. In the last **5 minutes** a pop-up with a live countdown and a **Stay signed in** button appears; if the screen is being used it is extended quietly instead. A login can never be extended past **12 hours**. No SQL is needed. Type check and lint are clean and the timing rules were run through 25 automated checks; **not yet tried in the browser** (see "What to test" for the quick way using a 3-minute timeout).
 **Status (October 19 batch, queue pop-up):** the Queue's button is now **Add to Queue** and opens a pop-up titled **Add to Queuing** that shows only date, patient, visit type and branch so the button is in view at once. Dentist, transaction type (defaults to Visit), payment, procedures, discounts, LOA / LOE, recall and remarks are folded under a link and open on demand (or by themselves if one of them has an error). Other **Add transaction** forms (Transactions, patient page) are unchanged. Type check and lint are clean; **not yet opened in the browser**.
 **Status (October 19 batch):** **Tier-based dentist commission** is written (dentist tiers, tier rates per procedure, editor on the Commissions page); type check and lint are clean and the commission rules were run through 11 automated checks. **Run `scripts/sql/2026-10-commission-tiers.sql`** (step 15): it also **deletes the old one-by-one commission rates of dentist accounts**. **Not yet opened in the browser.**
@@ -35,6 +38,50 @@
 ---
 
 ## 2. What the system does now
+
+#### Transaction number: date, time, branch and random code; form error above the button (October 21)
+
+**New number format.** `MMDDYYHHMM-BRANCH-XXXXX`, e.g. `1021261430-MAR-K7M3Q` = 21 Oct 2026, 14:30, Marikina, random code.
+
+- **Date and time** are when the transaction is recorded, in **clinic time (Manila), 24-hour clock, to the minute** (midnight is `0000`). The server's own clock is no longer used, which could roll to the next day at 8 AM Manila time on a UTC server.
+- **Branch code** is worked out from the branch name: the first three letters of a one-word name (Marikina → **MAR**, Antipolo → **ANT**, Cainta → **CAI**) or the initials of a longer one (Head Office → **HO**). A visit with no branch uses **NB**. It is not stored anywhere, so renaming a branch changes the code of *future* numbers only; old numbers keep what they had.
+- **Random code**: 5 characters from 30 (no 0, O, 1, I, L or U, so it is easy to read out and copy), about 24 million codes per branch per minute. A visit with several procedures gets the same date, time and branch with a different code on each line.
+- **Safeguards:** no two numbers in one batch are equal; each candidate is looked up in the table first and re-rolled if taken; if ten rounds fail, the save stops with an error instead of issuing a repeat. Two branches can never clash, nor two saves in different minutes.
+- **Old numbers** (`091726-0001`, and the short-lived `102126-K7M3Q` shape) are untouched and still display. Visit IDs (`YYYYMMDD-###`) are unchanged.
+
+**Files.** New `src/lib/cashflow/transaction-number.ts` (date/time prefix, branch code, random code and format rules, pure); changed `src/lib/db/transactions.ts` (`generateTransactionNumbers` now takes the branch) and `src/lib/db/invoices.ts` (passes the visit's branch when adding a visit and when adding procedures to a visit).
+
+**Checks.** Type check and lint clean. Automated checks: Manila date and time (including midnight and the roll-over to the next day), branch codes for the four current branches and odd names (accents, extra spaces, no letters, no name), format test, and (earlier) 20,000 draws gave 19,993 distinct codes, about what chance predicts, which is why the table check exists. Not yet saved from the browser with the new format.
+
+**Decision for you.** Branch codes are derived from names. If the clinic wants its own codes (for example **MKN** for Marikina), a code field on the Branches page is a small addition (one SQL line).
+
+**Form error.** In the Add / Edit transaction form (and the Add to Queue pop-up), a failed save now shows its red message directly above the submit button, in bolder text, and scrolls it into view. It used to sit at the very top of the long form, out of sight. `src/components/cashflow/transaction-form.tsx`.
+
+#### Fix: "Couldn't save the transaction" — duplicate transaction number (October 21)
+
+**Cause.** The app log showed `duplicate key value violates unique constraint "transactions_transaction_number_unique"`. A new transaction number was worked out as *the number of rows already recorded that day + 1*. After a visit is deleted (for example removed from the Queue, or test visits cleared), the count is lower than the highest number in use, so the next number was one that already existed and the database refused the save. Visit IDs (`YYYYMMDD-###`) had the same weakness (they were not blocked by the database, but could repeat).
+
+**Fix.** `generateTransactionNumbers` and `generateVisitId` in `src/lib/db/transactions.ts` now take the **highest** sequence used that day and add one, so deletions no longer cause a repeat. Two saves in the very same instant could still race for one number (unchanged, very unlikely at one front desk).
+
+**Checked.** Type check and lint clean. In the browser: Add transaction → patient Gozun, Daniel Leon Petronio, dentist James Russel Banawa, type Visit, visit type NEW, procedure Consultation → saved (the list went from 14 to 15). That test visit is still in Transactions and can be removed.
+
+**Also changed the same day (kept).** Reading the commission tier tables no longer breaks a save if the tier SQL has not been run (they return "no tiers" and print one warning). This was my first guess at the cause and was **not** the cause here, but it is a harmless safeguard.
+
+### October 20 batch — remove a visit from the Queue
+
+**What changed.** The Queue had no way to take a patient off the board, so a check-in made by mistake (or a patient who left) stayed there. Each card in the **Arrived** and **On-going** columns now has a red **Remove** link next to the status button. It opens a confirmation ("Remove from queue?") with **Keep in queue** and **Remove visit**. Confirming deletes the visit (its placeholder or procedure lines and any payments) and the board and the menu's Queue number update at once.
+
+**Rules (checked by the server, not only by the screen).**
+
+- Only visits that are **Arrived** or **On-going** can be removed here. **For Payment** and **Cleared** cards show no Remove link, as asked; those can still be removed by an **admin** from Transactions.
+- A visit that **already has a payment** cannot be removed here, even if it is still Arrived or On-going; the message says to remove the payment first or ask an admin.
+- **Any signed-in role** (admin, dentist, staff) may use it, because the front desk is the one who checks patients in. Removing from Transactions is still admin-only. If you would rather make this admin-only too, it is a one-line change.
+- If the visit was already removed on another screen, pressing Remove just refreshes the board.
+- Every removal is written to the **audit trail** (who, which patient, date, number of procedures).
+
+**Files.** New: `src/components/cashflow/remove-from-queue-button.tsx`. Changed: `src/lib/cashflow/visit-status.ts` (the rule `canRemoveFromQueue`), `src/lib/db/visit-status.ts` (reads the status and the amount already paid; the board's visits now carry `collected`), `src/app/cashflow/transactions/status-actions.ts` (`removeFromQueueAction`), `src/components/cashflow/today-board.tsx`.
+
+**Checks done:** type check and lint clean. **Not run:** the automated check of the rule (the connection to the computer dropped before it ran) and the screen itself.
 
 ### October 19 batch — login expiry (30 minutes, 5-minute warning)
 
@@ -411,10 +458,11 @@ The old procedure list is **deleted** and replaced by the **Cash Paying** column
 
 ---
 
-## 3. Files created (22 earlier + 12 + 6 in the latest batches)
+## 3. Files created (22 earlier + 12 + 7 in the latest batches)
 
 | File | Purpose |
 |---|---|
+| `src/components/cashflow/remove-from-queue-button.tsx` | October 20: the red **Remove** link and confirmation pop-up on Arrived / On-going Queue cards. |
 | `src/lib/auth/session-policy.ts`, `src/components/auth/session-guard.tsx` | October 19: the login-expiry timing rules (pure, testable) and the browser component that runs the clock, the quiet extension and the "Stay signed in" pop-up. |
 | `scripts/sql/2026-10-commission-tiers.sql`, `src/lib/cashflow/commission-tiers.ts`, `src/lib/db/commission-tiers.ts`, `src/components/cashflow/commission-tiers-manager.tsx` | October 19: the tier tables, cleanup and tier rates; tier rules (resolve, labels); tier queries; the tier editor on the Commissions page. |
 | `scripts/sql/2026-10-invoices-patients-suppliers.sql` | Creates the new tables and columns, and fills them from existing data (see section 5). |
@@ -470,6 +518,7 @@ The old procedure list is **deleted** and replaced by the **Cash Paying** column
 
 | File | What changed |
 |---|---|
+| *October 20 (remove from Queue):* `src/lib/cashflow/visit-status.ts`, `src/lib/db/visit-status.ts`, `src/app/cashflow/transactions/status-actions.ts`, `src/components/cashflow/today-board.tsx` | The removal rule, the database read it needs, the server action (with audit), and the Remove link on Arrived / On-going cards. |
 | *October 19 (login expiry):* `src/auth.ts`, `src/types/next-auth.d.ts`, `src/middleware.ts`, `src/app/cashflow/layout.tsx`, `src/app/login/page.tsx`, `src/components/auth/login-form.tsx`, `.env.example` | 30-minute idle clock in the login token, extension only on an explicit refresh, account re-check on extension; session carries time left; guard mounted in the layout; login page shows the inactivity message and returns to the page the person was on; example settings file has placeholders instead of real values. |
 | *October 19:* `src/lib/db/schema.ts`, `src/lib/cashflow/pricing.ts`, `src/lib/db/transactions.ts`, `src/app/cashflow/commissions/page.tsx`, `actions.ts` | Two tier tables; `computeCommission` supports a flat peso on any payment; the save-time lookup uses the individual rate, else the tier rate; the Commissions page shows tiers first; tier actions. |
 | *October 17:* `src/lib/db/schema.ts`, `invoice-schema.ts`, `audit-diff.ts`, `src/lib/db/invoices.ts` | LOA / LOE columns, validation and saving; both appear in the audit comparison; a new HMO visit saved paid with no LOA starts For Payment; a check-in with no procedures starts Arrived and can't take a payment. |
@@ -552,6 +601,8 @@ The old procedure list is **deleted** and replaced by the **Cash Paying** column
 - **The sample sheet's first block has numbers that do not add up** (see "PWD / Senior discount and VAT"). The system follows the arithmetic and the second block; please confirm with the accountant.
 
 ## 8. What was checked, and what to test
+
+**Test (remove from Queue):** (1) Add to Queue a test patient: it appears under **Arrived** with a **Remove** link. (2) Press Remove, then **Keep in queue**: nothing changes. (3) Press Remove, then **Remove visit**: the card disappears, the Queue number in the menu drops by one, and the audit trail shows the removal. (4) Move a card to **On-going**: Remove is still there. (5) Move a card to **For Payment**: no Remove link. (6) Record a payment on an Arrived visit: Remove is hidden on the next refresh, and if shown by an old screen the message says the visit already has a payment. (7) Sign in as a non-admin: Remove still works on Arrived / On-going.
 
 **Checked (October 19, login expiry):** type check and lint — no errors; 25 automated checks of the timing rules pass (details in the login expiry section).
 

@@ -1,6 +1,8 @@
-import { and, asc, desc, eq, gte, ilike, lte, ne, or, sql } from "drizzle-orm";
+import { randomInt } from "node:crypto";
+import { and, asc, desc, eq, gte, ilike, inArray, lte, ne, or, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { resolveRateSetting } from "@/lib/cashflow/commission-tiers";
+import { getBranchById } from "@/lib/db/branches";
 import { getCommissionRateMap } from "@/lib/db/commission-rates";
 import { getDentistTierMap, getTierRateMap } from "@/lib/db/commission-tiers";
 import { findDentistUserByName } from "@/lib/db/dentists";
@@ -15,6 +17,11 @@ import {
 } from "@/lib/db/schema";
 import { computeCommission, round2 } from "@/lib/cashflow/pricing";
 import { CHECK_IN_PLACEHOLDER } from "@/lib/cashflow/visit-status";
+import {
+  branchCode,
+  randomCode,
+  transactionNumberPrefix,
+} from "@/lib/cashflow/transaction-number";
 import type { CashflowTransaction } from "@/lib/cashflow/schema";
 import type {
   TransactionSortKey,
@@ -424,44 +431,56 @@ export async function upsertTransactions(
 }
 
 /**
- * Generates the next human-facing transaction number, in "MMDDYY-####"
- * format (e.g. "091726-0001") — the date the transaction is *recorded*
- * (not necessarily the visit date) plus a same-day running sequence. This
- * is the invoice-facing reference number shown to patients; it is distinct
- * from the internal `id` (the upsert key) and the free-text `invoiceNumber`
- * CSV field.
+ * Generates human-facing transaction numbers in
+ * "MMDDYYHHMM-BRANCH-XXXXX" format (e.g. "1021261430-MAR-K7M3Q"): the date
+ * and 24-hour time the transaction is *recorded* in clinic time, the
+ * branch's code and a random 5-character code (30 possible characters,
+ * about 24 million codes per branch per minute). This is the invoice-facing
+ * reference number shown to patients; it is distinct from the internal `id`
+ * (the upsert key) and the free-text `invoiceNumber` CSV field.
  *
  * Only transactions created through the app call this — bulk CSV import of
  * historical data leaves `transactionNumber` null, since those rows
  * weren't "recorded" on the date they occurred and backfilling a number
  * for them would be misleading.
  *
- * Implemented as a count of same-day rows rather than a DB sequence:
- * simple and adequate at this clinic's transaction volume, though two
- * transactions created in the same instant could in principle race to the
- * same number. Acceptable tradeoff for a low-concurrency single-clinic
- * app — revisit with a Postgres sequence per day if that ever becomes a
- * problem.
+ * Why random: counting (or "highest + 1") repeated a number whenever a visit
+ * was deleted or two saves ran together. A random code needs no counting.
+ * Safeguards on top: no two numbers in one batch are equal, and every
+ * candidate is checked against the table before it is handed out (a clash is
+ * re-rolled), so a repeat would need the same code to be drawn twice in the
+ * same instant on top of that.
  */
 export async function generateTransactionNumbers(
   count: number,
   recordDate: Date = new Date(),
+  branchId: string | null = null,
 ): Promise<string[]> {
-  const mm = String(recordDate.getMonth() + 1).padStart(2, "0");
-  const dd = String(recordDate.getDate()).padStart(2, "0");
-  const yy = String(recordDate.getFullYear() % 100).padStart(2, "0");
-  const prefix = `${mm}${dd}${yy}`;
+  const branch = branchId ? await getBranchById(branchId) : undefined;
+  const prefix = `${transactionNumberPrefix(recordDate)}-${branchCode(branch?.name)}`;
+  const chosen = new Set<string>();
 
-  const [row] = await db
-    .select({ count: sql<number>`count(*)::int` })
-    .from(transactions)
-    .where(sql`${transactions.transactionNumber} like ${prefix + "-%"}`);
+  for (let attempt = 0; attempt < 10 && chosen.size < count; attempt += 1) {
+    const candidates = new Set<string>();
+    while (chosen.size + candidates.size < count) {
+      const candidate = `${prefix}-${randomCode(randomInt)}`;
+      if (!chosen.has(candidate)) candidates.add(candidate);
+    }
+    const taken = await db
+      .select({ number: transactions.transactionNumber })
+      .from(transactions)
+      .where(inArray(transactions.transactionNumber, [...candidates]));
+    const takenSet = new Set(taken.map((row) => row.number));
+    for (const candidate of candidates) {
+      if (!takenSet.has(candidate)) chosen.add(candidate);
+    }
+  }
 
-  const firstSeq = (row?.count ?? 0) + 1;
-  return Array.from(
-    { length: count },
-    (_, index) => `${prefix}-${String(firstSeq + index).padStart(4, "0")}`,
-  );
+  if (chosen.size < count) {
+    // Practically impossible; fail loudly rather than issue a repeat.
+    throw new Error("Could not generate a unique transaction number.");
+  }
+  return [...chosen];
 }
 
 /** One number, for callers that only ever record a single row. A visit
@@ -469,8 +488,9 @@ export async function generateTransactionNumbers(
  * `generateTransactionNumbers` so they stay distinct. */
 export async function generateTransactionNumber(
   recordDate: Date = new Date(),
+  branchId: string | null = null,
 ): Promise<string> {
-  const [number] = await generateTransactionNumbers(1, recordDate);
+  const [number] = await generateTransactionNumbers(1, recordDate, branchId);
   return number;
 }
 
@@ -490,14 +510,16 @@ export async function generateTransactionNumber(
 export async function generateVisitId(visitDate: string): Promise<string> {
   const prefix = visitDate.replaceAll("-", "");
 
+  // Highest sequence used that day (not the count, which drops when a visit
+  // is removed and would repeat an ID still in use).
   const [row] = await db
     .select({
-      count: sql<number>`count(distinct ${transactions.visitId})::int`,
+      highest: sql<number>`coalesce(max((substring(${transactions.visitId} from '-([0-9]+)$'))::int), 0)::int`,
     })
     .from(transactions)
-    .where(sql`${transactions.visitId} like ${prefix + "-%"}`);
+    .where(sql`${transactions.visitId} ~ ${`^${prefix}-[0-9]+$`}`);
 
-  const nextSeq = (row?.count ?? 0) + 1;
+  const nextSeq = (row?.highest ?? 0) + 1;
   return `${prefix}-${String(nextSeq).padStart(3, "0")}`;
 }
 

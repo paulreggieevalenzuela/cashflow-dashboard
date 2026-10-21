@@ -543,3 +543,11 @@ Library detail that matters: `useSession().update()` with no argument is sent as
 ### 17.5 Not changed / known limits
 
 Server actions that run after the login ended still answer "You must be signed in." (the guard normally signs the person out before that can happen). A half-filled form is not preserved across a sign-out; the person is warned five minutes ahead instead. A signed login cookie from before the change keeps working under the new clock.
+
+## 18. October 20 additions — remove a visit from the Queue
+
+- **Rule** (`canRemoveFromQueue`, pure, in `src/lib/cashflow/visit-status.ts`): allowed only when the status is Arrived or On-going **and** nothing has been collected. The board uses it to decide whether to draw the Remove link; the server action uses the same function on facts read from the database.
+- **Server action** (`removeFromQueueAction`, `status-actions.ts`): requires a signed-in user of any role, reads the visit's status and collected total (`getQueueRemovalFacts`), refuses with the rule's message if not allowed, then calls the existing `deleteInvoice`, which writes the `visit.deleted` audit entry before deleting the lines and the header (payments go with the header through the foreign-key cascade). A visit that no longer exists is treated as already removed.
+- **Why not reuse `removeInvoiceAction`:** that one is admin-only and has no status rule; it stays as the way to remove For Payment / Cleared visits from Transactions.
+- **Board data:** `BoardVisit` now carries `collected` so the link is hidden for a visit with a payment without guessing from the balance (an overpaid visit shows a balance of zero).
+- **Concurrency:** the status and payment check and the delete are separate database calls (the database driver has no multi-step transactions), so a payment recorded in the same second as the removal could slip through. The window is small and the audit trail records the removal.
