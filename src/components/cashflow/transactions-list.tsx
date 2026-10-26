@@ -23,6 +23,7 @@ export function TransactionsList({
   totalPages,
   dentistOptions,
   branches,
+  defaultBranchId,
   procedures,
   discountTypes,
   invoiceSummaries,
@@ -34,6 +35,8 @@ export function TransactionsList({
   totalPages: number;
   dentistOptions: string[];
   branches: Branch[];
+  /** The signed-in user's own branch: what the list shows by default. */
+  defaultBranchId: string | null;
   procedures: ProcedureOption[];
   discountTypes: DiscountTypeOption[];
   invoiceSummaries: InvoiceSummaries;
@@ -59,7 +62,12 @@ export function TransactionsList({
           discountTypes={discountTypes}
         />
       </div>
-      <TransactionsToolbar query={query} dentistOptions={dentistOptions} />
+      <TransactionsToolbar
+        query={query}
+        dentistOptions={dentistOptions}
+        branches={branches}
+        defaultBranchId={defaultBranchId}
+      />
       <TransactionsTable
         transactions={transactions}
         canDelete={canDelete}

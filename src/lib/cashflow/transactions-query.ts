@@ -8,6 +8,10 @@
 import { DEFAULT_PAGE_SIZE, PAGE_SIZE_OPTIONS, type PageSizeOption } from "@/lib/cashflow/pagination";
 
 export const TRANSACTIONS_SORT_KEYS = ["date", "patientName", "dentist", "amountPaid", "netCollection"] as const;
+/** The branch filter's value for "show every branch" (chosen on purpose,
+ * as opposed to no branch in the address, which means "my branch"). */
+export const ALL_BRANCHES = "all";
+
 export type TransactionSortKey = (typeof TRANSACTIONS_SORT_KEYS)[number];
 
 export type TransactionsQueryParams = {
@@ -17,6 +21,8 @@ export type TransactionsQueryParams = {
   type?: string;
   payment?: string;
   dentist?: string;
+  /** A branch id, or "none" for visits with no branch. */
+  branch?: string;
   from?: string;
   to?: string;
   sort: TransactionSortKey;
@@ -42,6 +48,7 @@ export function parseTransactionsQuery(raw: {
   type?: string;
   payment?: string;
   dentist?: string;
+  branch?: string;
   from?: string;
   to?: string;
   sort?: string;
@@ -59,6 +66,7 @@ export function parseTransactionsQuery(raw: {
     type: cleanString(raw.type),
     payment: cleanString(raw.payment),
     dentist: cleanString(raw.dentist),
+    branch: cleanString(raw.branch),
     from: cleanString(raw.from),
     to: cleanString(raw.to),
     sort: isSortKey(raw.sort) ? raw.sort : "date",
@@ -71,7 +79,7 @@ export function parseTransactionsQuery(raw: {
 /** True when any search/filter (not sort/pagination) is active — used to
  * tell "no transactions yet" apart from "no matches for these filters". */
 export function hasActiveTransactionFilters(query: TransactionsQueryParams): boolean {
-  return Boolean(query.q || query.type || query.payment || query.dentist || query.from || query.to);
+  return Boolean(query.q || query.type || query.payment || query.dentist || (query.branch && query.branch !== ALL_BRANCHES) || query.from || query.to);
 }
 
 /** Builds the `?...` query string for the transactions page from the
@@ -90,6 +98,7 @@ export function buildTransactionsSearch(
   if (merged.type) params.set("type", merged.type);
   if (merged.payment) params.set("payment", merged.payment);
   if (merged.dentist) params.set("dentist", merged.dentist);
+  if (merged.branch) params.set("branch", merged.branch);
   if (merged.from) params.set("from", merged.from);
   if (merged.to) params.set("to", merged.to);
   if (merged.sort !== "date") params.set("sort", merged.sort);

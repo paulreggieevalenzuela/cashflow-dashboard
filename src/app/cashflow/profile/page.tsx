@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
+import { BranchSelect } from "@/components/cashflow/branch-select";
 import { ThemeToggle } from "@/components/cashflow/theme-toggle";
+import { listBranches } from "@/lib/db/branches";
 import { USER_ROLE_LABELS } from "@/lib/cashflow/user-schema";
 import { getUserById } from "@/lib/db/users";
 import { getUserTheme } from "@/lib/db/user-preferences";
@@ -18,9 +20,10 @@ export default async function ProfilePage() {
     redirect("/login");
   }
 
-  const [user, theme] = await Promise.all([
+  const [user, theme, branches] = await Promise.all([
     getUserById(session.user.id),
     getUserTheme(session.user.id),
+    listBranches(),
   ]);
 
   if (!user) {
@@ -43,6 +46,13 @@ export default async function ProfilePage() {
         <Field label="Email" value={user.email} />
         <Field label="Role" value={USER_ROLE_LABELS[user.role]} />
         <Field label="Member since" value={dateFormatter.format(new Date(user.createdAt))} />
+      </div>
+
+      <div className="rounded-xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-950">
+        <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">Branch</h3>
+        <div className="mt-4">
+          <BranchSelect branches={branches} initialBranchId={user.branchId ?? ""} />
+        </div>
       </div>
 
       <div className="rounded-xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-950">

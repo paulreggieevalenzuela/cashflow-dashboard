@@ -242,7 +242,8 @@ function formStateFromInvoice(
     loaNumber: invoice.loaNumber,
     loeNumber: invoice.loeNumber,
     paymentAmount: "",
-    paymentType: "",
+    // The visit's payment method, as shown at the top of the form.
+    paymentType: lines.find((line) => line.paymentType)?.paymentType ?? "",
     referenceNo: "",
     placeholderId: lines.find((line) => isCheckInPlaceholder(line.procedure))?.id ?? "",
     lines: realLines.length
@@ -844,6 +845,8 @@ export function TransactionForm(props: TransactionFormProps) {
           vatType: vatTypes[index],
         };
       }),
+      // Create: the first payment. Edit: only the payment METHOD travels
+      // (money is added or removed from the payments list, not here).
       payment:
         mode === "create"
           ? {
@@ -851,7 +854,7 @@ export function TransactionForm(props: TransactionFormProps) {
               paymentType: form.paymentType,
               referenceNo: form.referenceNo,
             }
-          : undefined,
+          : { amount: 0, paymentType: form.paymentType, referenceNo: "" },
     });
 
     if (!input.success) {
@@ -1088,13 +1091,16 @@ export function TransactionForm(props: TransactionFormProps) {
         <>
       <section className="space-y-3 rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
         <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">
-          {mode === "create" ? "Payment method & invoice" : "Invoice"}
+          Payment method & invoice
         </h3>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          {mode === "create" && (
-            <div className="flex flex-col gap-1.5">
+          <div className="flex flex-col gap-1.5">
               <SelectField
-                label="Payment method (optional, can be added later)"
+                label={
+                  mode === "create"
+                    ? "Payment method (optional, can be added later)"
+                    : "Payment method"
+                }
                 placeholder="Select payment method"
                 options={PAYMENT_TYPES}
                 value={form.paymentType}
@@ -1115,7 +1121,6 @@ export function TransactionForm(props: TransactionFormProps) {
                 </p>
               )}
             </div>
-          )}
           <div className="flex flex-col gap-1.5">
             <FormField
               label="Invoice number"

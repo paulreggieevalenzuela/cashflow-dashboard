@@ -18,6 +18,7 @@ import {
 } from "@/lib/db/invoices";
 import type { CashflowTransaction } from "@/lib/cashflow/schema";
 import { deleteTransaction } from "@/lib/db/transactions";
+import { listPaymentsForInvoice, type Payment } from "@/lib/db/payments";
 
 type ActionResult<T> =
   | { ok: true; data: T }
@@ -124,7 +125,13 @@ export async function updateInvoiceAction(
  */
 export async function getInvoiceForEditAction(
   invoiceId: string,
-): Promise<ActionResult<{ invoice: Invoice; lines: CashflowTransaction[] }>> {
+): Promise<
+  ActionResult<{
+    invoice: Invoice;
+    lines: CashflowTransaction[];
+    payments: Payment[];
+  }>
+> {
   const session = await requireSession();
   if (!session) {
     return { ok: false, message: "You must be signed in to edit a transaction." };
@@ -133,8 +140,11 @@ export async function getInvoiceForEditAction(
   if (!invoice) {
     return { ok: false, message: "That transaction no longer exists." };
   }
-  const lines = await listLinesForInvoice(invoiceId);
-  return { ok: true, data: { invoice, lines } };
+  const [lines, payments] = await Promise.all([
+    listLinesForInvoice(invoiceId),
+    listPaymentsForInvoice(invoiceId),
+  ]);
+  return { ok: true, data: { invoice, lines, payments } };
 }
 
 /**

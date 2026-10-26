@@ -8,6 +8,7 @@ import {
   removeInvoiceAction,
 } from "@/app/cashflow/actions";
 import { LoaPendingBadge } from "@/components/cashflow/loa-pending-badge";
+import { PaymentsManager } from "@/components/cashflow/payments-manager";
 import { TransactionForm } from "@/components/cashflow/transaction-form";
 import {
   buildTransactionsSearch,
@@ -18,6 +19,7 @@ import { Modal } from "@/components/ui/modal";
 import type { CashflowTransaction } from "@/lib/cashflow/schema";
 import type { Branch } from "@/lib/db/branches";
 import type { Invoice, InvoiceSummary } from "@/lib/db/invoices";
+import type { Payment } from "@/lib/db/payments";
 import type { DiscountTypeOption } from "@/lib/db/discount-types";
 import type { ProcedureOption } from "@/lib/db/procedures";
 
@@ -286,7 +288,11 @@ export function TransactionsTable({
   // lines is fetched when it opens (the table only holds this page's rows).
   const [editing, setEditing] = useState<{
     transaction: CashflowTransaction;
-    data: { invoice: Invoice; lines: CashflowTransaction[] } | null;
+    data: {
+      invoice: Invoice;
+      lines: CashflowTransaction[];
+      payments: Payment[];
+    } | null;
     error: string | null;
   } | null>(null);
 
@@ -304,6 +310,21 @@ export function TransactionsTable({
         ? result.ok
           ? { ...current, data: result.data }
           : { ...current, error: result.message }
+        : current,
+    );
+  }
+
+  // After a payment is recorded or removed in the pop-up, reload this visit's
+  // payments (the pop-up holds its own copy) without touching the form.
+  async function reloadPayments(invoiceId: string) {
+    const result = await getInvoiceForEditAction(invoiceId);
+    if (!result.ok) return;
+    setEditing((current) =>
+      current?.data && current.data.invoice.id === invoiceId
+        ? {
+            ...current,
+            data: { ...current.data, payments: result.data.payments },
+          }
         : current,
     );
   }
@@ -345,16 +366,30 @@ export function TransactionsTable({
       }
     >
       {editing?.data && (
-        <TransactionForm
-          mode="edit"
-          invoice={editing.data.invoice}
-          lines={editing.data.lines}
-          dentistOptions={dentistOptions}
-          branches={branches}
-          procedures={procedures}
-          discountTypes={discountTypes}
-          onSuccess={() => setEditing(null)}
-        />
+        <div className="space-y-6">
+          <TransactionForm
+            mode="edit"
+            invoice={editing.data.invoice}
+            lines={editing.data.lines}
+            dentistOptions={dentistOptions}
+            branches={branches}
+            procedures={procedures}
+            discountTypes={discountTypes}
+            onSuccess={() => setEditing(null)}
+          />
+          {/* Same Payments section as the Edit transaction pop-up on the
+              visit page: what was paid and how, and record / remove. */}
+          <PaymentsManager
+            invoiceId={editing.data.invoice.id}
+            totalDue={editing.data.lines.reduce(
+              (sum, line) => sum + line.amountPaid,
+              0,
+            )}
+            payments={editing.data.payments}
+            canDelete={canDelete}
+            onChanged={() => void reloadPayments(editing.data!.invoice.id)}
+          />
+        </div>
       )}
       {editing && !editing.data && !editing.error && (
         <p className="py-6 text-center text-sm text-zinc-500 dark:text-zinc-400">

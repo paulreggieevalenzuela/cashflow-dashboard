@@ -29,6 +29,8 @@ export type AuditSnapshot = {
   recallDate: string;
   loaNumber: string;
   loeNumber: string;
+  /** The visit's payment method (older audit entries don't have it). */
+  paymentMethod?: string;
   totalDue: number;
   lines: AuditLine[];
 };
@@ -57,6 +59,7 @@ export function diffVisit(
     ["Transaction type", "transactionType"],
     ["Visit type", "visitType"],
     ["Dentist", "dentist"],
+    ["Payment method", "paymentMethod"],
     ["Recall date", "recallDate"],
     ["LOA number", "loaNumber"],
     ["LOE number", "loeNumber"],

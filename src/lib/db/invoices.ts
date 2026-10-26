@@ -608,6 +608,8 @@ function snapshotOf(
     recallDate: header.recallDate ?? "",
     loaNumber: header.loaNumber,
     loeNumber: header.loeNumber,
+    paymentMethod:
+      lines.find((line) => line.paymentType)?.paymentType ?? "",
     totalDue: round2(lines.reduce((sum, line) => sum + line.amountPaid, 0)),
     lines: lines.map((line) => ({
       id: line.id,
@@ -920,7 +922,11 @@ export async function updateInvoice(
         visitType,
         invoiceNumber: input.invoiceNumber,
         remarks: input.remarks,
-        paymentType: previous?.paymentType ?? first.paymentType,
+        // Editing the visit can change its payment method (the field at the
+        // top of the form). Without it, every line keeps what it had.
+        paymentType: input.payment
+          ? input.payment.paymentType
+          : (previous?.paymentType ?? first.paymentType),
         branchId,
         createdByUserId: previous?.createdByUserId ?? context.userId,
         transactionNumber: previous

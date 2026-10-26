@@ -10,6 +10,7 @@ import {
 } from "@/components/cashflow/transactions-tabs";
 import { listExpenseAttachments } from "@/lib/db/attachments";
 import { listBranches } from "@/lib/db/branches";
+import { getUserById } from "@/lib/db/users";
 import { listExpenses } from "@/lib/db/expenses";
 import { listSuppliers } from "@/lib/db/suppliers";
 import { listDentistUsers } from "@/lib/db/dentists";
@@ -22,6 +23,7 @@ import { listTransactionsPage } from "@/lib/db/transactions";
 import { AuditTrail } from "@/components/cashflow/audit-trail";
 import { listRecentAudit } from "@/lib/db/audit";
 import {
+  ALL_BRANCHES,
   buildTransactionsSearch,
   parseTransactionsQuery,
 } from "@/lib/cashflow/transactions-query";
@@ -37,6 +39,7 @@ export default async function TransactionsPage({
     type?: string;
     payment?: string;
     dentist?: string;
+    branch?: string;
     group?: string;
     from?: string;
     to?: string;
@@ -171,18 +174,26 @@ export default async function TransactionsPage({
     );
   }
 
-  const query = parseTransactionsQuery(resolvedSearchParams);
+  // The list opens on the signed-in user's own branch (set on their profile)
+  // unless the address names a branch, or "all" on purpose. Users with no
+  // branch see every branch.
+  const session = await auth();
+  const me = session?.user ? await getUserById(session.user.id) : undefined;
+  const defaultBranchId = me?.branchId ?? null;
+  const parsedQuery = parseTransactionsQuery(resolvedSearchParams);
+  const query = {
+    ...parsedQuery,
+    branch: parsedQuery.branch ?? defaultBranchId ?? undefined,
+  };
   const offset = (query.page - 1) * query.pageSize;
 
   const [
-    session,
     { rows, total },
     dentists,
     branches,
     procedures,
     discountTypes,
   ] = await Promise.all([
-    auth(),
     listTransactionsPage({
       limit: query.pageSize,
       offset,
@@ -190,6 +201,7 @@ export default async function TransactionsPage({
       type: query.type,
       payment: query.payment,
       dentist: query.dentist,
+      branch: query.branch === ALL_BRANCHES ? undefined : query.branch,
       from: query.from,
       to: query.to,
       sort: query.sort,
@@ -228,6 +240,7 @@ export default async function TransactionsPage({
         totalPages={totalPages}
         dentistOptions={dentists.map((dentist) => dentist.name)}
         branches={branches}
+        defaultBranchId={defaultBranchId}
         procedures={procedures}
         discountTypes={discountTypes}
         invoiceSummaries={invoiceSummaries}

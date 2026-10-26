@@ -7,6 +7,12 @@ import {
   updatePatientAction,
 } from "@/app/cashflow/patients/actions";
 import { Modal } from "@/components/ui/modal";
+import {
+  HMO_COMPANY_SUGGESTIONS,
+  MAX_HMO_ACCOUNT_LENGTH,
+  MAX_HMO_COMPANY_LENGTH,
+} from "@/lib/cashflow/patient-hmo";
+import { todayInManila } from "@/lib/cashflow/visit-status";
 
 const FIELD =
   "mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50";
@@ -16,9 +22,12 @@ type Initial = {
   fullName: string;
   contactNumber: string;
   notes: string;
+  birthDate: string;
+  hmoCompany: string;
+  hmoAccountNumber: string;
 };
 
-/** Add a patient, or edit one's name, contact number and notes. */
+/** Add a patient, or edit one's name, contact number, birthday, HMO details and notes. */
 export function PatientFormModal({
   initial,
   buttonLabel,
@@ -36,6 +45,11 @@ export function PatientFormModal({
     initial?.contactNumber ?? "",
   );
   const [notes, setNotes] = useState(initial?.notes ?? "");
+  const [birthDate, setBirthDate] = useState(initial?.birthDate ?? "");
+  const [hmoCompany, setHmoCompany] = useState(initial?.hmoCompany ?? "");
+  const [hmoAccountNumber, setHmoAccountNumber] = useState(
+    initial?.hmoAccountNumber ?? "",
+  );
   const [error, setError] = useState<string | null>(null);
   const [existingId, setExistingId] = useState<string | null>(null);
 
@@ -43,7 +57,14 @@ export function PatientFormModal({
     setError(null);
     setExistingId(null);
     startTransition(async () => {
-      const input = { fullName, contactNumber, notes };
+      const input = {
+        fullName,
+        contactNumber,
+        notes,
+        birthDate,
+        hmoCompany,
+        hmoAccountNumber,
+      };
       const result = initial
         ? await updatePatientAction(initial.id, input)
         : await createPatientAction(input);
@@ -79,7 +100,7 @@ export function PatientFormModal({
         title={initial ? "Edit patient" : "Add patient"}
         description={
           initial
-            ? "Correct the name, contact number or notes. Old visits keep their dates and amounts."
+            ? "Correct the name, contact number, birthday, HMO details or notes. Old visits keep their dates and amounts."
             : "Patients are also added automatically the first time their name is used on a transaction."
         }
       >
@@ -103,6 +124,46 @@ export function PatientFormModal({
               autoComplete="off"
             />
           </label>
+          <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
+            Birthday
+            <input
+              type="date"
+              value={birthDate}
+              onChange={(event) => setBirthDate(event.target.value)}
+              min="1900-01-01"
+              max={todayInManila()}
+              className={FIELD}
+            />
+          </label>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
+              HMO company
+              <input
+                value={hmoCompany}
+                onChange={(event) => setHmoCompany(event.target.value)}
+                list="patient-hmo-companies"
+                maxLength={MAX_HMO_COMPANY_LENGTH}
+                placeholder="e.g. Maxicare"
+                className={FIELD}
+                autoComplete="off"
+              />
+              <datalist id="patient-hmo-companies">
+                {HMO_COMPANY_SUGGESTIONS.map((name) => (
+                  <option key={name} value={name} />
+                ))}
+              </datalist>
+            </label>
+            <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
+              HMO account number
+              <input
+                value={hmoAccountNumber}
+                onChange={(event) => setHmoAccountNumber(event.target.value)}
+                maxLength={MAX_HMO_ACCOUNT_LENGTH}
+                className={FIELD}
+                autoComplete="off"
+              />
+            </label>
+          </div>
           <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
             Notes
             <textarea

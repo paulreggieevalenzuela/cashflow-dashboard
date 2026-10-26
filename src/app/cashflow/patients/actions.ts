@@ -4,6 +4,13 @@ import { revalidatePath } from "next/cache";
 import { auth } from "@/auth";
 import { logAudit } from "@/lib/db/audit";
 import {
+  BIRTH_DATE_INVALID_MESSAGE,
+  MAX_HMO_ACCOUNT_LENGTH,
+  MAX_HMO_COMPANY_LENGTH,
+  cleanHmoText,
+  isValidBirthDate,
+} from "@/lib/cashflow/patient-hmo";
+import {
   createPatient,
   mergePatients,
   updatePatient,
@@ -19,6 +26,12 @@ function clean(input: PatientInput): PatientInput {
     fullName: String(input.fullName ?? "").slice(0, 200),
     contactNumber: String(input.contactNumber ?? "").slice(0, 60),
     notes: String(input.notes ?? "").slice(0, 2000),
+    birthDate: String(input.birthDate ?? "").trim(),
+    hmoCompany: cleanHmoText(input.hmoCompany, MAX_HMO_COMPANY_LENGTH),
+    hmoAccountNumber: cleanHmoText(
+      input.hmoAccountNumber,
+      MAX_HMO_ACCOUNT_LENGTH,
+    ),
   };
 }
 
@@ -48,6 +61,9 @@ export async function createPatientAction(
     return { ok: false, message: "You must be signed in." };
   }
   const data = clean(input);
+  if (data.birthDate && !isValidBirthDate(data.birthDate)) {
+    return { ok: false, message: BIRTH_DATE_INVALID_MESSAGE };
+  }
   const result = await createPatient(data);
   if (!result.ok) {
     return result;
@@ -73,6 +89,9 @@ export async function updatePatientAction(
     return { ok: false, message: "You must be signed in." };
   }
   const data = clean(input);
+  if (data.birthDate && !isValidBirthDate(data.birthDate)) {
+    return { ok: false, message: BIRTH_DATE_INVALID_MESSAGE };
+  }
   const result = await updatePatient(id, data);
   if (!result.ok) {
     return result;
@@ -82,7 +101,7 @@ export async function updatePatientAction(
     entityType: "patient",
     entityId: id,
     patientId: id,
-    summary: `${data.fullName}${data.contactNumber ? ` · ${data.contactNumber}` : ""}`,
+    summary: `${data.fullName}${data.contactNumber ? ` · ${data.contactNumber}` : ""}${data.hmoCompany ? ` · ${data.hmoCompany}` : ""}`,
     actor: who.actor,
   });
   revalidate();

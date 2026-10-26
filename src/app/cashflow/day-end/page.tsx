@@ -8,6 +8,7 @@ import {
   formatSheetDate,
   isValidIsoDate,
   summarizeDayEnd,
+  summarizeHmo,
 } from "@/lib/cashflow/day-end";
 import { isHmoPayment } from "@/lib/cashflow/pricing";
 import { todayInManila } from "@/lib/cashflow/visit-status";
@@ -46,6 +47,7 @@ export default async function DayEndPage({
   });
   const report = await getDayEndReport({ branchId: scope.branchId, date });
   const { breakdown, totals } = summarizeDayEnd(report);
+  const hmoSummary = summarizeHmo(report.hmoVisits);
   const isAdmin = session.user.role === "admin";
 
   const query = new URLSearchParams({
@@ -151,6 +153,130 @@ export default async function DayEndPage({
           hint="included in the total"
         />
       </div>
+
+      <section
+        aria-labelledby="hmo-summary-heading"
+        className="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-950"
+      >
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <div>
+            <h3
+              id="hmo-summary-heading"
+              className="text-sm font-semibold text-zinc-900 dark:text-zinc-50"
+            >
+              HMO summary
+            </h3>
+            <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
+              The day&rsquo;s visits billed to an HMO, whether or not the HMO
+              has paid yet.
+            </p>
+          </div>
+          <p className="text-sm text-zinc-900 dark:text-zinc-50">
+            <span className="font-semibold">Total billed to HMOs</span>{" "}
+            <span className="tabular-nums">
+              {money.format(hmoSummary.total.billed)}
+            </span>
+          </p>
+        </div>
+        {hmoSummary.lines.length === 0 ? (
+          <p className="mt-3 text-sm text-zinc-500 dark:text-zinc-400">
+            No HMO visits on this day.
+          </p>
+        ) : (
+          <>
+            <div className="mt-3 overflow-x-auto">
+              <table className="w-full min-w-[520px] text-left text-sm">
+                <thead className="text-xs uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+                  <tr>
+                    <th className="py-2 pr-3 font-medium">HMO</th>
+                    <th className="px-3 py-2 text-right font-medium">
+                      Patients
+                    </th>
+                    <th className="px-3 py-2 text-right font-medium">Visits</th>
+                    <th className="px-3 py-2 text-right font-medium">Billed</th>
+                    <th className="px-3 py-2 text-right font-medium">
+                      Received
+                    </th>
+                    <th className="py-2 pl-3 text-right font-medium">
+                      To collect
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
+                  {hmoSummary.rows.map((row) => (
+                    <tr key={row.hmo}>
+                      <td className="py-2 pr-3">{row.hmo}</td>
+                      <HmoNumber value={row.patients} />
+                      <HmoNumber value={row.visits} />
+                      <HmoMoney value={row.billed} />
+                      <HmoMoney value={row.received} />
+                      <HmoMoney value={row.toCollect} last />
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr className="border-t border-zinc-300 font-semibold dark:border-zinc-700">
+                    <td className="py-2 pr-3">Total</td>
+                    <HmoNumber value={hmoSummary.total.patients} />
+                    <HmoNumber value={hmoSummary.total.visits} />
+                    <HmoMoney value={hmoSummary.total.billed} />
+                    <HmoMoney value={hmoSummary.total.received} />
+                    <HmoMoney value={hmoSummary.total.toCollect} last />
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+
+            <h4 className="mt-5 text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+              Patients billed to HMOs
+            </h4>
+            <div className="mt-2 overflow-x-auto">
+              <table className="w-full min-w-[720px] text-left text-sm">
+                <thead className="text-xs uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+                  <tr>
+                    <th className="py-2 pr-3 font-medium">HMO</th>
+                    <th className="px-3 py-2 font-medium">Patient</th>
+                    <th className="px-3 py-2 font-medium">Account no.</th>
+                    <th className="px-3 py-2 font-medium">LOA no.</th>
+                    <th className="px-3 py-2 font-medium">Procedure</th>
+                    <th className="px-3 py-2 text-right font-medium">Billed</th>
+                    <th className="py-2 pl-3 text-right font-medium">
+                      Received
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
+                  {hmoSummary.lines.map((visit, index) => (
+                    <tr key={`${visit.hmo}-${visit.patientName}-${index}`}>
+                      <td className="whitespace-nowrap py-2 pr-3">
+                        {visit.hmo}
+                      </td>
+                      <td className="px-3 py-2">{visit.patientName}</td>
+                      <td className="px-3 py-2 font-mono text-xs">
+                        {visit.hmoAccountNumber || (
+                          <span className="font-sans text-zinc-400">
+                            Not on file
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2 font-mono text-xs">
+                        {visit.loaNumber || (
+                          <span className="font-sans text-orange-600 dark:text-orange-400">
+                            LOA pending
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2">{visit.procedure}</td>
+                      <HmoMoney value={visit.billed} />
+                      <HmoMoney value={visit.received} last />
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+      </section>
 
       <div className="overflow-x-auto rounded-lg border border-zinc-200 dark:border-zinc-800">
         <table className="w-full min-w-[1100px] text-left text-sm">
@@ -304,6 +430,22 @@ function Stat({
 function Money({ value }: { value: number }) {
   return (
     <td className="whitespace-nowrap px-3 py-2.5 text-right tabular-nums">
+      {value === 0 ? <span className="text-zinc-400">—</span> : money.format(value)}
+    </td>
+  );
+}
+
+function HmoNumber({ value }: { value: number }) {
+  return <td className="px-3 py-2 text-right tabular-nums">{value}</td>;
+}
+
+function HmoMoney({ value, last }: { value: number; last?: boolean }) {
+  return (
+    <td
+      className={`whitespace-nowrap py-2 text-right tabular-nums ${
+        last ? "pl-3" : "px-3"
+      }`}
+    >
       {value === 0 ? <span className="text-zinc-400">—</span> : money.format(value)}
     </td>
   );

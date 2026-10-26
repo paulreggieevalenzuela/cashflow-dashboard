@@ -501,6 +501,12 @@ export const patients = pgTable("patients", {
   nameKey: text("name_key").notNull().unique(),
   contactNumber: text("contact_number").notNull().default(""),
   notes: text("notes").notNull().default(""),
+  /** YYYY-MM-DD, or "" when not known. */
+  birthDate: text("birth_date").notNull().default(""),
+  /** The patient's HMO / insurance company (free text, suggestions offered). */
+  hmoCompany: text("hmo_company").notNull().default(""),
+  /** The patient's member / account number with that HMO. */
+  hmoAccountNumber: text("hmo_account_number").notNull().default(""),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

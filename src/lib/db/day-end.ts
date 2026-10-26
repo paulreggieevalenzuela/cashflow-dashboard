@@ -5,17 +5,22 @@ import {
   branches,
   expenses,
   invoices,
+  patients,
   payments,
   transactions,
 } from "@/lib/db/schema";
-import type {
-  DayEndExpense,
-  DayEndReport,
-  DayEndRow,
+import {
+  hmoNameFor,
+  type DayEndExpense,
+  type DayEndHmoVisit,
+  type DayEndReport,
+  type DayEndRow,
 } from "@/lib/cashflow/day-end";
+import { getInvoiceSummaries } from "@/lib/db/invoices";
 import {
   allocateProportionally,
   computeMerchantFee,
+  isHmoPayment,
   round2,
 } from "@/lib/cashflow/pricing";
 
@@ -44,6 +49,103 @@ type LineLite = {
 
 function distinct(values: string[]): string[] {
   return [...new Set(values.map((v) => v.trim()).filter(Boolean))];
+}
+
+/**
+ * The day's visits that are billed to an HMO: one entry per visit whose
+ * procedures use an HMO payment method, with what was billed, what has been
+ * received so far, the LOA number and the patient's HMO account number.
+ * A visit counts on its own visit date, paid or not.
+ */
+async function getHmoVisits(input: {
+  date: string;
+  branchFilter: ReturnType<typeof eq> | undefined;
+}): Promise<DayEndHmoVisit[]> {
+  const dayVisits = await db
+    .select({
+      id: invoices.id,
+      loaNumber: invoices.loaNumber,
+      patientId: invoices.patientId,
+    })
+    .from(invoices)
+    .where(and(eq(invoices.visitDate, input.date), input.branchFilter))
+    .orderBy(asc(invoices.createdAt));
+  if (dayVisits.length === 0) return [];
+
+  const ids = dayVisits.map((visit) => visit.id);
+  const [lines, summaries] = await Promise.all([
+    db
+      .select({
+        invoiceId: transactions.invoiceId,
+        patientName: transactions.patientName,
+        procedure: transactions.procedure,
+        paymentType: transactions.paymentType,
+      })
+      .from(transactions)
+      .where(inArray(transactions.invoiceId, ids))
+      .orderBy(asc(transactions.lineNumber), asc(transactions.createdAt)),
+    getInvoiceSummaries(ids),
+  ]);
+
+  const linesByInvoice = new Map<string, typeof lines>();
+  for (const line of lines) {
+    if (!line.invoiceId) continue;
+    const list = linesByInvoice.get(line.invoiceId) ?? [];
+    list.push(line);
+    linesByInvoice.set(line.invoiceId, list);
+  }
+
+  const hmoVisits = dayVisits.flatMap((visit) => {
+    const visitLines = linesByInvoice.get(visit.id) ?? [];
+    const hmoLine = visitLines.find((line) => isHmoPayment(line.paymentType));
+    if (!hmoLine) return [];
+    return [{ visit, visitLines, hmoLine }];
+  });
+  if (hmoVisits.length === 0) return [];
+
+  // The patient's HMO account number comes from their profile.
+  const patientIds = [
+    ...new Set(
+      hmoVisits.flatMap(({ visit }) => (visit.patientId ? [visit.patientId] : [])),
+    ),
+  ];
+  const accountByPatient = new Map<string, string>();
+  if (patientIds.length > 0) {
+    try {
+      const accounts = await db
+        .select({
+          id: patients.id,
+          hmoAccountNumber: patients.hmoAccountNumber,
+        })
+        .from(patients)
+        .where(inArray(patients.id, patientIds));
+      for (const account of accounts) {
+        accountByPatient.set(account.id, account.hmoAccountNumber);
+      }
+    } catch (error) {
+      // Until 2026-10-patient-hmo-details.sql is run the column does not
+      // exist: the report still works, just without account numbers.
+      if (!String(error).includes("hmo_account_number")) throw error;
+      console.warn(
+        "Day end: patients.hmo_account_number is missing; run scripts/sql/2026-10-patient-hmo-details.sql.",
+      );
+    }
+  }
+
+  return hmoVisits.map(({ visit, visitLines, hmoLine }) => {
+    const summary = summaries[visit.id];
+    return {
+      hmo: hmoNameFor(hmoLine.paymentType),
+      patientName: hmoLine.patientName,
+      hmoAccountNumber: visit.patientId
+        ? (accountByPatient.get(visit.patientId) ?? "")
+        : "",
+      loaNumber: visit.loaNumber,
+      procedure: distinct(visitLines.map((line) => line.procedure)).join(" + "),
+      billed: round2(summary?.totalDue ?? 0),
+      received: round2(summary?.collected ?? 0),
+    };
+  });
 }
 
 /**
@@ -250,6 +352,11 @@ export async function getDayEndReport(input: {
     });
   }
 
+  const hmoVisits = await getHmoVisits({
+    date: input.date,
+    branchFilter,
+  });
+
   const dayExpenses: DayEndExpense[] = (
     await db
       .select({
@@ -273,7 +380,7 @@ export async function getDayEndReport(input: {
     amount: round2(Number(expense.amount)),
   }));
 
-  return { branchName, date: input.date, rows, expenses: dayExpenses };
+  return { branchName, date: input.date, rows, hmoVisits, expenses: dayExpenses };
 }
 
 /**

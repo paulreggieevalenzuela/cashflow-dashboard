@@ -1,5 +1,5 @@
 import { randomInt } from "node:crypto";
-import { and, asc, desc, eq, gte, ilike, inArray, lte, ne, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, ilike, inArray, isNull, lte, ne, or, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { resolveRateSetting } from "@/lib/cashflow/commission-tiers";
 import { getBranchById } from "@/lib/db/branches";
@@ -106,11 +106,14 @@ export type TransactionsPage = {
  */
 export type TransactionsPageQuery = Pick<
   TransactionsQueryParams,
-  "q" | "type" | "payment" | "dentist" | "from" | "to" | "sort" | "dir"
+  "q" | "type" | "payment" | "dentist" | "branch" | "from" | "to" | "sort" | "dir"
 > & {
   limit: number;
   offset: number;
 };
+
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export async function listTransactionsPage({
   limit,
@@ -119,6 +122,7 @@ export async function listTransactionsPage({
   type,
   payment,
   dentist,
+  branch,
   from,
   to,
   sort = "date",
@@ -142,6 +146,14 @@ export async function listTransactionsPage({
   if (type) conditions.push(eq(transactions.transactionType, type));
   if (payment) conditions.push(eq(transactions.paymentType, payment));
   if (dentist) conditions.push(eq(transactions.dentist, dentist));
+  // A branch id, or "none" for visits saved without a branch. Anything else
+  // (a hand-edited address) is ignored rather than sent to the database as a
+  // malformed id.
+  if (branch === "none") {
+    conditions.push(isNull(transactions.branchId));
+  } else if (branch && UUID_PATTERN.test(branch)) {
+    conditions.push(eq(transactions.branchId, branch));
+  }
   if (from) conditions.push(gte(transactions.date, from));
   if (to) conditions.push(lte(transactions.date, to));
 

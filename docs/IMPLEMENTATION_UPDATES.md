@@ -1,8 +1,11 @@
 # Implementation Updates — Transactions, Patients, Invoices & Expenses
 
 **Project:** Cashflow application — ADT Dental Clinic
-**Date:** October 11, 2026 (updated October 21)
+**Date:** October 11, 2026 (updated October 26)
 **Follows:** `TRANSACTION_EXPENSE_UPDATES_PLAN.md` (the plan written before implementation)
+**Status (October 26, HMO summary and patient HMO details):** the **Day end** report has a new **HMO summary**: for the day's visits billed to an HMO it shows, per HMO (Intellicare, Maxicare...), the patients, visits, **billed** amount, amount **received** and **still to collect**, then one line per patient with their **HMO account number** and **LOA number**. It is also in the Excel and CSV downloads. The **patient profile** now holds **HMO company**, **HMO account number** and **birthday** (Add / Edit patient, shown under the patient's name). **Run `scripts/sql/2026-10-patient-hmo-details.sql` first** (step 17): the patient pages read the new columns. Type check and lint are clean; the totals and birthday rules were run through automated checks. In the browser: the Day end HMO summary (Oct 22: ₱4,325.00 over 8 visits, matching the Transactions list) and its CSV were checked and the Add patient form was opened; **saving a patient with the new fields and the account numbers on Day end could not be tried until the SQL is run.**
+**Status (October 22, default branch from the user's profile):** the **Transactions** list now opens on the signed-in user's own branch, so each person sees their branch's visits right away. The **Branch** filter is filled in automatically from the user (chip: "Branch: Marikina (your branch)"), and **All branches** is a real choice that shows everything. Every user can change their own branch on **My profile → Branch** (saves by itself); an admin can still change anyone's branch on the Users page. A user with no branch sees all branches, as before. No SQL is needed. Type check and lint are clean. Checked in the browser with the test account: the profile select saved and stayed after a reload, the list opened on "Branch: Marikina (your branch)" with 35 visits, `?branch=all` showed all visits with no branch chip, and the test account was put back to "No branch".
+**Status (October 22, transaction filters and edit form):** the Transactions **Filters** pop-up has a **Branch** filter (all branches, each branch, or "No branch"), shown as a removable chip like the others. In **Edit transaction**, **Payment method** is now at the top, in the same "Payment method & invoice" section as Add transaction, and saving it changes the method on the whole visit. The **Edit pop-up opened from a row's Actions menu now has the same Payments section** as the one opened from the visit page (it was missing there). Type check and lint are clean. Checked in the browser (signed in with the test account, nothing saved): the Branch filter (Marikina 33 visits, Cainta 0, chip and address update) and the row Edit pop-up (payment method selected at the top, Payments section present). Saving a changed payment method was **not** tried.
 **Status (October 21, transaction numbers and form errors):** transaction numbers are now **MMDDYYHHMM-BRANCH-RANDOM**, for example `1021261430-MAR-K7M3Q` (date, 24-hour clinic time, branch code, random 5-character code), checked against the table before use, so deleting visits or saving two at once cannot repeat one. A failed save now shows its error in red **right above the submit button** (and scrolls it into view). Earlier today: the "Couldn't save the transaction" error was a repeated transaction number (see the fix below). Type check and lint are clean and the number rules were run through automated checks; **the new number format has not been saved in the browser yet.**
 **Status (October 21 fix, saving a transaction):** saving a visit failed with "Couldn't save the transaction. Nothing was recorded". The real cause (from the app's log) was a **duplicate transaction number**: numbers were handed out by counting the day's rows, which repeats a number once a visit has been deleted. Numbers and Visit IDs now continue after the highest one used. A test visit ("Gozun, Daniel Leon Petronio", Consultation) was saved in the browser after the fix and appears in Transactions. Type check and lint are clean.
 **Status (October 20 batch, remove from Queue):** a **Remove** link now shows on Queue cards that are **Arrived** or **On-going**. It asks for confirmation, then deletes the visit and records it in the audit trail. It is refused for For Payment and Cleared visits, and for any visit that already has a payment. No SQL is needed. Type check and lint are clean; **not yet tried in the browser**, and the small rule check could not be run because the connection to the Mac dropped (see "What to test").
@@ -35,9 +38,60 @@
 
 16. **Login expiry needs no SQL.** Restart the app once after pulling the change (`NEXT_PUBLIC_` settings are read at start). Everyone who is already signed in gets a fresh 30 minutes at their next page load instead of being signed out. **Security, please do now:** the example settings file (`.env.example`) contained what looked like a real database address with its password and the real login-signing secret. I replaced both with placeholders in the file, but anything that was in it should be treated as exposed — **rotate the Neon database password and generate a new `AUTH_SECRET` in `.env.local`** (this signs everyone out once). `.env.example` was not under version control here, so check your repository history if it was ever pushed.
 
+17. **Run `scripts/sql/2026-10-patient-hmo-details.sql`** (same place, safe to repeat) **before starting the updated app.** It adds three text columns to the patients table (`birth_date`, `hmo_company`, `hmo_account_number`, blank by default). Until it is run the Patients pages show "This page couldn't load"; the Day end page still opens but shows "Not on file" for every account number.
+
 ---
 
 ## 2. What the system does now
+
+#### October 26: HMO summary on Day end, and HMO details on the patient profile
+
+**HMO summary (Day end).** A new section just under the figures, above the payment rows. It is built from the **day's visits whose payment method is an HMO**, because an HMO visit is billed on the day and the HMO pays later (so it often has no payment on that day, and the existing "Paid through HMO" figure, which counts payments only, showed 0).
+
+- **Per HMO:** patients, visits, **Billed** (what the visits come to), **Received** (payments recorded so far) and **To collect** (billed less received), with a **Total** row. HMOs follow the order of the HMO list.
+- **Patients billed to HMOs:** one line per visit: HMO, patient, **account no.** (from the patient profile, "Not on file" if blank), **LOA no.** ("LOA pending" if blank), procedures, billed, received.
+- **Branch and date** follow the page's filters. A visit counts on its own visit date.
+- **Downloads:** the same two tables are added to the Excel and CSV files under the totals.
+- Existing figures are unchanged: the payment rows, the breakdown by method and "Paid through HMO" still count payments received that day.
+
+**Patient profile.** Add patient and Edit patient have three new fields: **Birthday** (date picker, not in the future), **HMO company** (typed freely; the six HMOs are suggested) and **HMO account number**. The patient page shows them under the name (birthday with the age, HMO, account no.). A bad birthday is refused with a message. Patients can also be **searched by account number** on the Patients page. When two patient records are merged, the kept one fills any blank birthday, HMO company or account number from the removed one. The audit trail line for an edit includes the HMO company (not the account number).
+
+**Notes.** The Day end shows the HMO the visit was **billed** to (its payment method), which can differ from the company written on the profile. Patients with an HMO company on file are not yet filled into the transaction form automatically.
+
+**Files.** New `scripts/sql/2026-10-patient-hmo-details.sql`, `src/lib/cashflow/patient-hmo.ts` (birthday and text rules, pure). Changed `src/lib/db/schema.ts`, `src/lib/db/patient-admin.ts`, `src/app/cashflow/patients/actions.ts`, `src/components/cashflow/patient-form-modal.tsx`, `src/app/cashflow/patients/[id]/page.tsx`, `src/lib/cashflow/day-end.ts` (`summarizeHmo`, sheet), `src/lib/db/day-end.ts` (`getHmoVisits`), `src/app/cashflow/day-end/page.tsx`.
+
+**Checks.** Type check and lint clean. Automated checks: totals per HMO and overall (case-insensitive HMO names, a patient with two visits counted once, a cash payment ignored, cents added without drift), the sheet rows, birthday validity (real dates, no future dates, nothing before 1900) and age on the birthday itself. Browser (test account, nothing saved): Day end for October 22 shows Intellicare ₱1,050, Maxicare ₱750, Medicard ₱2,250, Valucare ₱275, total ₱4,325 over 8 visits, each with its LOA number or "LOA pending"; the CSV carries the same; the Add patient form shows the three new fields. **Not tried:** saving a patient with the new fields, and the account numbers on Day end (both need the SQL).
+
+#### October 22: Transactions open on the user's branch; branch on My profile
+
+**What changed.**
+
+- **Default branch.** When the Transactions page is opened without a branch in the address, the user's own branch (from their account) is used as the Branch filter. The list shows only that branch's visits, the count and paging follow it, and the chip reads **Branch: <name> (your branch)**.
+- **Looking at other branches.** In Filters → Branch choose another branch, **No branch**, or **All branches**. All branches is stored in the address as `?branch=all`, so it is not replaced by the default again. Removing the chip, **Clear all** and **Reset** go back to *All branches* when the user has no branch, and back to *their branch* when they have one.
+- **My profile → Branch.** A new card with a **My branch** select (*No branch (show all branches)* or any branch). It saves the moment it is changed ("Saved.") and applies from the next time the Transactions page is opened. Any signed-in user can set their **own** branch; the branch must exist. The Users page (admin) still sets anyone's branch.
+- **No branch on the account.** The list behaves exactly as before: all branches, no chip.
+
+**Files.** `src/app/cashflow/transactions/page.tsx` (reads the user's branch and applies it), `src/lib/cashflow/transactions-query.ts` (`ALL_BRANCHES`), `src/components/cashflow/transactions-toolbar.tsx` and `transactions-list.tsx` (chip, select, reset), `src/app/cashflow/profile/actions.ts` (`updateMyBranchAction`), `src/components/cashflow/branch-select.tsx` (new), `src/app/cashflow/profile/page.tsx`.
+
+**Checks.** Type check and lint clean. Browser (test account): My profile → Branch → Marikina showed "Saved." and was still selected after a reload; Transactions opened with "Branch: Marikina (your branch)" and 35 matching; `?branch=all` listed 35 recorded with no branch chip; the account was then set back to *No branch* and the list showed no chip. **Not tried:** another user's account, and Filters → *No branch* with a default branch set.
+
+#### October 22: Branch filter and payment method in Edit transaction
+
+**Branch filter (Transactions page).** Filters pop-up → **Branch**: *All branches*, one of the branches, or *No branch* (visits saved without a branch). The choice shows as a chip ("Branch: Marikina") that can be removed on its own, is cleared by **Clear all** and **Reset**, counts in the filter badge, and is part of the page address (`?branch=…`), so a filtered list can be bookmarked or shared. A malformed branch in the address is ignored instead of causing an error. Files: `transactions-query.ts`, `transactions-toolbar.tsx`, `transactions-list.tsx`, `transactions/page.tsx`, `src/lib/db/transactions.ts` (`listTransactionsPage`).
+
+**Payment method in Edit transaction.** Before, the edit form showed only "Invoice" at the top and had no payment method (it could only be set when adding). It now shows the same **Payment method & invoice** section as Add transaction, with the method the visit already has selected.
+
+- Saving applies the chosen method to **every procedure line of the visit**. It does not change or move any money: payments are still added and removed on the visit page.
+- Choosing a different method works like in Add transaction: choosing an HMO (Maxicare, Intellicare...) re-prices procedures that still have the list price to that HMO's price, and choosing Cash or another non-HMO method goes back to the cash price list; a notice says what changed. Prices you typed by hand are left alone.
+- Because HMO and cash visits earn commission differently, **commission is re-worked for the visit when the method changes**.
+- The change is written to the **audit trail** as "Payment method: A → B". Older audit entries have no payment method and show nothing for it.
+- Edit calls that send no payment method (none today) keep each line's method as before.
+
+Files: `transaction-form.tsx`, `src/lib/db/invoices.ts` (`updateInvoice`, audit snapshot), `src/lib/cashflow/audit-diff.ts`.
+
+**Row Edit pop-up now matches the visit page.** The pop-up opened from a row's **Actions → Edit** showed only the form; the one opened from the visit page's **Edit transaction** button also showed the **Payments** section (what was paid and how, record / remove a payment). Both now show both: payment method at the top, Payments below. After recording or removing a payment in the row pop-up its list reloads by itself. Files: `transactions-table.tsx`, `payments-manager.tsx` (an `onChanged` hook), `src/app/cashflow/actions.ts` (`getInvoiceForEditAction` also returns the payments).
+
+**Checks.** Type check and lint clean. In the browser (test account, nothing saved): Filters → Branch → Marikina listed 33 visits with a "Branch: Marikina" chip and `?branch=…` in the address; Cainta listed 0; the row Edit pop-up showed Payment method (for Garcia, Annaly: Intellicare) in the top section and the Payments section below. **Not tried:** saving a changed payment method, and recording or removing a payment from the row pop-up.
 
 #### Transaction number: date, time, branch and random code; form error above the button (October 21)
 
@@ -462,6 +516,8 @@ The old procedure list is **deleted** and replaced by the **Cash Paying** column
 
 | File | Purpose |
 |---|---|
+| `scripts/sql/2026-10-patient-hmo-details.sql`, `src/lib/cashflow/patient-hmo.ts` | October 26: the SQL that adds the patient's birthday, HMO company and HMO account number, and the pure rules for them (birthday check, age, formatting, text cleaning). |
+| `src/components/cashflow/branch-select.tsx` | October 22: the "My branch" select on My profile that saves by itself. |
 | `src/components/cashflow/remove-from-queue-button.tsx` | October 20: the red **Remove** link and confirmation pop-up on Arrived / On-going Queue cards. |
 | `src/lib/auth/session-policy.ts`, `src/components/auth/session-guard.tsx` | October 19: the login-expiry timing rules (pure, testable) and the browser component that runs the clock, the quiet extension and the "Stay signed in" pop-up. |
 | `scripts/sql/2026-10-commission-tiers.sql`, `src/lib/cashflow/commission-tiers.ts`, `src/lib/db/commission-tiers.ts`, `src/components/cashflow/commission-tiers-manager.tsx` | October 19: the tier tables, cleanup and tier rates; tier rules (resolve, labels); tier queries; the tier editor on the Commissions page. |
@@ -518,6 +574,8 @@ The old procedure list is **deleted** and replaced by the **Cash Paying** column
 
 | File | What changed |
 |---|---|
+| *October 26 (HMO summary, patient HMO details):* `src/lib/db/schema.ts`, `src/lib/db/patient-admin.ts`, `src/app/cashflow/patients/actions.ts`, `src/components/cashflow/patient-form-modal.tsx`, `src/app/cashflow/patients/[id]/page.tsx`, `src/lib/cashflow/day-end.ts`, `src/lib/db/day-end.ts`, `src/app/cashflow/day-end/page.tsx` | Three patient columns (birthday, HMO company, account number) in the form, profile, search and merge; the Day end HMO summary, its lines and its place in the Excel / CSV. |
+| *October 22 (branch from the profile):* `src/app/cashflow/transactions/page.tsx`, `src/lib/cashflow/transactions-query.ts`, `src/components/cashflow/transactions-toolbar.tsx`, `transactions-list.tsx`, `src/app/cashflow/profile/actions.ts`, `src/app/cashflow/profile/page.tsx` | The list defaults to the user's branch, "All branches" is an explicit `all` value, chip says "(your branch)", and My profile has a Branch card with `updateMyBranchAction`. |
 | *October 20 (remove from Queue):* `src/lib/cashflow/visit-status.ts`, `src/lib/db/visit-status.ts`, `src/app/cashflow/transactions/status-actions.ts`, `src/components/cashflow/today-board.tsx` | The removal rule, the database read it needs, the server action (with audit), and the Remove link on Arrived / On-going cards. |
 | *October 19 (login expiry):* `src/auth.ts`, `src/types/next-auth.d.ts`, `src/middleware.ts`, `src/app/cashflow/layout.tsx`, `src/app/login/page.tsx`, `src/components/auth/login-form.tsx`, `.env.example` | 30-minute idle clock in the login token, extension only on an explicit refresh, account re-check on extension; session carries time left; guard mounted in the layout; login page shows the inactivity message and returns to the page the person was on; example settings file has placeholders instead of real values. |
 | *October 19:* `src/lib/db/schema.ts`, `src/lib/cashflow/pricing.ts`, `src/lib/db/transactions.ts`, `src/app/cashflow/commissions/page.tsx`, `actions.ts` | Two tier tables; `computeCommission` supports a flat peso on any payment; the save-time lookup uses the individual rate, else the tier rate; the Commissions page shows tiers first; tier actions. |
@@ -601,6 +659,10 @@ The old procedure list is **deleted** and replaced by the **Cash Paying** column
 - **The sample sheet's first block has numbers that do not add up** (see "PWD / Senior discount and VAT"). The system follows the arithmetic and the second block; please confirm with the accountant.
 
 ## 8. What was checked, and what to test
+
+**Test (HMO summary and patient HMO details, October 26):** (1) Run the SQL. (2) Patients → Add patient (or Edit patient): fill Birthday, HMO company (pick Maxicare) and HMO account number, Save: the patient page shows them under the name, with the age. (3) Try a birthday in the future: refused. (4) Add a transaction for that patient with payment method **Maxicare**, then open **Day end** for that date: the HMO summary lists the patient under Maxicare with the account number you typed and "LOA pending" (or the LOA number), billed = the visit total, received 0, to collect = billed. (5) Record a payment on the visit: Received and To collect update. (6) Download Excel and CSV: both contain the HMO summary and patient lines. (7) Patients search: type the account number: the patient is found.
+
+**Test (branch from the profile, October 22):** (1) My profile → Branch → pick your branch: "Saved." appears. (2) Open Transactions: the chip reads "Branch: <your branch> (your branch)" and only that branch's visits show. (3) Filters → Branch → *All branches*: every visit shows and the chip goes; the address has `?branch=all`. (4) Clear all / Reset: back to your branch. (5) Set the profile to *No branch (show all branches)*: Transactions shows everything with no chip. (6) As admin, change another user's branch on the Users page and sign in as that user: the list opens on that branch.
 
 **Test (remove from Queue):** (1) Add to Queue a test patient: it appears under **Arrived** with a **Remove** link. (2) Press Remove, then **Keep in queue**: nothing changes. (3) Press Remove, then **Remove visit**: the card disappears, the Queue number in the menu drops by one, and the audit trail shows the removal. (4) Move a card to **On-going**: Remove is still there. (5) Move a card to **For Payment**: no Remove link. (6) Record a payment on an Arrived visit: Remove is hidden on the next refresh, and if shown by an old screen the message says the visit already has a payment. (7) Sign in as a non-admin: Remove still works on Arrived / On-going.
 

@@ -3,8 +3,10 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Modal } from "@/components/ui/modal";
+import type { Branch } from "@/lib/db/branches";
 import { PAYMENT_TYPES, TRANSACTION_TYPES } from "@/lib/cashflow/constants";
 import {
+  ALL_BRANCHES,
   buildTransactionsSearch,
   type TransactionsQueryParams,
 } from "@/lib/cashflow/transactions-query";
@@ -19,6 +21,7 @@ type FilterDraft = {
   type: string;
   payment: string;
   dentist: string;
+  branch: string;
   from: string;
   to: string;
 };
@@ -28,6 +31,7 @@ function draftFrom(query: TransactionsQueryParams): FilterDraft {
     type: query.type ?? "",
     payment: query.payment ?? "",
     dentist: query.dentist ?? "",
+    branch: query.branch ?? ALL_BRANCHES,
     from: query.from ?? "",
     to: query.to ?? "",
   };
@@ -35,7 +39,7 @@ function draftFrom(query: TransactionsQueryParams): FilterDraft {
 
 /**
  * Search box plus a filter button. The search stays on the page; the other
- * filters (type, payment method, dentist, date range) live in a pop-up so
+ * filters (type, payment method, dentist, branch, date range) live in a pop-up so
  * the page isn't taken up by a row of dropdowns. Applied filters show as
  * small removable chips under the search box.
  *
@@ -47,9 +51,15 @@ function draftFrom(query: TransactionsQueryParams): FilterDraft {
 export function TransactionsToolbar({
   query,
   dentistOptions,
+  branches,
+  defaultBranchId,
 }: {
   query: TransactionsQueryParams;
   dentistOptions: string[];
+  branches: Branch[];
+  /** The signed-in user's branch. With none, "all branches" is the normal
+   * view and needs no mark in the address. */
+  defaultBranchId: string | null;
 }) {
   const router = useRouter();
   const [searchInput, setSearchInput] = useState(query.q ?? "");
@@ -74,6 +84,12 @@ export function TransactionsToolbar({
     };
   }, []);
 
+  // "All branches" must be written into the address when the user has a
+  // branch of their own (otherwise it would fall back to their branch).
+  function branchParam(value: string): string | undefined {
+    return value === ALL_BRANCHES && !defaultBranchId ? undefined : value;
+  }
+
   function navigate(overrides: Partial<TransactionsQueryParams>) {
     const search = buildTransactionsSearch(query, { page: 1, ...overrides });
     router.push(`/cashflow/transactions${search}`, { scroll: false });
@@ -97,6 +113,7 @@ export function TransactionsToolbar({
       type: draft.type || undefined,
       payment: draft.payment || undefined,
       dentist: draft.dentist || undefined,
+      branch: branchParam(draft.branch || ALL_BRANCHES),
       from: draft.from || undefined,
       to: draft.to || undefined,
     });
@@ -111,6 +128,7 @@ export function TransactionsToolbar({
       type: undefined,
       payment: undefined,
       dentist: undefined,
+      branch: branchParam(ALL_BRANCHES),
       from: undefined,
       to: undefined,
     });
@@ -138,6 +156,18 @@ export function TransactionsToolbar({
       key: "dentist",
       label: `Dentist: ${query.dentist}`,
       clear: () => navigate({ dentist: undefined }),
+    });
+  }
+  if (query.branch && query.branch !== ALL_BRANCHES) {
+    const branchName =
+      query.branch === "none"
+        ? "No branch"
+        : (branches.find((branch) => branch.id === query.branch)?.name ??
+          "Unknown branch");
+    chips.push({
+      key: "branch",
+      label: `Branch: ${branchName}${query.branch === defaultBranchId ? " (your branch)" : ""}`,
+      clear: () => navigate({ branch: branchParam(ALL_BRANCHES) }),
     });
   }
   if (query.from || query.to) {
@@ -259,7 +289,7 @@ export function TransactionsToolbar({
         open={filtersOpen}
         onClose={() => setFiltersOpen(false)}
         title="Filters"
-        description="Narrow the list by type, payment method, dentist or date. The search box stays on the page."
+        description="Narrow the list by type, payment method, dentist, branch or date. The search box stays on the page."
       >
         <div className="space-y-5">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -299,6 +329,25 @@ export function TransactionsToolbar({
               </select>
             </label>
           </div>
+
+          <label className={LABEL_CLASSES}>
+            Branch
+            <select
+              value={draft.branch}
+              onChange={(event) =>
+                setDraft({ ...draft, branch: event.target.value })
+              }
+              className={`${FIELD_CLASSES} select-chevron`}
+            >
+              <option value={ALL_BRANCHES}>All branches</option>
+              {branches.map((branch) => (
+                <option key={branch.id} value={branch.id}>
+                  {branch.name}
+                </option>
+              ))}
+              <option value="none">No branch</option>
+            </select>
+          </label>
 
           {dentistOptions.length > 0 && (
             <label className={LABEL_CLASSES}>
@@ -354,7 +403,14 @@ export function TransactionsToolbar({
             <button
               type="button"
               onClick={() =>
-                setDraft({ type: "", payment: "", dentist: "", from: "", to: "" })
+                setDraft({
+                  type: "",
+                  payment: "",
+                  dentist: "",
+                  branch: defaultBranchId ?? ALL_BRANCHES,
+                  from: "",
+                  to: "",
+                })
               }
               className="text-sm font-medium text-zinc-500 hover:text-zinc-900 hover:underline dark:text-zinc-400 dark:hover:text-zinc-100"
             >

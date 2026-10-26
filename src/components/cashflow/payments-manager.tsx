@@ -56,6 +56,7 @@ export function PaymentsManager({
   canDelete = false,
   readOnly = false,
   attachments,
+  onChanged,
 }: {
   invoiceId: string;
   totalDue: number;
@@ -69,6 +70,9 @@ export function PaymentsManager({
    * only available from the edit flow, where this is rendered without
    * `readOnly`. */
   readOnly?: boolean;
+  /** Called after a payment was recorded or removed, for a parent that
+   * holds its own copy of the payments (the table's edit pop-up). */
+  onChanged?: () => void;
 }) {
   const router = useRouter();
   const [form, setForm] = useState<FormState>(emptyForm);
@@ -110,6 +114,7 @@ export function PaymentsManager({
 
     setForm(emptyForm());
     router.refresh();
+    onChanged?.();
   }
 
   async function handleDelete(paymentId: string) {
@@ -123,6 +128,7 @@ export function PaymentsManager({
         window.alert(result.message);
       }
       router.refresh();
+      onChanged?.();
     } finally {
       setRowBusyId(null);
     }

@@ -8,7 +8,7 @@
  * own. The database side is `src/lib/db/day-end.ts`.
  */
 
-import { isHmoPayment, round2 } from "@/lib/cashflow/pricing";
+import { HMO_PAYMENT_TYPES, isHmoPayment, round2 } from "@/lib/cashflow/pricing";
 import type { Cell, SheetInput } from "@/lib/cashflow/xlsx";
 
 export type DayEndRow = {
@@ -40,12 +40,29 @@ export type DayEndExpense = {
   amount: number;
 };
 
+/** A visit of the day that is billed to an HMO (whether or not it is paid yet). */
+export type DayEndHmoVisit = {
+  /** The HMO's name as used for the payment method, e.g. "Maxicare". */
+  hmo: string;
+  patientName: string;
+  /** The patient's account (member) number with the HMO, from their profile. */
+  hmoAccountNumber: string;
+  loaNumber: string;
+  procedure: string;
+  /** What the visit comes to (the amount billed to the HMO). */
+  billed: number;
+  /** What has been recorded as received for the visit so far. */
+  received: number;
+};
+
 export type DayEndReport = {
   /** "All branches" or one branch's name. */
   branchName: string;
   /** YYYY-MM-DD */
   date: string;
   rows: DayEndRow[];
+  /** The day's visits that are billed to an HMO. */
+  hmoVisits: DayEndHmoVisit[];
   expenses: DayEndExpense[];
 };
 
@@ -110,6 +127,100 @@ export type DayEndTotals = {
   visitsWithoutPayment: number;
   paymentCount: number;
 };
+
+/** One HMO company's share of the day's visits. */
+export type HmoSummaryRow = {
+  hmo: string;
+  /** Different patients billed to this HMO that day. */
+  patients: number;
+  visits: number;
+  /** Billed to the HMO. */
+  billed: number;
+  /** Already recorded as received. */
+  received: number;
+  /** Billed less received (never below 0). */
+  toCollect: number;
+};
+
+export type HmoSummary = {
+  rows: HmoSummaryRow[];
+  /** One line per HMO visit, grouped by HMO. */
+  lines: DayEndHmoVisit[];
+  total: Omit<HmoSummaryRow, "hmo">;
+};
+
+/** The HMO's proper name for a payment type ("avega" → "Avega"). */
+export function hmoNameFor(paymentType: string): string {
+  const wanted = paymentType.trim().toLowerCase();
+  return (
+    HMO_PAYMENT_TYPES.find((name) => name.toLowerCase() === wanted) ??
+    paymentType.trim()
+  );
+}
+
+/**
+ * The day's HMO amounts, per HMO company: how many patients and visits, how
+ * much is billed to the HMO, how much has been received and how much is
+ * still to collect. Built from the day's visits (an HMO visit is billed on
+ * the day even though the HMO pays later). Lines are grouped by HMO in the
+ * order of the HMO list, then by patient.
+ */
+export function summarizeHmo(visits: DayEndHmoVisit[]): HmoSummary {
+  const order = (name: string) => {
+    const index = HMO_PAYMENT_TYPES.findIndex((hmo) => hmo === name);
+    return index === -1 ? HMO_PAYMENT_TYPES.length : index;
+  };
+  const lines = [...visits].sort(
+    (a, b) =>
+      order(a.hmo) - order(b.hmo) ||
+      a.hmo.localeCompare(b.hmo) ||
+      a.patientName.localeCompare(b.patientName),
+  );
+
+  const byHmo = new Map<
+    string,
+    { names: Set<string>; visits: number; billed: number; received: number }
+  >();
+  const everyone = new Set<string>();
+  let billed = 0;
+  let received = 0;
+  for (const visit of lines) {
+    const key = visit.patientName.trim().toLowerCase();
+    const entry = byHmo.get(visit.hmo) ?? {
+      names: new Set<string>(),
+      visits: 0,
+      billed: 0,
+      received: 0,
+    };
+    entry.names.add(key);
+    entry.visits += 1;
+    entry.billed = round2(entry.billed + visit.billed);
+    entry.received = round2(entry.received + visit.received);
+    byHmo.set(visit.hmo, entry);
+    everyone.add(key);
+    billed = round2(billed + visit.billed);
+    received = round2(received + visit.received);
+  }
+
+  return {
+    rows: [...byHmo.entries()].map(([hmo, entry]) => ({
+      hmo,
+      patients: entry.names.size,
+      visits: entry.visits,
+      billed: entry.billed,
+      received: entry.received,
+      toCollect: Math.max(0, round2(entry.billed - entry.received)),
+    })),
+    lines,
+    total: {
+      patients: everyone.size,
+      visits: lines.length,
+      billed,
+      received,
+      toCollect: Math.max(0, round2(billed - received)),
+    },
+  };
+}
 
 export function summarizeDayEnd(report: DayEndReport): {
   breakdown: Array<{ label: string; amount: number }>;
@@ -264,6 +375,60 @@ export function buildDayEndSheet(report: DayEndReport): SheetInput {
   push(["Merchant fees", totals.merchantFees]);
   push(["Withholding tax", totals.withholdingTax]);
   push(["Net collection", totals.netCollection], true);
+
+  const hmoSummary = summarizeHmo(report.hmoVisits);
+  if (hmoSummary.lines.length > 0) {
+    push([]);
+    push(
+      ["HMO summary", "Patients", "Visits", "Billed", "Received", "To collect"],
+      true,
+    );
+    for (const row of hmoSummary.rows) {
+      push([
+        row.hmo,
+        String(row.patients),
+        String(row.visits),
+        row.billed,
+        row.received,
+        row.toCollect,
+      ]);
+    }
+    push(
+      [
+        "Total HMO",
+        String(hmoSummary.total.patients),
+        String(hmoSummary.total.visits),
+        hmoSummary.total.billed,
+        hmoSummary.total.received,
+        hmoSummary.total.toCollect,
+      ],
+      true,
+    );
+    push([]);
+    push(
+      [
+        "HMO",
+        "Patient",
+        "Account No.",
+        "LOA No.",
+        "Procedure",
+        "Billed",
+        "Received",
+      ],
+      true,
+    );
+    for (const visit of hmoSummary.lines) {
+      push([
+        visit.hmo,
+        visit.patientName,
+        visit.hmoAccountNumber,
+        visit.loaNumber,
+        visit.procedure,
+        visit.billed,
+        visit.received,
+      ]);
+    }
+  }
 
   if (report.expenses.length > 0) {
     push([]);

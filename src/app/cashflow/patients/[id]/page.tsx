@@ -8,6 +8,7 @@ import { PatientFormModal } from "@/components/cashflow/patient-form-modal";
 import { LoaPendingBadge } from "@/components/cashflow/loa-pending-badge";
 import { VisitStatusControl } from "@/components/cashflow/visit-status-control";
 import { maskId } from "@/lib/cashflow/mask";
+import { ageFromBirthDate, formatBirthDate } from "@/lib/cashflow/patient-hmo";
 import { VISIT_STATUSES, isVisitStatus } from "@/lib/cashflow/visit-status";
 import { listAuditForPatient } from "@/lib/db/audit";
 import { listBranches } from "@/lib/db/branches";
@@ -129,6 +130,38 @@ export default async function PatientPage({
               ? ` · PWD / Senior ID on file${profile.lastDiscountId.type ? ` (${profile.lastDiscountId.type})` : ""}: ${isAdmin ? profile.lastDiscountId.number : maskId(profile.lastDiscountId.number)}`
               : ""}
           </p>
+          {(patient.birthDate || patient.hmoCompany || patient.hmoAccountNumber) && (
+            <dl className="mt-2 flex flex-wrap gap-x-6 gap-y-1 text-sm">
+              {patient.birthDate && (
+                <div className="flex gap-1.5">
+                  <dt className="text-zinc-500 dark:text-zinc-400">Birthday</dt>
+                  <dd className="text-zinc-900 dark:text-zinc-50">
+                    {formatBirthDate(patient.birthDate)}
+                    {ageFromBirthDate(patient.birthDate) !== null &&
+                      ` (${ageFromBirthDate(patient.birthDate)})`}
+                  </dd>
+                </div>
+              )}
+              {patient.hmoCompany && (
+                <div className="flex gap-1.5">
+                  <dt className="text-zinc-500 dark:text-zinc-400">HMO</dt>
+                  <dd className="text-zinc-900 dark:text-zinc-50">
+                    {patient.hmoCompany}
+                  </dd>
+                </div>
+              )}
+              {patient.hmoAccountNumber && (
+                <div className="flex gap-1.5">
+                  <dt className="text-zinc-500 dark:text-zinc-400">
+                    Account no.
+                  </dt>
+                  <dd className="font-mono text-zinc-900 dark:text-zinc-50">
+                    {patient.hmoAccountNumber}
+                  </dd>
+                </div>
+              )}
+            </dl>
+          )}
           {patient.notes && (
             <p className="mt-1 max-w-xl whitespace-pre-line text-sm text-zinc-600 dark:text-zinc-400">
               {patient.notes}
@@ -142,6 +175,9 @@ export default async function PatientPage({
               fullName: patient.fullName,
               contactNumber: patient.contactNumber,
               notes: patient.notes,
+              birthDate: patient.birthDate,
+              hmoCompany: patient.hmoCompany,
+              hmoAccountNumber: patient.hmoAccountNumber,
             }}
             buttonLabel="Edit patient"
             buttonClassName="rounded-lg border border-zinc-300 px-3.5 py-2 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"

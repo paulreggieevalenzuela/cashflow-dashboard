@@ -130,7 +130,11 @@ export async function listPatientsPage(input: {
   if (search) {
     const term = `%${search.replace(/[\\%_]/g, (m) => `\\${m}`)}%`;
     conditions.push(
-      or(ilike(patients.fullName, term), ilike(patients.contactNumber, term)),
+      or(
+        ilike(patients.fullName, term),
+        ilike(patients.contactNumber, term),
+        ilike(patients.hmoAccountNumber, term),
+      ),
     );
   }
   switch (input.filter) {
@@ -226,6 +230,9 @@ export type PatientProfile = {
     fullName: string;
     contactNumber: string;
     notes: string;
+    birthDate: string;
+    hmoCompany: string;
+    hmoAccountNumber: string;
     createdAt: string;
   };
   invoices: PatientInvoiceRow[];
@@ -338,6 +345,9 @@ export async function getPatientProfile(
       fullName: patient.fullName,
       contactNumber: patient.contactNumber,
       notes: patient.notes,
+      birthDate: patient.birthDate,
+      hmoCompany: patient.hmoCompany,
+      hmoAccountNumber: patient.hmoAccountNumber,
       createdAt: patient.createdAt.toISOString(),
     },
     invoices: rows,
@@ -363,6 +373,10 @@ export type PatientInput = {
   fullName: string;
   contactNumber: string;
   notes: string;
+  /** YYYY-MM-DD, or "" when not known. */
+  birthDate: string;
+  hmoCompany: string;
+  hmoAccountNumber: string;
 };
 
 export type PatientResult =
@@ -401,6 +415,9 @@ export async function createPatient(
       nameKey: key,
       contactNumber: input.contactNumber.trim(),
       notes: input.notes.trim(),
+      birthDate: input.birthDate,
+      hmoCompany: input.hmoCompany,
+      hmoAccountNumber: input.hmoAccountNumber,
     })
     .returning({ id: patients.id });
   return { ok: true, id: row.id };
@@ -430,6 +447,9 @@ export async function updatePatient(
       nameKey: key,
       contactNumber: input.contactNumber.trim(),
       notes: input.notes.trim(),
+      birthDate: input.birthDate,
+      hmoCompany: input.hmoCompany,
+      hmoAccountNumber: input.hmoAccountNumber,
     })
     .where(eq(patients.id, id));
   // Visits keep showing the name they were saved with, so keep the stored
@@ -468,11 +488,16 @@ export async function mergePatients(
     .update(transactions)
     .set({ patientId: targetId, patientName: target[0].fullName })
     .where(eq(transactions.patientId, sourceId));
-  // Keep the contact number / notes of the removed record if the kept one has none.
+  // Keep the contact number, birthday and HMO details of the removed record
+  // where the kept one has none.
   await db
     .update(patients)
     .set({
       contactNumber: target[0].contactNumber || source[0].contactNumber,
+      birthDate: target[0].birthDate || source[0].birthDate,
+      hmoCompany: target[0].hmoCompany || source[0].hmoCompany,
+      hmoAccountNumber:
+        target[0].hmoAccountNumber || source[0].hmoAccountNumber,
       notes: [target[0].notes, source[0].notes].filter(Boolean).join("\n"),
     })
     .where(eq(patients.id, targetId));
