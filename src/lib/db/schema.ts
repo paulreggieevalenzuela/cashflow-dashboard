@@ -1,4 +1,5 @@
-import { boolean, integer, jsonb, numeric, pgEnum, pgTable, smallint, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import { boolean, index, integer, jsonb, numeric, pgEnum, pgTable, smallint, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
 
 /**
  * A physical clinic location. Dentist/staff accounts and transactions can
@@ -121,7 +122,14 @@ export const transactions = pgTable("transactions", {
   // same even if a type is renamed later.
   discountTypeId: uuid("discount_type_id").references(() => discountTypes.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => [
+  index("transactions_invoice_id_idx").on(table.invoiceId),
+  index("transactions_patient_id_idx").on(table.patientId),
+  index("transactions_date_idx").on(table.date, table.createdAt),
+  index("transactions_branch_idx").on(table.branchId),
+  index("transactions_visit_id_idx").on(table.visitId),
+  index("transactions_dentist_user_idx").on(table.dentistUserId),
+]);
 
 export type TransactionRow = typeof transactions.$inferSelect;
 export type NewTransactionRow = typeof transactions.$inferInsert;
@@ -225,7 +233,9 @@ export const procedurePriceHistory = pgTable("procedure_price_history", {
   note: text("note").notNull().default(""),
   // Which price changed: "Cash" (procedures.default_price) or an HMO name.
   payer: text("payer").notNull().default("Cash"),
-});
+}, (table) => [
+  index("procedure_price_history_procedure_idx").on(table.procedureId, table.changedAt.desc()),
+]);
 
 /**
  * The price of a procedure for one HMO (payer = the payment type name as on
@@ -385,7 +395,10 @@ export const payments = pgTable("payments", {
   referenceNo: text("reference_no").notNull().default(""),
   notes: text("notes").notNull().default(""),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => [
+  index("payments_invoice_id_idx").on(table.invoiceId),
+  index("payments_paid_at_idx").on(table.paidAt),
+]);
 
 export type PaymentRow = typeof payments.$inferSelect;
 export type NewPaymentRow = typeof payments.$inferInsert;
@@ -418,7 +431,10 @@ export const attachments = pgTable("attachments", {
   dataBase64: text("data_base64").notNull(),
   createdByUserId: uuid("created_by_user_id").references(() => users.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => [
+  index("attachments_invoice_id_idx").on(table.invoiceId),
+  index("attachments_expense_id_idx").on(table.expenseId),
+]);
 
 export type AttachmentRow = typeof attachments.$inferSelect;
 export type NewAttachmentRow = typeof attachments.$inferInsert;
@@ -483,7 +499,10 @@ export const expenses = pgTable("expenses", {
   vatableAmount: numeric("vatable_amount", { precision: 12, scale: 2 }).notNull().default("0"),
   vatAmount: numeric("vat_amount", { precision: 12, scale: 2 }).notNull().default("0"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => [
+  index("expenses_date_idx").on(table.date),
+  index("expenses_branch_date_idx").on(table.branchId, table.date),
+]);
 
 export type ExpenseRow = typeof expenses.$inferSelect;
 export type NewExpenseRow = typeof expenses.$inferInsert;
@@ -508,7 +527,9 @@ export const patients = pgTable("patients", {
   /** The patient's member / account number with that HMO. */
   hmoAccountNumber: text("hmo_account_number").notNull().default(""),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => [
+  index("patients_name_key_prefix_idx").on(table.nameKey.op("text_pattern_ops")),
+]);
 
 export type PatientRow = typeof patients.$inferSelect;
 export type NewPatientRow = typeof patients.$inferInsert;
@@ -563,7 +584,14 @@ export const invoices = pgTable("invoices", {
   statusChangedAt: timestamp("status_changed_at", { withTimezone: true }).notNull().defaultNow(),
   createdByUserId: uuid("created_by_user_id").references(() => users.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
+}, (table) => [
+  index("invoices_invoice_number_idx").on(table.invoiceNumber).where(sql`${table.invoiceNumber} <> ''`),
+  index("invoices_status_idx").on(table.status, table.visitDate),
+  index("invoices_patient_visit_idx").on(table.patientId, table.visitDate),
+  index("invoices_recall_date_idx").on(table.recallDate).where(sql`${table.recallDate} is not null`),
+  index("invoices_visit_date_idx").on(table.visitDate),
+  index("invoices_branch_visit_idx").on(table.branchId, table.visitDate),
+]);
 
 /**
  * Every status change of a visit: who, when, from, to and why. Gives the
@@ -581,7 +609,9 @@ export const invoiceStatusHistory = pgTable("invoice_status_history", {
   changedByName: text("changed_by_name").notNull().default(""),
   changedAt: timestamp("changed_at", { withTimezone: true }).notNull().defaultNow(),
   note: text("note").notNull().default(""),
-});
+}, (table) => [
+  index("invoice_status_history_invoice_idx").on(table.invoiceId, table.changedAt),
+]);
 
 /**
  * Who did what, and when: visits created / edited / removed, payments added
@@ -601,7 +631,33 @@ export const auditLog = pgTable("audit_log", {
   patientId: uuid("patient_id"),
   summary: text("summary").notNull().default(""),
   details: jsonb("details"),
-});
+}, (table) => [
+  index("audit_log_invoice_idx").on(table.invoiceId, table.createdAt),
+  index("audit_log_patient_idx").on(table.patientId, table.createdAt),
+  index("audit_log_created_idx").on(table.createdAt.desc()),
+]);
+
+/**
+ * Every sign-in attempt, successful or not: when, which e-mail, from which
+ * address and browser. Used to lock an account (or address) for a while
+ * after repeated wrong passwords, and as a sign-in history for admins.
+ * `emailKey` is the typed e-mail, trimmed and lower-cased (it may be one
+ * that does not exist). Rows older than 90 days are removed as new ones are
+ * added.
+ */
+export const loginAttempts = pgTable("login_attempts", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  emailKey: text("email_key").notNull(),
+  ip: text("ip").notNull().default(""),
+  userAgent: text("user_agent").notNull().default(""),
+  success: boolean("success").notNull(),
+  /** "ok" | "wrong_password" | "unknown_email" | "locked" */
+  outcome: text("outcome").notNull().default(""),
+}, (table) => [
+  index("login_attempts_email_idx").on(table.emailKey, table.createdAt),
+  index("login_attempts_ip_idx").on(table.ip, table.createdAt),
+]);
 
 export type AuditLogRow = typeof auditLog.$inferSelect;
 

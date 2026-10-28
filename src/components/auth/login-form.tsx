@@ -54,7 +54,11 @@ export function LoginForm({
 
       if (!result || result.error) {
         setStatus("idle");
-        setFormError("Invalid email or password.");
+        setFormError(
+          result?.code === "locked"
+            ? "Too many unsuccessful attempts. Please wait 15 minutes and try again, or ask your administrator to help."
+            : "Invalid email or password.",
+        );
         return;
       }
 

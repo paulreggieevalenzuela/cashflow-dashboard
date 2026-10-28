@@ -4,22 +4,20 @@ import { useRouter } from "next/navigation";
 import { useState, type ReactNode } from "react";
 import { setSalesTargetAction } from "@/app/cashflow/targets-actions";
 import {
-  expenseCategoryBreakdown,
   GRANULARITY_OPTIONS,
-  patientStats,
-  paymentMethodBreakdown,
   periodOverPeriodChange,
-  topProcedures,
+  type ExpenseCategoryStat,
   type Granularity,
+  type PatientStats,
+  type PaymentStat,
   type PeriodPoint,
+  type ProcedureStat,
 } from "@/lib/cashflow/dashboard-metrics";
 import {
   BRAND_LINE_COLOR,
   CATEGORICAL_PALETTE,
   CHART_OTHER_COLOR,
 } from "@/lib/cashflow/chart-palette";
-import type { Expense } from "@/lib/cashflow/expense-schema";
-import type { CashflowTransaction } from "@/lib/cashflow/schema";
 import { DonutChart, DonutLegend, GroupedBarChart, TrendLineChart, type DonutSegment } from "./charts";
 
 const currencyFormatter = new Intl.NumberFormat("en-PH", {
@@ -219,8 +217,13 @@ export function IncomeExpenseCard({
  * the `expenses` table and the header's "Add Expenses" button), same
  * top-5-plus-"Other" pattern as PaymentMethodsCard.
  */
-export function ExpenseBreakdownCard({ expenses }: { expenses: Expense[] }) {
-  const all = expenseCategoryBreakdown(expenses);
+export function ExpenseBreakdownCard({
+  categories,
+}: {
+  /** This period's expenses by category, largest first (worked out on the server). */
+  categories: ExpenseCategoryStat[];
+}) {
+  const all = categories;
   const top = all.slice(0, 5);
   const other = all.slice(5);
   const otherTotal = other.reduce((sum, item) => sum + item.total, 0);
@@ -267,14 +270,15 @@ export function ExpenseBreakdownCard({ expenses }: { expenses: Expense[] }) {
  * `granularity` is only used here for the "this X" copy.
  */
 export function PopularProceduresCard({
-  transactions,
+  procedures,
   granularity,
 }: {
-  transactions: CashflowTransaction[];
+  /** This period's top procedures (worked out on the server). */
+  procedures: { top: ProcedureStat[]; otherCount: number; otherRevenue: number };
   granularity: Granularity;
 }) {
   const option = GRANULARITY_OPTIONS.find((o) => o.value === granularity) ?? GRANULARITY_OPTIONS[0];
-  const { top, otherCount } = topProcedures(transactions, 5);
+  const { top, otherCount } = procedures;
   const maxCount = Math.max(...top.map((item) => item.count), 1);
 
   return (
@@ -320,14 +324,15 @@ export function PopularProceduresCard({
  * picker's current period (see `filterTransactionsToCurrentPeriod`).
  */
 export function PaymentMethodsCard({
-  transactions,
+  payments,
   granularity,
 }: {
-  transactions: CashflowTransaction[];
+  /** This period's revenue by payment method, largest first (worked out on the server). */
+  payments: PaymentStat[];
   granularity: Granularity;
 }) {
   const option = GRANULARITY_OPTIONS.find((o) => o.value === granularity) ?? GRANULARITY_OPTIONS[0];
-  const all = paymentMethodBreakdown(transactions);
+  const all = payments;
   const top = all.slice(0, 5);
   const other = all.slice(5);
   const otherTotal = other.reduce((sum, item) => sum + item.total, 0);
@@ -378,14 +383,14 @@ export function PaymentMethodsCard({
  * breakdown itself, from `granularity`.
  */
 export function PatientsCard({
-  transactions,
+  stats,
   granularity,
 }: {
-  transactions: CashflowTransaction[];
+  /** This period's patient figures plus the all-time total (worked out on the server). */
+  stats: PatientStats;
   granularity: Granularity;
 }) {
   const option = GRANULARITY_OPTIONS.find((o) => o.value === granularity) ?? GRANULARITY_OPTIONS[0];
-  const stats = patientStats(transactions, granularity);
   const newPct = stats.periodUnique === 0 ? 0 : (stats.newInPeriod / stats.periodUnique) * 100;
   const returningPct = 100 - newPct;
   const periodLabel = option.periodNoun === "month" ? "This month" : `This ${option.periodNoun}`;

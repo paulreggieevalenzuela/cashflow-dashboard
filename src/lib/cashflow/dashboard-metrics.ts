@@ -70,7 +70,7 @@ const GRANULARITY_CONFIG: Record<
   annual: { periodsBack: 5, monthsPerPeriod: 12 },
 };
 
-function periodKeyAndLabel(
+export function periodKeyAndLabel(
   year: number,
   monthIndex0: number,
   granularity: Granularity,
@@ -144,7 +144,7 @@ export function currentPeriodKeys(referenceDate = new Date()): {
  * transaction, amount on an expense) so both stay byte-for-byte identical
  * in how they walk periods instead of drifting apart as two copies.
  */
-function trailingPeriodTotals<T>(
+export function trailingPeriodTotals<T>(
   items: T[],
   getDate: (item: T) => string,
   getAmount: (item: T) => number,

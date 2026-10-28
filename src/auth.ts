@@ -1,6 +1,11 @@
-import NextAuth from "next-auth";
+import NextAuth, { CredentialsSignin } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
-import { verifyPassword } from "@/lib/auth/password";
+import { hashPassword, verifyPassword } from "@/lib/auth/password";
+import {
+  checkLoginLock,
+  normalizeEmailKey,
+  recordLoginAttempt,
+} from "@/lib/db/login-attempts";
 import { getUserByEmail, getUserById } from "@/lib/db/users";
 import {
   ABSOLUTE_LIMIT_MS,
@@ -8,6 +13,24 @@ import {
   isExpired,
   nextActiveUntil,
 } from "@/lib/auth/session-policy";
+
+/** Too many wrong passwords: the sign-in page shows its own message. */
+class AccountLockedError extends CredentialsSignin {
+  code = "locked";
+}
+
+// A real hash to compare against when the e-mail does not exist, so an
+// unknown e-mail takes as long to refuse as a wrong password does.
+let decoyHash: Promise<string> | undefined;
+
+function clientAddress(request: Request | undefined): string {
+  const forwarded = request?.headers.get("x-forwarded-for");
+  return (
+    forwarded?.split(",")[0]?.trim() ||
+    request?.headers.get("x-real-ip") ||
+    ""
+  );
+}
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   // maxAge only bounds the cookie itself. The real rules (30 minutes idle,
@@ -23,7 +46,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         email: { label: "Email", type: "text" },
         password: { label: "Password", type: "password" },
       },
-      async authorize(credentials) {
+      async authorize(credentials, request) {
         const email = typeof credentials?.email === "string" ? credentials.email : "";
         const password = typeof credentials?.password === "string" ? credentials.password : "";
 
@@ -31,15 +54,31 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           return null;
         }
 
+        const emailKey = normalizeEmailKey(email);
+        const ip = clientAddress(request);
+        const userAgent = request?.headers.get("user-agent") ?? "";
+
+        // Locked after repeated wrong passwords (see login-throttle.ts).
+        const lock = await checkLoginLock({ emailKey, ip });
+        if (lock.locked) {
+          await recordLoginAttempt({ emailKey, ip, userAgent, outcome: "locked" });
+          throw new AccountLockedError();
+        }
+
         const user = await getUserByEmail(email);
         if (!user) {
+          decoyHash ??= hashPassword("decoy-password-for-timing");
+          await verifyPassword(password, await decoyHash);
+          await recordLoginAttempt({ emailKey, ip, userAgent, outcome: "unknown_email" });
           return null;
         }
 
         const isValid = await verifyPassword(password, user.passwordHash);
         if (!isValid) {
+          await recordLoginAttempt({ emailKey, ip, userAgent, outcome: "wrong_password" });
           return null;
         }
+        await recordLoginAttempt({ emailKey, ip, userAgent, outcome: "ok" });
 
         return {
           id: user.id,

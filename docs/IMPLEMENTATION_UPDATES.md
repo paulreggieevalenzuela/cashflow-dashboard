@@ -1,8 +1,10 @@
 # Implementation Updates — Transactions, Patients, Invoices & Expenses
 
 **Project:** Cashflow application — ADT Dental Clinic
-**Date:** October 11, 2026 (updated October 26)
+**Date:** October 11, 2026 (updated October 28)
 **Follows:** `TRANSACTION_EXPENSE_UPDATES_PLAN.md` (the plan written before implementation)
+**Status (October 28, security, privacy, performance and reliability):** items 3, 4, 5, 6 and 8 of the optimization review are built. **(3)** public **Privacy Policy, Terms of Use, Help & FAQ, Contact** and a printable **Patient privacy notice**, linked from the sign-in page and the app footer (clinic details are highlighted placeholders to fill in). **(4)** sign-in **lock-out** (5 wrong passwords for an e-mail, or 20 from one address, in 15 minutes, locks sign-in for the rest of the window), a sign-in log, and **security headers** (Content-Security-Policy, frame, content-type, referrer, permissions, HSTS in production, no-index); `middleware.ts` renamed to the Next 16 name `proxy.ts`. **(5)** the 9 database **indexes** are declared in the schema and written as SQL. **(6)** the **Overview** now gets monthly totals worked out in the database (a few hundred numbers) instead of every transaction, and non-admin users see only their own branch. **(8)** friendly **error / not-found / loading** screens, a **/api/health** check, a server-error log line with a reference code, a **backup script** and a **runbook**. **Two SQL files must be run first:** `2026-10-performance-indexes.sql` and `2026-10-login-attempts.sql` (steps 18 and 19; the app keeps working until you do, the lock-out simply stays off). Type check, lint and a production build are clean. Section 10 lists the page-speed findings (LCP / INP) in priority order and everything from the review that is **not** done yet.
+**Status (October 26, new ADT logo):** the app now uses the new ADT Dental Clinic logo with the yellow set to exactly **#FFC815** (the supplied image already used that value; it was cleaned to a transparent background with pure black and #FFC815). Replaced: the wordmark (header, login, home page), the tooth mark, the browser-tab icon, the Apple touch icon and the favicon (16, 32 and 48 px). On the login page the logo was stretched sideways by the page layout; fixed (slightly larger, left-aligned). The rest of the app's colours (the amber buttons and links) were **not** changed. Checked on the login page in the browser; the header (white chip) uses the same file but was not opened.
 **Status (October 26, HMO summary and patient HMO details):** the **Day end** report has a new **HMO summary**: for the day's visits billed to an HMO it shows, per HMO (Intellicare, Maxicare...), the patients, visits, **billed** amount, amount **received** and **still to collect**, then one line per patient with their **HMO account number** and **LOA number**. It is also in the Excel and CSV downloads. The **patient profile** now holds **HMO company**, **HMO account number** and **birthday** (Add / Edit patient, shown under the patient's name). **Run `scripts/sql/2026-10-patient-hmo-details.sql` first** (step 17): the patient pages read the new columns. Type check and lint are clean; the totals and birthday rules were run through automated checks. In the browser: the Day end HMO summary (Oct 22: ₱4,325.00 over 8 visits, matching the Transactions list) and its CSV were checked and the Add patient form was opened; **saving a patient with the new fields and the account numbers on Day end could not be tried until the SQL is run.**
 **Status (October 22, default branch from the user's profile):** the **Transactions** list now opens on the signed-in user's own branch, so each person sees their branch's visits right away. The **Branch** filter is filled in automatically from the user (chip: "Branch: Marikina (your branch)"), and **All branches** is a real choice that shows everything. Every user can change their own branch on **My profile → Branch** (saves by itself); an admin can still change anyone's branch on the Users page. A user with no branch sees all branches, as before. No SQL is needed. Type check and lint are clean. Checked in the browser with the test account: the profile select saved and stayed after a reload, the list opened on "Branch: Marikina (your branch)" with 35 visits, `?branch=all` showed all visits with no branch chip, and the test account was put back to "No branch".
 **Status (October 22, transaction filters and edit form):** the Transactions **Filters** pop-up has a **Branch** filter (all branches, each branch, or "No branch"), shown as a removable chip like the others. In **Edit transaction**, **Payment method** is now at the top, in the same "Payment method & invoice" section as Add transaction, and saving it changes the method on the whole visit. The **Edit pop-up opened from a row's Actions menu now has the same Payments section** as the one opened from the visit page (it was missing there). Type check and lint are clean. Checked in the browser (signed in with the test account, nothing saved): the Branch filter (Marikina 33 visits, Cainta 0, chip and address update) and the row Edit pop-up (payment method selected at the top, Payments section present). Saving a changed payment method was **not** tried.
@@ -40,9 +42,35 @@
 
 17. **Run `scripts/sql/2026-10-patient-hmo-details.sql`** (same place, safe to repeat) **before starting the updated app.** It adds three text columns to the patients table (`birth_date`, `hmo_company`, `hmo_account_number`, blank by default). Until it is run the Patients pages show "This page couldn't load"; the Day end page still opens but shows "Not on file" for every account number.
 
+18. **Run `scripts/sql/2026-10-performance-indexes.sql`** (same place, safe to repeat; `create index if not exists`). It adds 9 indexes (invoices by visit date and branch, transactions by date, branch, visit and dentist, payments by date, expenses by date and branch). Nothing changes on screen; Day end, the Transactions list and the Overview get faster as the data grows. The same indexes are declared in `schema.ts` so that `yarn db:push` does not drop them.
+19. **Run `scripts/sql/2026-10-login-attempts.sql`** (same place, safe to repeat) to switch on the sign-in lock-out and sign-in log. It creates one table, `login_attempts`. Until it is run, sign-in works exactly as before and nothing is recorded (the app prints one warning and "fails open" rather than locking everybody out).
+20. **Upgrade Next.js** (review item 1, still open): the installed 16.3.4 has known serious advisories fixed from 16.4.1. On your machine: `yarn add next@16.4.3 eslint-config-next@16.4.3 drizzle-orm@latest`, `yarn build`, then click through login, Transactions, Queue, Day end and Patients.
+21. **Fill in the clinic details** in `src/lib/cashflow/legal.ts` (registered name, address, phone, support e-mail and hours, Data Protection Officer name / e-mail / phone). Every highlighted `[TO BE CONFIRMED]` on the public pages comes from this one file. When the clinic's legal adviser has approved the text, set `LEGAL_TEXT_REVIEWED = true` to remove the "draft" banner.
+
 ---
 
 ## 2. What the system does now
+
+#### October 28: security, privacy pages, speed and reliability (review items 3, 4, 5, 6, 8)
+
+**3. Privacy and help pages (public, no sign-in).** New pages at `/privacy` (Privacy Policy under the Data Privacy Act, RA 10173: who is responsible, what is collected for patients and staff, why, who sees it, protection, retention, rights, cookies), `/terms` (Terms of Use for staff: confidentiality, accurate records, account security, monitoring), `/help` (Help & FAQ, 6 groups and 21 questions: signing in, daily work, HMO, reports, mistakes, privacy; open-and-close answers), `/contact` (support and Data Protection Officer details, breach reporting) and `/privacy/patient-notice` (one printable page with a signature line for the front desk). A link row (Privacy Policy · Terms of Use · Help & FAQ · Contact) sits under the sign-in card and at the foot of every app page, with a one-line cookie note on the sign-in page (one essential sign-in cookie, no tracking). The pages are marked **draft** and the clinic's details show as highlighted `[TO BE CONFIRMED]` until `src/lib/cashflow/legal.ts` is filled in; a legal adviser should approve the wording before it is relied on (this is not legal advice). Not built: staff accepting the terms at first sign-in, and a Help link inside the account menu.
+
+**4. Sign-in lock-out and security headers.**
+- **Lock-out:** 5 wrong passwords for one e-mail in 15 minutes, or 20 failures from one network address, lock sign-in for the rest of that window; attempts made while locked are not counted, and a good sign-in clears the e-mail's count. The sign-in page says "Too many unsuccessful attempts. Please wait 15 minutes…". An unknown e-mail takes as long to refuse as a wrong password (no way to guess which e-mails exist). Every attempt (ok, wrong password, unknown e-mail, locked) is written to `login_attempts` with time, address and browser; rows older than 90 days are removed automatically. There is no screen to read the log yet (it is in the table; a "Sign-in history" list on the Users page is a small addition).
+- **Headers** (`next.config.ts`): Content-Security-Policy (own pages only; no outside scripts, no framing, forms only to the app), `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy`, `Permissions-Policy` (camera, microphone, location, payment, USB off), `Strict-Transport-Security` in production only, and `noindex` plus a `robots.txt` that disallows everything (the app is private). The attachment viewer route is excluded from the policy so PDFs still open. Checked in the browser: the headers are present on app pages and there are no policy violations in the console on Transactions. The policy still allows inline scripts (a Next.js requirement without a per-request token); a stricter token-based policy is listed in section 10.
+- **`middleware.ts` → `proxy.ts`:** only the file name changed (Next 16's name; the deprecation warning is gone). Redirects checked: signed-in people on `/login` go to the dashboard; app pages still require sign-in.
+
+**5. Database indexes.** The 9 indexes from the review are declared in `schema.ts` and written as `scripts/sql/2026-10-performance-indexes.sql` (step 18). They are plain indexes (some on a date, some partial) and change no data.
+
+**6. Overview no longer loads everything.** `getOverviewData` (`src/lib/db/overview.ts`) runs 9 small queries in parallel that add up in the database (monthly totals, payment types, procedures, expenses by category, patients and so on) and the page sends only those totals; the screen's four views (monthly, quarterly, half-yearly, yearly) are worked out from them by a pure function (`overview-data.ts`) that was checked against the old calculation on the same data (same figures). **Branch rule:** admins, and users with no branch, see all branches; everyone else sees only their own branch and no targets, so a staff member's browser no longer receives other branches' figures. The whole page measured about 62 KB in the browser and no longer grows with every visit. In the browser, the Overview shows the same numbers as before; with no expenses in the database today the expense card is empty, as it was.
+
+**8. Errors, health and backups.**
+- **Screens:** `error.tsx` for the public pages and, inside the app, for each page (the menu stays, a **Try again** button, and a **Reference** code the user can quote); `global-error.tsx` for the rare case when the whole layout fails; `not-found.tsx` (404) and a not-found screen inside the app; and a **loading skeleton** (`cashflow/loading.tsx`) that appears the moment a menu item is clicked, so navigation gives instant feedback.
+- **`/api/health`:** answers `{"status":"ok","database":"up"}` (HTTP 200) or 503 when the database does not answer; no data, no sign-in needed; point an uptime monitor at it.
+- **Server error log:** `src/instrumentation.ts` writes one JSON line per server error (message, page, reference code) to the host's log; the same code is shown on the error screen. Sentry steps are in the runbook (a package install, so it is done on your machine).
+- **Backups:** `scripts/backup-db.sh` (compressed `pg_dump`, keeps the newest 30, never prints the connection string) and `docs/RUNBOOK.md` (emergency steps and paper fallback, backup layers incl. Neon's restore window, a **restore test** to do once now and quarterly, monitoring, breach steps with the 72-hour rule, releases, routine calendar, secrets rotation).
+
+**Checks.** Type check and lint clean on the whole project; a **production build** (done in my workspace because your Mac's sandbox cannot build) succeeds with all 28 pages; the lock rules and the Overview figures were run through automated checks earlier in this batch; in the browser, `/privacy`, `/help`, a wrong address (404 page), `/api/health` and the headers were opened and worked. **Not tested:** the lock-out end to end (needs the login SQL), saving through the real database from a production build, and the **Try again** error screens (they need a failure to appear).
 
 #### October 26: HMO summary on Day end, and HMO details on the patient profile
 
@@ -516,6 +544,12 @@ The old procedure list is **deleted** and replaced by the **Cash Paying** column
 
 | File | Purpose |
 |---|---|
+| `src/lib/cashflow/legal.ts`, `src/components/legal/legal-shell.tsx`, `src/app/privacy/page.tsx`, `src/app/privacy/patient-notice/page.tsx`, `src/app/terms/page.tsx`, `src/app/help/page.tsx`, `src/app/contact/page.tsx` | October 28: the clinic details (placeholders), the shared page frame and link row, and the five public pages. |
+| `src/lib/auth/login-throttle.ts`, `src/lib/db/login-attempts.ts`, `scripts/sql/2026-10-login-attempts.sql` | October 28: the lock-out rules (pure), the sign-in log reads / writes and the SQL for its table. |
+| `src/lib/cashflow/overview-data.ts`, `src/lib/db/overview.ts` | October 28: the Overview's database totals and the pure function that builds the four period views. |
+| `scripts/sql/2026-10-performance-indexes.sql`, `src/app/robots.ts` | October 28: the 9 indexes; `robots.txt` (no search-engine indexing). |
+| `src/app/error.tsx`, `src/app/global-error.tsx`, `src/app/not-found.tsx`, `src/app/cashflow/error.tsx`, `src/app/cashflow/not-found.tsx`, `src/app/cashflow/loading.tsx`, `src/app/api/health/route.ts`, `src/instrumentation.ts` | October 28: error, not-found and loading screens, the health check and the server-error log line. |
+| `scripts/backup-db.sh`, `docs/RUNBOOK.md`, `docs/OPTIMIZATION_SECURITY_REVIEW.md` (+ PDF) | October 28: backup script, runbook and the review document. |
 | `scripts/sql/2026-10-patient-hmo-details.sql`, `src/lib/cashflow/patient-hmo.ts` | October 26: the SQL that adds the patient's birthday, HMO company and HMO account number, and the pure rules for them (birthday check, age, formatting, text cleaning). |
 | `src/components/cashflow/branch-select.tsx` | October 22: the "My branch" select on My profile that saves by itself. |
 | `src/components/cashflow/remove-from-queue-button.tsx` | October 20: the red **Remove** link and confirmation pop-up on Arrived / On-going Queue cards. |
@@ -574,6 +608,8 @@ The old procedure list is **deleted** and replaced by the **Cash Paying** column
 
 | File | What changed |
 |---|---|
+| *October 28:* `src/proxy.ts` (was `src/middleware.ts`), `src/auth.ts`, `src/components/auth/login-form.tsx`, `next.config.ts`, `src/lib/db/schema.ts`, `src/app/cashflow/page.tsx`, `src/components/cashflow/cashflow-overview.tsx`, `src/components/cashflow/dashboard/dashboard-cards.tsx`, `src/lib/cashflow/dashboard-metrics.ts`, `src/components/auth/auth-layout.tsx`, `src/app/cashflow/layout.tsx` | Renamed to the Next 16 proxy name; sign-in records and checks the lock; the sign-in page's lock message; security headers; index and `login_attempts` declarations; the Overview reads database totals and is scoped by branch; the cards take totals instead of rows; link row under the sign-in card and in the app footer. |
+| *October 26 (logo):* `public/logo-wordmark.png`, `public/logo-mark.png`, `src/app/icon.png`, `src/app/apple-icon.png`, `src/app/favicon.ico`, `src/components/auth/auth-layout.tsx` | New logo files (yellow #FFC815, transparent background) and the login page's logo size / alignment. |
 | *October 26 (HMO summary, patient HMO details):* `src/lib/db/schema.ts`, `src/lib/db/patient-admin.ts`, `src/app/cashflow/patients/actions.ts`, `src/components/cashflow/patient-form-modal.tsx`, `src/app/cashflow/patients/[id]/page.tsx`, `src/lib/cashflow/day-end.ts`, `src/lib/db/day-end.ts`, `src/app/cashflow/day-end/page.tsx` | Three patient columns (birthday, HMO company, account number) in the form, profile, search and merge; the Day end HMO summary, its lines and its place in the Excel / CSV. |
 | *October 22 (branch from the profile):* `src/app/cashflow/transactions/page.tsx`, `src/lib/cashflow/transactions-query.ts`, `src/components/cashflow/transactions-toolbar.tsx`, `transactions-list.tsx`, `src/app/cashflow/profile/actions.ts`, `src/app/cashflow/profile/page.tsx` | The list defaults to the user's branch, "All branches" is an explicit `all` value, chip says "(your branch)", and My profile has a Branch card with `updateMyBranchAction`. |
 | *October 20 (remove from Queue):* `src/lib/cashflow/visit-status.ts`, `src/lib/db/visit-status.ts`, `src/app/cashflow/transactions/status-actions.ts`, `src/components/cashflow/today-board.tsx` | The removal rule, the database read it needs, the server action (with audit), and the Remove link on Arrived / On-going cards. |
@@ -660,6 +696,8 @@ The old procedure list is **deleted** and replaced by the **Cash Paying** column
 
 ## 8. What was checked, and what to test
 
+**Test (October 28 batch):** (1) Run the two SQL files (steps 18 and 19). (2) Sign out, open `/login`: the Privacy Policy · Terms · Help · Contact links and the cookie note are under the card; open each, expand a few FAQ answers, print `/privacy/patient-notice` (it should fit one page). (3) Sign in with a **wrong password 5 times** for one e-mail: the 6th attempt (even with the right password) shows "Too many unsuccessful attempts. Please wait 15 minutes…"; after 15 minutes, or with another account, sign-in works; a successful sign-in clears the count. In the Neon SQL editor `select * from login_attempts order by created_at desc limit 20;` shows the attempts. (4) Open `/does-not-exist`: the 404 page. Open `/api/health`: `ok`. (5) As a **staff** user with a branch, open Overview: only that branch's figures and no targets; as admin: all branches. Compare a month's revenue with the Transactions list. (6) In the browser's developer tools (Console) look for "Content Security Policy" errors on Transactions, Queue, Day end, Patients and an invoice with an attached PDF: there should be none. (7) Run `./scripts/backup-db.sh ~/Backups/cashflow` and do the **restore test** in `docs/RUNBOOK.md`.
+
 **Test (HMO summary and patient HMO details, October 26):** (1) Run the SQL. (2) Patients → Add patient (or Edit patient): fill Birthday, HMO company (pick Maxicare) and HMO account number, Save: the patient page shows them under the name, with the age. (3) Try a birthday in the future: refused. (4) Add a transaction for that patient with payment method **Maxicare**, then open **Day end** for that date: the HMO summary lists the patient under Maxicare with the account number you typed and "LOA pending" (or the LOA number), billed = the visit total, received 0, to collect = billed. (5) Record a payment on the visit: Received and To collect update. (6) Download Excel and CSV: both contain the HMO summary and patient lines. (7) Patients search: type the account number: the patient is found.
 
 **Test (branch from the profile, October 22):** (1) My profile → Branch → pick your branch: "Saved." appears. (2) Open Transactions: the chip reads "Branch: <your branch> (your branch)" and only that branch's visits show. (3) Filters → Branch → *All branches*: every visit shows and the chip goes; the address has `?branch=all`. (4) Clear all / Reset: back to your branch. (5) Set the profile to *No branch (show all branches)*: Transactions shows everything with no chip. (6) As admin, change another user's branch on the Users page and sign in as that user: the list opens on that branch.
@@ -710,6 +748,8 @@ The old procedure list is **deleted** and replaced by the **Cash Paying** column
 
 ## 9. Not done yet (deferred)
 
+**See section 10** for the full, prioritized list of what the October review found and what is still open (framework upgrade, change-password, separate development database, uploads out of the database, caching, stricter CSP, tests) and for the page-speed (LCP / INP) findings.
+
 **From October 19, login expiry:** sign in again inside the pop-up without losing a half-filled form · one shared message for saves refused with "You must be signed in" · limit on failed password attempts · sign-in / sign-out in the audit trail · a longer limit for the Queue screen if the clinic asks.
 
 **From October 19:** screenshot-based mapping of the sheet to the price list should be confirmed by Kim (see the assumptions above) · commission is still saved per line at save time, so a tier change needs `yarn db:backfill-links` for older visits.
@@ -720,3 +760,70 @@ The old procedure list is **deleted** and replaced by the **Cash Paying** column
 
 
 Showing the last invoice number used as a hint · a "missing invoice no." filter · changing the Visit ID format · Head Office branch · switching the dashboard's patient card to use the patients table · importing the expenses spreadsheet.
+
+---
+
+## 10. What is still open, and page-speed priorities (LCP, INP)
+
+### 10.1 Page-speed findings
+
+**Targets** (Google's "good" thresholds): **LCP** (time until the main content is shown) 2.5 s or less, **INP** (time from a tap or key press until the screen responds) 200 ms or less, **CLS** (layout jumping) 0.1 or less.
+
+**What was measured, and how.** (a) The **production build** was built in my workspace and the public pages were loaded in a headless browser set to a phone (390 px wide), a slow-4G connection and a CPU four times slower than normal. (b) The **signed-in pages** were timed from the built-in browser against your running development copy and the real database; development mode is slower than production, so treat these as *relative*, not absolute. (c) **INP could not be measured** this way (it needs real taps on a real device); the INP items below come from reading the code.
+
+| Page (phone, slow 4G, 4× slower CPU) | First paint | LCP | Layout jump | Blocked time on the main thread | Downloaded |
+|---|---|---|---|---|---|
+| Sign in | 1.25 s | **1.25 s** | 0 | about 0.6 s | 223 KB |
+| Help & FAQ | 0.87 s | **0.87 s** | 0 | about 0.3 s | 212 KB |
+| Home | 0.73 s | **0.73 s** | 0 | about 0.2 s | 210 KB |
+
+All three are within the 2.5 s target and none jump (CLS 0). The largest item on each is a block of text, not the logo, so the 53 KB logo image does not slow the first view. The sign-in page's wait is mostly the 4× slower processor running about 220 KB of scripts, not the network.
+
+| Signed-in page (development copy, real database) | Wait for the first byte | Until fully loaded | Page data |
+|---|---|---|---|
+| Overview | 0.49 s | 0.85 s | 62 KB |
+| Transactions | 0.50 s | **1.9 s** | 138 KB |
+| Queue | 0.64 s | 0.93 s | 125 KB |
+| Patients | 0.73 s | 0.73 s | 116 KB |
+| Day end | 0.43 s | **3.1 s** | 171 KB |
+| Expenses | 0.40 s | 0.40 s | 39 KB |
+| Performance | 0.53 s | 0.53 s | 50 KB |
+| Commissions | 0.46 s | 0.46 s | 186 KB |
+
+**What the numbers say.** The public pages are fast. For the signed-in pages, the time is spent **waiting for the database**, one network trip per query (about 0.1 s each from here), not drawing the page. Even a small page (Expenses) takes 0.4 s because the sign-in check, the theme lookup and the Queue badge count each cost a trip before any page query. Day end and Transactions take 2–3 s because they run their queries **one after another** (for example Day end: sign-in check, branches, the user's branch, then the report with several queries, then the HMO summary; Transactions: the user, five parallel lists, then three more steps for invoice totals). In the browser the scripts for an app page are about 220 KB compressed shared by every page (Next.js, React, the menu, the session timer), with Transactions about 65 KB more because of the add-transaction form.
+
+### 10.2 Priorities (what to do, in order)
+
+| # | Change | Helps | Effort | Why / how |
+|---|---|---|---|---|
+| 1 | **Put the app and the database in the same region** (Neon region nearest the host; for a Philippine clinic the Singapore region for both) and **turn off Neon auto-suspend** on a paid plan | LCP on every signed-in page | S | Every query is a network trip; moving them next to each other typically cuts each trip from about 100 ms to a few ms, the single biggest gain. Auto-suspend makes the first request after idle 1–3 s. |
+| 2 | **Stop running queries in a row** on Day end and Transactions: start independent lookups together (`Promise.all`), use the branch already in the sign-in token instead of re-reading the user, and combine the three invoice-total queries | LCP (Day end 3.1 s, Transactions 1.9 s) | S–M | Pure code change, no new feature. Aim: Day end and Transactions under 1 s in the development copy. |
+| 3 | **Remove the theme lookup from the root layout.** It runs a database query for every page and makes even the public pages "dynamic" (built on every request). Keep the theme in a cookie (or apply it only inside the app layout) | LCP everywhere; public pages become static and cacheable | S | Saves one trip per navigation. Needs a small change to the theme toggle. |
+| 4 | **Do not count open visits on every navigation.** Keep the polled badge only, or cache the count for 10–15 s; make the Queue's 30-second refresh pause when the tab is hidden | LCP, idle database load | S | The count runs in the app layout on every click and again from the menu's timer. |
+| 5 | **Cache reference lists** (procedures, dentists, branches, discount types) with a few minutes' lifetime and refresh them when an admin edits them | LCP, page data size | M | They are re-read on almost every page. Do this *after* the Next upgrade (several advisories concern the cache features). |
+| 6 | **Load the big forms only when opened** (`next/dynamic` for Add / Edit transaction, Add expense, Add patient) and split `transaction-form.tsx` (about 1,800 lines) | **INP**, first load of Transactions (about 65 KB) | M | Opening and typing in the form currently waits on a large component being ready and re-rendering. |
+| 7 | **Keep typing and filtering light** (search boxes and filters: wait a moment before querying, mark list updates as "not urgent" with `useDeferredValue`; do not re-render every row on each key) | **INP** | M | Applies to the patient search, procedure picker and the Transactions toolbar. |
+| 8 | **Show things as they arrive** (Suspense) for slow sections such as the Day end HMO summary and the Overview cards, so the top of the page appears first | LCP | M | The loading skeleton added in this batch already gives instant feedback on every click. |
+| 9 | **Measure for real**: add `web-vitals` or the host's speed-insights tool and send LCP / INP / CLS from the clinic's own computers; check again after items 1–4 | all | S | Needs a package, so it is run on your machine. Without field data, INP is a guess. |
+| 10 | **Make the logo smaller**: re-export the wordmark at about 2× its display size (about 300 px wide) or as SVG / WebP (53 KB → under 10 KB) | minor | S | Not on the LCP path today; saves bytes on slow phones. |
+| 11 | **After the Next.js upgrade**, check the build output again | all | S | The upgrade (below) also carries speed fixes. |
+
+Items 1 to 4 are the "feels faster" set (small, safe, and they act on what was measured). Items 6 and 7 are the INP set.
+
+### 10.3 Everything from the review that is not done yet
+
+| Review item | Status | What remains |
+|---|---|---|
+| 1. Upgrade Next.js and Drizzle | **Open** (needs your machine) | The scan found 3 critical and 19 high problems; fixed from Next 16.4.1 (latest 16.4.3), Drizzle 0.45.2+ (latest 0.45.4). Run step 20, then `yarn build`. Add Dependabot or Renovate. |
+| 2. Change password, real forgot-password | **Open** | No way for a user to change the password an admin gave; the forgot-password page only pretends to send an e-mail (until built, change its text to "ask your admin"). Needs: Profile → Change password, forced change at first sign-in, admin **Reset password** and **Disable user**, a longer minimum and common-password check; later a real e-mail reset and optional two-step verification for admins. |
+| 3. Privacy and help pages | **Built**, needs the clinic | Fill in `legal.ts`, have the text reviewed, appoint the Data Protection Officer, check NPC registration (1,000 or more patients), write the breach procedure and retention rule. Not built: terms acceptance at first sign-in, a Help link in the account menu. |
+| 4. Sign-in lock and headers | **Built** | Not built: a Sign-in history list on the Users page, sign-in / sign-out in the audit trail, a stricter token-based CSP (today it allows inline scripts), lock-out by address behind a proxy needs the host to pass the real address (check on the live host). |
+| 5. Indexes | **Built**, run the SQL | Run step 18; after a month look at the slowest queries in Neon. |
+| 6. Overview | **Built** | Other pages that load wide lists (Performance, Commissions report) were not changed. |
+| 7. Separate development database | **Open, important** | The developer's copy talks to the live Neon database (test visits were saved in it). Create a Neon branch for development and use its connection string locally. |
+| 8. Backups, monitoring, errors | **Built**, needs set-up | Run the backup on a schedule and do the restore test; create the uptime monitor on `/api/health`; install Sentry (steps in the runbook). |
+| 9. Uploads out of the database | **Open** | Files are base64 text in Postgres. Move to object storage; also check the attachment's branch before showing it (today any signed-in user with the link can open it). |
+| 10. FAQ / Help | **Built** (as part of item 3) | A short video or one-page quick-start per role is not made. |
+| Open from earlier | **Open (yours)** | Rotate the Neon password and `AUTH_SECRET` (they were shared in chat); delete the test visit "Gozun, Daniel Leon Petronio"; delete or strengthen the shared test superuser account before real use on the internet; run the pending SQL files (patient HMO details, step 17; indexes, step 18; login attempts, step 19). |
+
+**Other gaps noted in the review and not started:** automated tests and a build check on every change (CI); soft-delete with a restore window (deleting a visit is permanent today); month-end closing; a front-desk / owner role split; patient recall messages (SMS / e-mail); official-receipt numbering and BIR rules (check with the accountant); data export for the accountant; a written paper fallback for internet outages; data-subject request procedure; vendor agreements with Neon and the host.

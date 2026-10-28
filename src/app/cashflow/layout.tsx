@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { auth } from "@/auth";
 import { SessionGuard } from "@/components/auth/session-guard";
+import { LegalLinks } from "@/components/legal/legal-shell";
 import { CashflowNav } from "@/components/cashflow/cashflow-nav";
 import { countOpenVisits } from "@/lib/db/visit-status";
 import { RouteFocusManager } from "@/components/navigation/route-focus-manager";
@@ -53,6 +54,9 @@ export default async function CashflowLayout({ children }: { children: ReactNode
       >
         {children}
       </main>
+      <footer className="mx-auto max-w-6xl px-4 pb-8 sm:px-6 print:hidden">
+        <LegalLinks />
+      </footer>
       <RouteFocusManager />
       {/* 30-minute login: quiet extension while in use, the 5-minute
           "Stay signed in" pop-up, and sign-out on expiry. */}

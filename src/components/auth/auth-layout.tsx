@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { ToothIcon } from "@/components/icons/tooth-icon";
+import { LegalLinks } from "@/components/legal/legal-shell";
 
 type AuthLayoutProps = {
   heroEyebrow?: string;
@@ -48,7 +49,7 @@ export function AuthLayout({
         <img
           src="/logo-wordmark.png"
           alt="ADT Dental Clinic"
-          className="h-11 w-auto"
+          className="h-14 w-auto self-start"
         />
 
         <div className="max-w-md">
@@ -143,6 +144,14 @@ export function AuthLayout({
 
           <div className="rounded-2xl border border-white/60 bg-white/90 p-6 shadow-xl shadow-amber-900/5 backdrop-blur-sm dark:border-zinc-800 dark:bg-zinc-950/90 sm:p-8">
             {children}
+          </div>
+
+          <div className="mt-6 space-y-2 text-center">
+            <LegalLinks className="justify-center" />
+            <p className="text-xs text-zinc-400 dark:text-zinc-500">
+              This site uses one essential cookie to keep you signed in. No
+              tracking or advertising cookies.
+            </p>
           </div>
         </div>
       </section>

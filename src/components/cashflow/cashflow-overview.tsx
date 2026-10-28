@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import {
   CashflowTrendCard,
   ExpenseBreakdownCard,
@@ -14,16 +14,10 @@ import {
 } from "@/components/cashflow/dashboard/dashboard-cards";
 import { CsvUpload } from "@/components/cashflow/csv-upload";
 import {
-  expenseSeriesByGranularity,
-  filterExpensesToCurrentPeriod,
-  filterTransactionsToCurrentPeriod,
-  netCollectionSeriesByGranularity,
-  visitCountOf,
   GRANULARITY_OPTIONS,
   type Granularity,
 } from "@/lib/cashflow/dashboard-metrics";
-import type { Expense } from "@/lib/cashflow/expense-schema";
-import type { CashflowTransaction } from "@/lib/cashflow/schema";
+import type { OverviewData } from "@/lib/cashflow/overview-data";
 import type { Branch } from "@/lib/db/branches";
 
 const currencyFormatter = new Intl.NumberFormat("en-PH", {
@@ -38,119 +32,68 @@ function greetingForHour(hour: number): string {
 }
 
 export function CashflowOverview({
-  transactions,
-  expenses,
+  data,
   userName,
   targets,
   canEditTargets = false,
+  branchName,
   branches = [],
 }: {
-  transactions: CashflowTransaction[];
-  /** Recorded expenses (see the `expenses` table) — feeds the Income &
-   * expense and Expense breakdown cards with real numbers instead of the
-   * sample data they used to show. */
-  expenses: Expense[];
+  /** Every figure on this page, already added up by the server (see
+   * `getOverviewData`): the browser gets a few hundred numbers, not the
+   * transaction history. */
+  data: OverviewData;
   userName?: string;
   /** This period's admin-set target for month/quarter/year, `null` where
    * none has been set yet — fetched server-side from the `sales_targets`
-   * table (see targets.ts) since it's not derivable from `transactions`. */
-  targets?: Record<TargetPeriodType, number | null>;
+   * table (see targets.ts). `null` hides the target card (used when the
+   * figures are for one branch only, because targets are clinic-wide). */
+  targets?: Record<TargetPeriodType, number | null> | null;
   canEditTargets?: boolean;
+  /** Set when the figures cover one branch only. */
+  branchName?: string;
   /** Branches offered when importing a CSV. */
   branches?: Branch[];
 }) {
   // The single page-wide period picker, next to the greeting — every card
   // below (besides the CSV importer and the target-vs-actual card, which
   // has its own independent period selector) reflects whichever
-  // granularity is selected here.
+  // granularity is selected here. Switching it is an instant client-side
+  // lookup: the server already worked out all four.
   const [granularity, setGranularity] = useState<Granularity>("monthly");
 
-  // Precomputed once per load for every granularity, so switching the
-  // picker is an instant client-side recompute — no refetch, and only the
-  // already-fetched `transactions` (not additional data) is used.
-  const trendSeriesByGranularity: Record<
-    Granularity,
-    ReturnType<typeof netCollectionSeriesByGranularity>
-  > = useMemo(
-    () => ({
-      monthly: netCollectionSeriesByGranularity(transactions, "monthly"),
-      quarterly: netCollectionSeriesByGranularity(transactions, "quarterly"),
-      semiAnnual: netCollectionSeriesByGranularity(transactions, "semiAnnual"),
-      annual: netCollectionSeriesByGranularity(transactions, "annual"),
-    }),
-    [transactions],
-  );
-
-  // Just the transactions inside the *current* period at the selected
-  // granularity (e.g. this month, this quarter) — feeds the stat cards and
-  // every period-scoped card (Payment methods, Patients, Popular
-  // procedures). `PatientsCard` is the one exception: it takes the full
-  // `transactions` list itself, since it also reports an all-time figure
-  // alongside the period-scoped one.
-  const periodTransactions = useMemo(
-    () => filterTransactionsToCurrentPeriod(transactions, granularity),
-    [transactions, granularity],
-  );
-
-  // Same precompute-once-per-granularity approach as trendSeriesByGranularity
-  // above, just over recorded expenses — feeds the Income & expense card.
-  const expenseSeriesByGranularityMap: Record<
-    Granularity,
-    ReturnType<typeof expenseSeriesByGranularity>
-  > = useMemo(
-    () => ({
-      monthly: expenseSeriesByGranularity(expenses, "monthly"),
-      quarterly: expenseSeriesByGranularity(expenses, "quarterly"),
-      semiAnnual: expenseSeriesByGranularity(expenses, "semiAnnual"),
-      annual: expenseSeriesByGranularity(expenses, "annual"),
-    }),
-    [expenses],
-  );
-
-  // Just this period's expenses, same scoping as periodTransactions — feeds
-  // the Expense breakdown card so it lines up with the payment-methods
-  // card it sits next to.
-  const periodExpenses = useMemo(
-    () => filterExpensesToCurrentPeriod(expenses, granularity),
-    [expenses, granularity],
-  );
-
-  const totalAmountPaid = periodTransactions.reduce(
-    (sum, t) => sum + t.amountPaid,
-    0,
-  );
-  const totalNetCollection = periodTransactions.reduce(
-    (sum, t) => sum + t.netCollection,
-    0,
-  );
+  const trendSeriesByGranularity = data.trend;
+  const expenseSeriesByGranularityMap = data.expenseTrend;
+  const period = data.current[granularity];
 
   // "This period"'s actual is just the last point of each trailing
-  // series above (it already ends at "now") — no separate computation
-  // needed, just a different granularity name for the same three periods
-  // the sales-target feature uses (month/quarter/year, no semi-annual).
-  // This is intentionally independent of the page-level `granularity`
-  // picker above — the target card has always had its own period-type
-  // selector.
-  const targetPeriods: Record<TargetPeriodType, TargetPeriodData> = {
-    month: {
-      periodKey: trendSeriesByGranularity.monthly.at(-1)!.key,
-      periodLabel: trendSeriesByGranularity.monthly.at(-1)!.label,
-      actual: trendSeriesByGranularity.monthly.at(-1)!.total,
-      target: targets?.month ?? null,
-    },
-    quarter: {
-      periodKey: trendSeriesByGranularity.quarterly.at(-1)!.key,
-      periodLabel: trendSeriesByGranularity.quarterly.at(-1)!.label,
-      actual: trendSeriesByGranularity.quarterly.at(-1)!.total,
-      target: targets?.quarter ?? null,
-    },
-    year: {
-      periodKey: trendSeriesByGranularity.annual.at(-1)!.key,
-      periodLabel: trendSeriesByGranularity.annual.at(-1)!.label,
-      actual: trendSeriesByGranularity.annual.at(-1)!.total,
-      target: targets?.year ?? null,
-    },
-  };
+  // series (it already ends at "now") — a different granularity name for
+  // the same three periods the sales-target feature uses (month/quarter/
+  // year, no semi-annual). Independent of the page-level picker above —
+  // the target card has always had its own period-type selector.
+  const targetPeriods: Record<TargetPeriodType, TargetPeriodData> | null =
+    targets
+      ? {
+          month: {
+            periodKey: trendSeriesByGranularity.monthly.at(-1)!.key,
+            periodLabel: trendSeriesByGranularity.monthly.at(-1)!.label,
+            actual: trendSeriesByGranularity.monthly.at(-1)!.total,
+            target: targets.month,
+          },
+          quarter: {
+            periodKey: trendSeriesByGranularity.quarterly.at(-1)!.key,
+            periodLabel: trendSeriesByGranularity.quarterly.at(-1)!.label,
+            actual: trendSeriesByGranularity.quarterly.at(-1)!.total,
+            target: targets.quarter,
+          },
+          year: {
+            periodKey: trendSeriesByGranularity.annual.at(-1)!.key,
+            periodLabel: trendSeriesByGranularity.annual.at(-1)!.label,
+            actual: trendSeriesByGranularity.annual.at(-1)!.total,
+            target: targets.year,
+          },
+        }
+      : null;
 
   const now = new Date();
   const dateLabel = now.toLocaleDateString("en-US", {
@@ -170,6 +113,7 @@ export function CashflowOverview({
           </h2>
           <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
             {dateLabel}
+            {branchName ? ` · ${branchName} branch` : ""}
           </p>
         </div>
         <div className="flex flex-col items-start gap-1.5 sm:items-end">
@@ -199,21 +143,23 @@ export function CashflowOverview({
       <section className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <StatCard
           label="Transactions"
-          value={visitCountOf(periodTransactions).toString()}
+          value={period.visits.toString()}
         />
         <StatCard
           label="Amount paid"
-          value={currencyFormatter.format(totalAmountPaid)}
+          value={currencyFormatter.format(period.amountPaid)}
         />
         <StatCard
           label="Net collection"
-          value={currencyFormatter.format(totalNetCollection)}
+          value={currencyFormatter.format(period.netCollection)}
         />
       </section>
 
-      <section className="grid grid-cols-1">
-        <TargetVsActualCard periods={targetPeriods} canEdit={canEditTargets} />
-      </section>
+      {targetPeriods && (
+        <section className="grid grid-cols-1">
+          <TargetVsActualCard periods={targetPeriods} canEdit={canEditTargets} />
+        </section>
+      )}
 
       <section className="grid grid-cols-1 gap-6 xl:grid-cols-3">
         <div className="xl:col-span-2">
@@ -223,7 +169,7 @@ export function CashflowOverview({
           />
         </div>
         <PaymentMethodsCard
-          transactions={periodTransactions}
+          payments={period.payments}
           granularity={granularity}
         />
       </section>
@@ -234,13 +180,13 @@ export function CashflowOverview({
           expenseSeries={expenseSeriesByGranularityMap[granularity]}
           granularity={granularity}
         />
-        <ExpenseBreakdownCard expenses={periodExpenses} />
+        <ExpenseBreakdownCard categories={period.expenseCategories} />
       </section>
 
       <section className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <PatientsCard transactions={transactions} granularity={granularity} />
+        <PatientsCard stats={period.patients} granularity={granularity} />
         <PopularProceduresCard
-          transactions={periodTransactions}
+          procedures={period.procedures}
           granularity={granularity}
         />
       </section>
