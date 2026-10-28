@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import {
   CLINIC,
   LEGAL_LAST_UPDATED,
-  LEGAL_TEXT_REVIEWED,
+  // LEGAL_TEXT_REVIEWED,
   isPlaceholder,
 } from "@/lib/cashflow/legal";
 
@@ -65,9 +65,16 @@ export function LegalShell({
     <div className="min-h-screen bg-gradient-to-br from-white via-amber-50/40 to-sky-50/60 print:bg-white dark:from-zinc-950 dark:via-zinc-950 dark:to-zinc-900">
       <header className="border-b border-zinc-200 bg-white/80 backdrop-blur-sm print:border-0 dark:border-zinc-800 dark:bg-zinc-950/80">
         <div className="mx-auto flex max-w-3xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
-          <Link href="/" className="inline-flex items-center rounded-lg bg-white px-2 py-1.5 shadow-sm ring-1 ring-zinc-200">
+          <Link
+            href="/"
+            className="inline-flex items-center rounded-lg bg-white px-2 py-1.5 shadow-sm ring-1 ring-zinc-200"
+          >
             {/* eslint-disable-next-line @next/next/no-img-element -- static brand asset */}
-            <img src="/logo-wordmark.png" alt="ADT Dental Clinic" className="h-8 w-auto" />
+            <img
+              src="/logo-wordmark.png"
+              alt="ADT Dental Clinic"
+              className="h-8 w-auto"
+            />
           </Link>
           <Link
             href="/login"
@@ -78,8 +85,11 @@ export function LegalShell({
         </div>
       </header>
 
-      <main id="main-content" className="mx-auto max-w-3xl px-4 py-8 sm:px-6 sm:py-12">
-        {!LEGAL_TEXT_REVIEWED && (
+      <main
+        id="main-content"
+        className="mx-auto max-w-3xl px-4 py-8 sm:px-6 sm:py-12"
+      >
+        {/* {!LEGAL_TEXT_REVIEWED && (
           <p
             role="note"
             className="mb-6 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 print:hidden"
@@ -88,15 +98,19 @@ export function LegalShell({
             clinic&apos;s details, and a legal adviser should approve the text
             before it is relied on.
           </p>
-        )}
+        )} */}
         <h1 className="text-3xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
           {title}
         </h1>
         {showUpdated && (
-          <p className="mt-1 text-sm text-zinc-500">Last updated {LEGAL_LAST_UPDATED}</p>
+          <p className="mt-1 text-sm text-zinc-500">
+            Last updated {LEGAL_LAST_UPDATED}
+          </p>
         )}
         {intro && (
-          <p className="mt-4 text-base leading-7 text-zinc-600 dark:text-zinc-300">{intro}</p>
+          <p className="mt-4 text-base leading-7 text-zinc-600 dark:text-zinc-300">
+            {intro}
+          </p>
         )}
         <div className="mt-8 space-y-8 text-[15px] leading-7 text-zinc-700 dark:text-zinc-300">
           {children}
@@ -115,10 +129,18 @@ export function LegalShell({
   );
 }
 
-export function Section({ title, children }: { title: string; children: ReactNode }) {
+export function Section({
+  title,
+  children,
+}: {
+  title: string;
+  children: ReactNode;
+}) {
   return (
     <section className="space-y-3">
-      <h2 className="text-xl font-semibold text-zinc-900 dark:text-zinc-50">{title}</h2>
+      <h2 className="text-xl font-semibold text-zinc-900 dark:text-zinc-50">
+        {title}
+      </h2>
       {children}
     </section>
   );
