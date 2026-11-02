@@ -65,38 +65,86 @@ export type CommissionRateSetting = {
 };
 
 /**
+ * Commission is worked out on the amount WITHOUT the 12% VAT: the net
+ * collection divided by 1.12 (e.g. ₱300 → ₱267.86). Ortho is the exception
+ * and uses the full amount. (Clinic rule, November 2026.)
+ */
+export const COMMISSION_VAT_DIVISOR = 1.12;
+
+/**
+ * The percentage used when a dentist has no commission rate for a procedure
+ * (cash or HMO), so no procedure silently earns ₱0. X-rays never use it:
+ * they only earn their fixed peso value. `null` switches the fallback off.
+ * Set by the clinic: waiting for the number.
+ */
+export const DEFAULT_COMMISSION_PERCENT: number | null = null;
+
+export function isOrthoProcedure(name: string | null | undefined): boolean {
+  return /^\s*ortho/i.test(name ?? "");
+}
+
+export function isXrayProcedure(name: string | null | undefined): boolean {
+  return /x-?\s?ray/i.test(name ?? "");
+}
+
+/** The amount the commission % is applied to. */
+export function commissionBase(
+  netCollection: number,
+  procedureName?: string | null,
+): number {
+  return isOrthoProcedure(procedureName)
+    ? netCollection
+    : round2(netCollection / COMMISSION_VAT_DIVISOR);
+}
+
+/**
  * Commission one procedure line earns.
  *
- * - Not an HMO payment: cash-paying % of the line's net collection.
+ * - Percentages apply to `commissionBase` (net collection ÷ 1.12, Ortho
+ *   excepted); fixed peso values (X-rays, some HMO procedures) are paid as
+ *   they are.
+ * - Not an HMO payment: cash-paying % of the base, or the flat peso value.
  * - HMO payment: the fixed peso value when the procedure has one (X-rays),
- *   otherwise the HMO % of net collection (OP), otherwise nothing — the
- *   sheet lists only a few HMO procedures, and the rest earn no commission
- *   when billed to an HMO.
+ *   otherwise the HMO %.
+ * - Nothing set for the dentist and procedure (or only a 0%): the default %
+ *   when one is configured, for every procedure except X-rays.
  */
 export function computeCommission(
   netCollection: number,
   paymentType: string | null | undefined,
   rate: CommissionRateSetting | undefined,
+  options: {
+    procedureName?: string | null;
+    defaultPercent?: number | null;
+  } = {},
 ): number {
+  const base = commissionBase(netCollection, options.procedureName);
+  const defaultPercent = options.defaultPercent ?? null;
+  const fallback =
+    defaultPercent !== null && !isXrayProcedure(options.procedureName)
+      ? round2(base * (defaultPercent / 100))
+      : 0;
   if (!rate) {
-    return 0;
+    return fallback;
   }
   const flatPeso = rate.pesoValue ?? null;
   if (isHmoPayment(paymentType)) {
     if (rate.hmoPesoValue !== null) {
       return round2(rate.hmoPesoValue);
     }
-    if (rate.hmoRatePercent !== null) {
-      return round2(netCollection * (rate.hmoRatePercent / 100));
+    if (rate.hmoRatePercent !== null && rate.hmoRatePercent > 0) {
+      return round2(base * (rate.hmoRatePercent / 100));
     }
-    // No HMO-specific setting: a flat peso (X-ray) still applies, a plain
-    // cash percentage does not.
-    return flatPeso !== null ? round2(flatPeso) : 0;
+    // No HMO-specific setting: a flat peso (X-ray) still applies, otherwise
+    // the default % (if any).
+    return flatPeso !== null ? round2(flatPeso) : fallback;
   }
   if (flatPeso !== null) {
     return round2(flatPeso);
   }
-  return round2(netCollection * (rate.ratePercent / 100));
+  return rate.ratePercent > 0
+    ? round2(base * (rate.ratePercent / 100))
+    : fallback;
 }
 
 /**

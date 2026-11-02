@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { AddExpenseModal } from "@/components/cashflow/add-expense-modal";
 import { AttachmentsPanel } from "@/components/cashflow/attachments-panel";
+import { ExpenseRowActions } from "@/components/cashflow/expense-row-actions";
 import type { Expense } from "@/lib/cashflow/expense-schema";
 import type { AttachmentInfo } from "@/lib/db/attachments";
 import type { Branch } from "@/lib/db/branches";
@@ -15,7 +16,15 @@ const currencyFormatter = new Intl.NumberFormat("en-PH", {
 // search and date filters to reach older ones.
 const MAX_ROWS = 200;
 
-export type ExpensesFilters = { q: string; from: string; to: string };
+/** `branch` is "" (all branches), a branch id, or "none" (clinic-wide). */
+export type ExpensesFilters = {
+  q: string;
+  from: string;
+  to: string;
+  branch: string;
+};
+
+export const NO_BRANCH = "none";
 
 /** The Expenses tab inside the Transactions page. */
 export function ExpensesTab({
@@ -40,6 +49,11 @@ export function ExpensesTab({
   const matching = expenses.filter((expense) => {
     if (filters.from && expense.date < filters.from) return false;
     if (filters.to && expense.date > filters.to) return false;
+    if (filters.branch === NO_BRANCH) {
+      if (expense.branchId) return false;
+    } else if (filters.branch && expense.branchId !== filters.branch) {
+      return false;
+    }
     if (!q) return true;
     const haystack = [
       expense.category,
@@ -54,7 +68,27 @@ export function ExpensesTab({
   });
   const shown = matching.slice(0, MAX_ROWS);
   const total = matching.reduce((sum, expense) => sum + expense.amount, 0);
-  const filtered = Boolean(q || filters.from || filters.to);
+  const filtered = Boolean(q || filters.from || filters.to || filters.branch);
+
+  // Total of the matching expenses for each branch (and clinic-wide ones),
+  // so each branch's spending can be read at a glance.
+  const perBranch = new Map<string, { label: string; total: number; count: number }>();
+  for (const expense of matching) {
+    const key = expense.branchId ?? NO_BRANCH;
+    const entry = perBranch.get(key) ?? {
+      label: expense.branchId
+        ? (branchName.get(expense.branchId) ?? "Unknown branch")
+        : "No branch / clinic-wide",
+      total: 0,
+      count: 0,
+    };
+    entry.total += expense.amount;
+    entry.count += 1;
+    perBranch.set(key, entry);
+  }
+  const branchTotals = [...perBranch.entries()].sort((a, b) =>
+    a[1].label.localeCompare(b[1].label),
+  );
 
   return (
     <div className="space-y-4">
@@ -66,7 +100,7 @@ export function ExpensesTab({
           <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
             {matching.length} {filtered ? "matching" : "recorded"} &middot;{" "}
             {currencyFormatter.format(total)} total. Newest first, with the
-            receipt or proof.
+            receipt or proof.{canDelete && " Admins can edit or delete an expense."}
           </p>
         </div>
         <AddExpenseModal branches={branches} suppliers={suppliers} />
@@ -86,6 +120,22 @@ export function ExpensesTab({
             placeholder="Expense, supplier, reference, remarks"
             className="mt-1 block w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
           />
+        </label>
+        <label className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
+          Branch
+          <select
+            name="branch"
+            defaultValue={filters.branch}
+            className="select-chevron mt-1 block rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+          >
+            <option value="">All branches</option>
+            {branches.map((branch) => (
+              <option key={branch.id} value={branch.id}>
+                {branch.name}
+              </option>
+            ))}
+            <option value={NO_BRANCH}>No branch / clinic-wide</option>
+          </select>
         </label>
         <label className="text-xs font-medium text-zinc-600 dark:text-zinc-400">
           From
@@ -123,6 +173,30 @@ export function ExpensesTab({
         </div>
       </form>
 
+      {branchTotals.length > 0 && (
+        <ul
+          aria-label="Total expenses per branch"
+          className="flex flex-wrap gap-2"
+        >
+          {branchTotals.map(([key, entry]) => (
+            <li
+              key={key}
+              className="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm dark:border-zinc-800 dark:bg-zinc-950"
+            >
+              <span className="text-zinc-500 dark:text-zinc-400">
+                {entry.label}
+              </span>{" "}
+              <span className="font-semibold tabular-nums text-zinc-900 dark:text-zinc-50">
+                {currencyFormatter.format(entry.total)}
+              </span>{" "}
+              <span className="text-xs text-zinc-400">
+                ({entry.count})
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+
       <div className="overflow-x-auto rounded-lg border border-zinc-200 dark:border-zinc-800">
         <table className="w-full min-w-[760px] text-left text-sm">
           <thead className="bg-zinc-50 text-xs uppercase tracking-wide text-zinc-500 dark:bg-zinc-900 dark:text-zinc-400">
@@ -132,13 +206,14 @@ export function ExpensesTab({
               <th className="px-4 py-3 font-medium">Supplier</th>
               <th className="px-4 py-3 text-right font-medium">Amount</th>
               <th className="px-4 py-3 font-medium">Receipt / proof</th>
+              {canDelete && <th className="px-4 py-3 font-medium">Actions</th>}
             </tr>
           </thead>
           <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
             {shown.length === 0 ? (
               <tr>
                 <td
-                  colSpan={5}
+                  colSpan={canDelete ? 6 : 5}
                   className="px-4 py-6 text-center text-sm text-zinc-500 dark:text-zinc-400"
                 >
                   {filtered
@@ -188,6 +263,15 @@ export function ExpensesTab({
                       buttonLabel="Attach receipt / proof"
                     />
                   </td>
+                  {canDelete && (
+                    <td className="px-4 py-3">
+                      <ExpenseRowActions
+                        expense={expense}
+                        branches={branches}
+                        suppliers={suppliers}
+                      />
+                    </td>
+                  )}
                 </tr>
               ))
             )}

@@ -38,6 +38,8 @@ export async function GET(request: NextRequest) {
       to: params.get("to"),
       branch: params.get("branch"),
       dentist: params.get("dentist"),
+      sort: params.get("sort"),
+      dir: params.get("dir"),
     },
     { today: todayInManila(), branches: branchList, dentists: dentistList },
   );

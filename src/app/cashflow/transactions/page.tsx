@@ -139,6 +139,7 @@ export default async function TransactionsPage({
             q: resolvedSearchParams.q ?? "",
             from: resolvedSearchParams.from ?? "",
             to: resolvedSearchParams.to ?? "",
+            branch: resolvedSearchParams.branch ?? "",
           }}
         />
       </div>

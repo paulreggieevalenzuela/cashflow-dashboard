@@ -1,9 +1,12 @@
 import { and, asc, eq, gte, lte, ne } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { branches, transactions } from "@/lib/db/schema";
-import type {
-  CommissionReport,
-  CommissionRow,
+import {
+  sortCommissionRows,
+  type CommissionReport,
+  type CommissionRow,
+  type CommissionSortDir,
+  type CommissionSortKey,
 } from "@/lib/cashflow/commission-report";
 import { round2 } from "@/lib/cashflow/pricing";
 
@@ -19,6 +22,8 @@ export async function getCommissionReport(input: {
   dentistUserId: string | null;
   branchName: string;
   dentistLabel: string;
+  sort: CommissionSortKey;
+  dir: CommissionSortDir;
 }): Promise<CommissionReport> {
   const result = await db
     .select({
@@ -45,8 +50,8 @@ export async function getCommissionReport(input: {
           : undefined,
       ),
     )
+    // Always oldest first here; the chosen order is applied afterwards.
     .orderBy(
-      asc(transactions.dentist),
       asc(transactions.date),
       asc(transactions.visitId),
       asc(transactions.lineNumber),
@@ -69,6 +74,8 @@ export async function getCommissionReport(input: {
     to: input.to,
     branchName: input.branchName,
     dentistLabel: input.dentistLabel,
-    rows,
+    sort: input.sort,
+    dir: input.dir,
+    rows: sortCommissionRows(rows, input.sort, input.dir),
   };
 }

@@ -4,6 +4,8 @@ import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import {
   COMMISSION_HEADERS,
+  COMMISSION_SORT_KEYS,
+  COMMISSION_SORT_LABELS,
   commissionFileName,
   effectivePercent,
   formatSheetDateRange,
@@ -39,6 +41,8 @@ export default async function CommissionReportPage({
     to?: string;
     branch?: string;
     dentist?: string;
+    sort?: string;
+    dir?: string;
   }>;
 }) {
   const session = await auth();
@@ -63,6 +67,8 @@ export default async function CommissionReportPage({
     to: filters.to,
     branch: filters.branchId ?? "",
     dentist: filters.dentistUserId ?? "",
+    sort: filters.sort,
+    dir: filters.dir,
   });
   const fileName = commissionFileName(filters.from, filters.to);
   const shown = report.rows.slice(0, SCREEN_LIMIT);
@@ -156,6 +162,29 @@ export default async function CommissionReportPage({
             </option>
           ))}
         </select>
+        <label className="flex items-center gap-2 text-sm text-zinc-600 dark:text-zinc-400">
+          Order by
+          <select
+            name="sort"
+            defaultValue={filters.sort}
+            className="select-chevron rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+          >
+            {COMMISSION_SORT_KEYS.map((key) => (
+              <option key={key} value={key}>
+                {COMMISSION_SORT_LABELS[key]}
+              </option>
+            ))}
+          </select>
+        </label>
+        <select
+          name="dir"
+          defaultValue={filters.dir}
+          aria-label="Direction"
+          className="select-chevron rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+        >
+          <option value="asc">Ascending (oldest / A–Z / lowest first)</option>
+          <option value="desc">Descending (newest / Z–A / highest first)</option>
+        </select>
         <button
           type="submit"
           className="rounded-lg bg-zinc-900 px-3.5 py-2 text-sm font-medium text-white hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
@@ -229,6 +258,13 @@ export default async function CommissionReportPage({
         </table>
       </div>
 
+      {report.rows.length > 0 && (
+        <p className="text-xs text-zinc-500 dark:text-zinc-400">
+          Lines ordered by {COMMISSION_SORT_LABELS[filters.sort].toLowerCase()},{" "}
+          {filters.dir === "asc" ? "ascending" : "descending"}. Lines that tie
+          stay oldest first.
+        </p>
+      )}
       {report.rows.length > 0 && (
         <div className="overflow-x-auto rounded-lg border border-zinc-200 dark:border-zinc-800">
           <table className="w-full min-w-[960px] text-left text-sm">

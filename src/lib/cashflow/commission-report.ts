@@ -9,7 +9,12 @@
  * rewrites past commission.
  */
 
-import { isHmoPayment, round2 } from "@/lib/cashflow/pricing";
+import {
+  commissionBase,
+  isHmoPayment,
+  isXrayProcedure,
+  round2,
+} from "@/lib/cashflow/pricing";
 import { formatSheetDate, isValidIsoDate } from "@/lib/cashflow/day-end";
 import type { Cell, SheetInput } from "@/lib/cashflow/xlsx";
 
@@ -27,6 +32,33 @@ export type CommissionRow = {
   commission: number;
 };
 
+/** The columns the report's lines can be ordered by. */
+export const COMMISSION_SORT_KEYS = [
+  "date",
+  "dentist",
+  "patient",
+  "procedure",
+  "branch",
+  "net",
+  "commission",
+] as const;
+export type CommissionSortKey = (typeof COMMISSION_SORT_KEYS)[number];
+export type CommissionSortDir = "asc" | "desc";
+
+export const COMMISSION_SORT_LABELS: Record<CommissionSortKey, string> = {
+  date: "Date",
+  dentist: "Dentist",
+  patient: "Patient name",
+  procedure: "Procedure",
+  branch: "Branch",
+  net: "Net collection",
+  commission: "Commission",
+};
+
+/** Date, oldest first, unless the person picks another order. */
+export const DEFAULT_COMMISSION_SORT: CommissionSortKey = "date";
+export const DEFAULT_COMMISSION_DIR: CommissionSortDir = "asc";
+
 export type CommissionReport = {
   /** YYYY-MM-DD, inclusive. */
   from: string;
@@ -34,8 +66,59 @@ export type CommissionReport = {
   branchName: string;
   /** "All dentists" or one dentist's name. */
   dentistLabel: string;
+  /** How `rows` are ordered. */
+  sort: CommissionSortKey;
+  dir: CommissionSortDir;
   rows: CommissionRow[];
 };
+
+/**
+ * Orders the lines. Whatever the chosen column, lines that tie keep the
+ * oldest-first order (date, then visit) — so "Dentist" lists each dentist's
+ * lines in date order. `rows` must arrive oldest first (the database query
+ * does that); the sort is stable.
+ */
+export function sortCommissionRows(
+  rows: CommissionRow[],
+  key: CommissionSortKey,
+  dir: CommissionSortDir,
+): CommissionRow[] {
+  const sign = dir === "desc" ? -1 : 1;
+  const text = (a: string, b: string) =>
+    a.localeCompare(b, "en", { sensitivity: "base", numeric: true });
+  const compare = (a: CommissionRow, b: CommissionRow): number => {
+    switch (key) {
+      case "date":
+        return a.date < b.date ? -1 : a.date > b.date ? 1 : 0;
+      case "dentist":
+        return text(a.dentist, b.dentist);
+      case "patient":
+        return text(a.patientName, b.patientName);
+      case "procedure":
+        return text(a.procedure, b.procedure);
+      case "branch":
+        return text(a.branchName, b.branchName);
+      case "net":
+        return a.netCollection - b.netCollection;
+      case "commission":
+        return a.commission - b.commission;
+    }
+  };
+  return rows
+    .map((row, index) => ({ row, index }))
+    .sort((a, b) => {
+      const primary = compare(a.row, b.row) * sign;
+      if (primary !== 0) return primary;
+      if (key !== "date") {
+        if (a.row.date !== b.row.date) return a.row.date < b.row.date ? -1 : 1;
+      }
+      if (a.row.visitId !== b.row.visitId) {
+        return a.row.visitId < b.row.visitId ? -1 : 1;
+      }
+      return a.index - b.index;
+    })
+    .map((item) => item.row);
+}
 
 export type DentistCommissionTotal = {
   dentist: string;
@@ -85,13 +168,21 @@ export function summarizeCommission(rows: CommissionRow[]): {
   };
 }
 
-/** Commission as a percent of net collection ("" when nothing to compare). */
+/**
+ * Commission as a percent of what it was worked out on: the net collection
+ * without VAT (÷ 1.12), the full amount for Ortho and for X-rays (which earn
+ * a fixed peso value). "" when there is nothing to compare.
+ */
 export function effectivePercent(row: {
   netCollection: number;
   commission: number;
+  procedure?: string;
 }): string {
   if (!(row.netCollection > 0) || row.commission === 0) return "";
-  return `${round2((row.commission / row.netCollection) * 100)}%`;
+  const base = isXrayProcedure(row.procedure)
+    ? row.netCollection
+    : commissionBase(row.netCollection, row.procedure);
+  return `${round2((row.commission / base) * 100)}%`;
 }
 
 export function commissionFileName(from: string, to: string): string {
@@ -143,28 +234,45 @@ export function buildCommissionDetailSheet(
   push([]);
   push([...COMMISSION_HEADERS], true);
 
-  const { perDentist, totals } = summarizeCommission(report.rows);
-  for (const group of perDentist) {
-    for (const row of report.rows.filter((r) => r.dentist === group.dentist)) {
-      push([
-        formatSheetDate(row.date),
-        row.visitId,
-        row.patientName,
-        row.dentist,
-        row.branchName,
-        row.procedure,
-        row.paymentType,
-        row.netCollection,
-        row.commission,
-        isHmoPayment(row.paymentType)
-          ? `${effectivePercent(row)}${effectivePercent(row) ? " (HMO)" : "HMO"}`
-          : effectivePercent(row),
-      ]);
+  const { totals } = summarizeCommission(report.rows);
+  const detailLine = (row: CommissionRow): Cell[] => [
+    formatSheetDate(row.date),
+    row.visitId,
+    row.patientName,
+    row.dentist,
+    row.branchName,
+    row.procedure,
+    row.paymentType,
+    row.netCollection,
+    row.commission,
+    isHmoPayment(row.paymentType)
+      ? `${effectivePercent(row)}${effectivePercent(row) ? " (HMO)" : "HMO"}`
+      : effectivePercent(row),
+  ];
+  if (report.sort === "dentist") {
+    // Ordered by dentist: each dentist's lines, then their subtotal.
+    const order: string[] = [];
+    for (const row of report.rows) {
+      if (!order.includes(row.dentist)) order.push(row.dentist);
     }
-    push(
-      [`Total — ${group.dentist}`, "", "", "", "", "", "", group.netCollection, group.commission],
-      true,
-    );
+    const { perDentist } = summarizeCommission(report.rows);
+    for (const name of order) {
+      const group = perDentist.find((item) => item.dentist === name);
+      for (const row of report.rows.filter((r) => r.dentist === name)) {
+        push(detailLine(row));
+      }
+      if (group) {
+        push(
+          [`Total — ${group.dentist}`, "", "", "", "", "", "", group.netCollection, group.commission],
+          true,
+        );
+        push([]);
+      }
+    }
+  } else {
+    // Any other order: one list in exactly the order chosen. The Summary
+    // sheet holds the per-dentist totals.
+    for (const row of report.rows) push(detailLine(row));
     push([]);
   }
   if (report.rows.length === 0) {
@@ -224,6 +332,8 @@ export type CommissionFilters = {
   dentistUserId: string | null;
   branchName: string;
   dentistLabel: string;
+  sort: CommissionSortKey;
+  dir: CommissionSortDir;
 };
 
 /**
@@ -237,6 +347,8 @@ export function parseCommissionFilters(
     to?: string | null;
     branch?: string | null;
     dentist?: string | null;
+    sort?: string | null;
+    dir?: string | null;
   },
   context: {
     today: string;
@@ -257,5 +369,9 @@ export function parseCommissionFilters(
     dentistUserId: dentist?.id ?? null,
     branchName: branch?.name ?? "All branches",
     dentistLabel: dentist?.name ?? "All dentists",
+    sort:
+      COMMISSION_SORT_KEYS.find((key) => key === raw.sort) ??
+      DEFAULT_COMMISSION_SORT,
+    dir: raw.dir === "desc" ? "desc" : DEFAULT_COMMISSION_DIR,
   };
 }

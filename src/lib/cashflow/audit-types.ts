@@ -12,7 +12,9 @@ export type AuditAction =
   | "status.changed"
   | "patient.created"
   | "patient.updated"
-  | "patient.merged";
+  | "patient.merged"
+  | "expense.updated"
+  | "expense.deleted";
 
 export type AuditEntry = {
   id: string;
@@ -37,4 +39,6 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   "patient.created": "Patient added",
   "patient.updated": "Patient edited",
   "patient.merged": "Patients merged",
+  "expense.updated": "Expense edited",
+  "expense.deleted": "Expense deleted",
 };

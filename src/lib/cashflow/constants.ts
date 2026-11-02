@@ -99,6 +99,20 @@ export const EXPENSE_CATEGORIES = [
   "Taxes & licenses",
   "Marketing",
   "Insurance",
+  // Added November 2026 at the clinic's request.
+  "Outsourced Service",
+  "Training & Seminar Expense",
+  "Dental Equipment",
+  "Employee Benefit",
+  "Depreciation Expense",
+  "License & Permit",
+  "Transportation & Travel",
+  "Loan",
+  "Income Tax",
+  "WHT",
+  "Vat",
+  "Commission",
+  "Incentives",
 ] as const;
 export type ExpenseCategoryOption = (typeof EXPENSE_CATEGORIES)[number];
 
@@ -109,6 +123,7 @@ export const EXPENSE_SOURCES = [
   "Credit Card",
   "BDO Check",
   "Bank Transfer",
+  "GoTyme",
 ] as const;
 export type ExpenseSourceOption = (typeof EXPENSE_SOURCES)[number];
 

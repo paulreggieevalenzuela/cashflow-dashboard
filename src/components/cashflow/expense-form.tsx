@@ -2,7 +2,10 @@
 
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
-import { addExpenseAction } from "@/app/cashflow/expense-actions";
+import {
+  addExpenseAction,
+  updateExpenseAction,
+} from "@/app/cashflow/expense-actions";
 import { FormField } from "@/components/auth/form-field";
 import { FilePicker } from "@/components/cashflow/file-picker";
 import { ProcedureCombobox } from "@/components/cashflow/procedure-combobox";
@@ -13,7 +16,10 @@ import {
   EXPENSE_SOURCES,
 } from "@/lib/cashflow/constants";
 import { uploadAttachment } from "@/lib/cashflow/attachment-client";
-import { ManualExpenseInputSchema } from "@/lib/cashflow/expense-schema";
+import {
+  ManualExpenseInputSchema,
+  type Expense,
+} from "@/lib/cashflow/expense-schema";
 import {
   VAT_TYPES,
   VAT_TYPE_LABELS,
@@ -77,6 +83,29 @@ function blankFormState(): FormState {
   };
 }
 
+/** The form filled in from a saved expense (edit mode). */
+function formStateFromExpense(
+  expense: Expense,
+  suppliers: Supplier[],
+): FormState {
+  const supplier = suppliers.find((item) => item.id === expense.supplierId);
+  return {
+    date: expense.date,
+    category: expense.category,
+    description: expense.description ?? "",
+    amount: String(expense.amount),
+    paymentMethod: expense.paymentMethod ?? "",
+    branchId: expense.branchId ?? "",
+    supplierName: supplier?.name ?? "",
+    supplierAddress: supplier?.address ?? "",
+    supplierTin: supplier?.tin ?? "",
+    referenceNo: expense.referenceNo ?? "",
+    remarks: expense.remarks ?? "",
+    nature: expense.nature ?? "",
+    vatType: normalizeVatType(expense.vatType),
+  };
+}
+
 type FieldErrors = Partial<Record<keyof FormState, string>>;
 
 /**
@@ -89,14 +118,19 @@ type FieldErrors = Partial<Record<keyof FormState, string>>;
 export function ExpenseForm({
   branches,
   suppliers = [],
+  expense,
   onSuccess,
 }: {
   branches?: Branch[];
   suppliers?: Supplier[];
+  /** When given, the form edits this saved expense instead of adding one. */
+  expense?: Expense;
   onSuccess?: () => void;
 }) {
   const router = useRouter();
-  const [form, setForm] = useState<FormState>(blankFormState());
+  const [form, setForm] = useState<FormState>(() =>
+    expense ? formStateFromExpense(expense, suppliers) : blankFormState(),
+  );
   const [errors, setErrors] = useState<FieldErrors>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [duplicateWarning, setDuplicateWarning] = useState<string | null>(null);
@@ -163,7 +197,9 @@ export function ExpenseForm({
     setErrors({});
     setStatus("submitting");
 
-    const result = await addExpenseAction(input.data);
+    const result = expense
+      ? await updateExpenseAction(expense.id, input.data)
+      : await addExpenseAction(input.data);
 
     if (!result.ok) {
       setStatus("idle");
@@ -193,7 +229,9 @@ export function ExpenseForm({
     }
 
     setStatus("idle");
-    setForm(blankFormState());
+    if (!expense) {
+      setForm(blankFormState());
+    }
     setProofFiles([]);
     if (uploadProblem) {
       // The expense itself is saved; only a file failed.
@@ -253,7 +291,7 @@ export function ExpenseForm({
       )}
       {justAdded && (
         <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
-          Expense added.
+          {expense ? "Changes saved." : "Expense added."}
         </div>
       )}
 
@@ -434,7 +472,13 @@ export function ExpenseForm({
           disabled={status === "submitting"}
           className="rounded-lg bg-amber-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-70"
         >
-          {status === "submitting" ? "Adding..." : "Add expense"}
+          {status === "submitting"
+            ? expense
+              ? "Saving..."
+              : "Adding..."
+            : expense
+              ? "Save changes"
+              : "Add expense"}
         </button>
         {onSuccess && (
           <button

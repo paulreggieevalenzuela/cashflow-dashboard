@@ -15,7 +15,11 @@ import {
   type NewTransactionRow,
   type TransactionRow,
 } from "@/lib/db/schema";
-import { computeCommission, round2 } from "@/lib/cashflow/pricing";
+import {
+  computeCommission,
+  DEFAULT_COMMISSION_PERCENT,
+  round2,
+} from "@/lib/cashflow/pricing";
 import { CHECK_IN_PLACEHOLDER } from "@/lib/cashflow/visit-status";
 import {
   branchCode,
@@ -348,10 +352,14 @@ async function resolveCommissionLinks(rows: CashflowTransaction[]) {
     // Commission is on (total - discount - fees): the line total after any
     // discount, less card fees and withholding tax (= net collection). Cash
     // visits use the cash-paying %; HMO visits use the HMO % / peso value.
-    const commissionAmount =
-      dentistUserId && procedureId
-        ? computeCommission(row.netCollection, row.paymentType, rate)
-        : 0;
+    // The commission % applies to the amount without VAT (net ÷ 1.12, Ortho
+    // excepted); a procedure with no rate falls back to the default %.
+    const commissionAmount = dentistUserId
+      ? computeCommission(row.netCollection, row.paymentType, rate, {
+          procedureName: row.procedure,
+          defaultPercent: DEFAULT_COMMISSION_PERCENT,
+        })
+      : 0;
 
     return { dentistUserId, procedureId, commissionAmount };
   });
