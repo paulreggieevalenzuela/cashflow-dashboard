@@ -1,6 +1,6 @@
 "use server";
 
-import { auth } from "@/auth";
+import { auth } from "@/lib/auth/access";
 import {
   computeVisitType,
   findOtherPatientsUsingId,

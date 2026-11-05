@@ -56,8 +56,10 @@ export function LoginForm({
         setStatus("idle");
         setFormError(
           result?.code === "locked"
-            ? "Too many unsuccessful attempts. Please wait 15 minutes and try again, or ask your administrator to help."
-            : "Invalid email or password.",
+            ? "Too many unsuccessful attempts. Please wait 15 minutes and try again. Forgot your password? Use the link below to request a reset."
+            : result?.code === "temp_expired"
+              ? "This temporary password has expired. Ask your admin for a new one, or use Forgot password to request it."
+              : "Invalid email or password.",
         );
         return;
       }

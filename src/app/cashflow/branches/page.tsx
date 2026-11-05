@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { auth } from "@/auth";
+import { auth } from "@/lib/auth/access";
 import { BranchesManager } from "@/components/cashflow/branches-manager";
 import { listBranches } from "@/lib/db/branches";
 

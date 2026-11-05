@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { auth } from "@/auth";
+import { auth } from "@/lib/auth/access";
 import { canRemoveFromQueue, isVisitStatus } from "@/lib/cashflow/visit-status";
 import { deleteInvoice } from "@/lib/db/invoices";
 import { getQueueRemovalFacts, setVisitStatus } from "@/lib/db/visit-status";

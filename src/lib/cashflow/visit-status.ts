@@ -74,9 +74,18 @@ export function nextStatus(status: VisitStatus): VisitStatus | null {
   return next ?? null;
 }
 
-/** Cleared visits are read-only for everyone but an admin. */
+/** Cleared visits are read-only, except for the people allowed to correct them. */
 export function isLocked(status: VisitStatus): boolean {
   return status === "Cleared";
+}
+
+/**
+ * Who can still edit a Cleared visit: admins and staff (every change is
+ * written to the audit trail). Dentists cannot. Removing a visit or a
+ * payment, and reopening a visit's status, stay admin-only.
+ */
+export function canEditClearedVisit(role: string | null | undefined): boolean {
+  return role === "admin" || role === "staff";
 }
 
 export function balanceDueOf(totalDue: number, collected: number): number {

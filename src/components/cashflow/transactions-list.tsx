@@ -18,6 +18,7 @@ import type { ProcedureOption } from "@/lib/db/procedures";
 export function TransactionsList({
   transactions,
   canDelete = false,
+  canEditCleared = false,
   query,
   total,
   totalPages,
@@ -30,6 +31,7 @@ export function TransactionsList({
 }: {
   transactions: CashflowTransaction[];
   canDelete?: boolean;
+  canEditCleared?: boolean;
   query: TransactionsQueryParams;
   total: number;
   totalPages: number;
@@ -71,6 +73,7 @@ export function TransactionsList({
       <TransactionsTable
         transactions={transactions}
         canDelete={canDelete}
+        canEditCleared={canEditCleared}
         invoiceSummaries={invoiceSummaries}
         query={query}
         hasActiveFilters={filtered}

@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { auth } from "@/auth";
+import { auth } from "@/lib/auth/access";
 import { getBranchById } from "@/lib/db/branches";
 import { setUserTheme, type Theme } from "@/lib/db/user-preferences";
 import { updateUserBranch } from "@/lib/db/users";

@@ -28,7 +28,7 @@ async function main() {
   await createUser({ name, email, passwordHash, role: "admin" });
 
   console.log(`Created admin account: ${email} / ${password}`);
-  console.log("Sign in with this and change the password (or add your real account and remove this one) from Cashflow -> Users.");
+  console.log("Sign in with this, then change the password from Profile (or add your real account from Cashflow -> Users and remove this one).");
 }
 
 main()

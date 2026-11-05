@@ -46,12 +46,15 @@ export function CashflowNav({
   displayName,
   email,
   openVisits = null,
+  resetRequests = 0,
 }: {
   role: UserRole;
   displayName?: string;
   email?: string;
   /** Visits not Cleared yet (null = unknown). Shown next to "Queue". */
   openVisits?: number | null;
+  /** Password reset requests waiting for this admin (shown next to "Users"). */
+  resetRequests?: number;
 }) {
   const pathname = usePathname();
   const [isOpen, setIsOpen] = useState(false);
@@ -66,6 +69,7 @@ export function CashflowNav({
 
   function badgeFor(href: string) {
     // Always shown for the Queue (0 included) so the menu stays an indicator.
+    if (href === "/cashflow/users") return resetRequests > 0 ? resetRequests : null;
     return href === "/cashflow/queue" && openCount !== null ? openCount : null;
   }
 
@@ -87,7 +91,7 @@ export function CashflowNav({
             }`}
           >
             {link.label}
-            <CountBadge count={badgeFor(link.href)} />
+            <CountBadge count={badgeFor(link.href)} unit={link.href === "/cashflow/users" ? "password request" : "open visit"} />
           </Link>
         ))}
       </nav>
@@ -152,7 +156,7 @@ export function CashflowNav({
                 }`}
               >
                 {link.label}
-                <CountBadge count={badgeFor(link.href)} />
+                <CountBadge count={badgeFor(link.href)} unit={link.href === "/cashflow/users" ? "password request" : "open visit"} />
               </Link>
             ))}
           </nav>
@@ -234,7 +238,7 @@ function useOpenVisitCount(initial: number | null): number | null {
   return polled && polled.base === initial ? polled.value : initial;
 }
 
-function CountBadge({ count }: { count: number | null }) {
+function CountBadge({ count, unit }: { count: number | null; unit: string }) {
   if (count === null) return null;
   return (
     <span
@@ -243,7 +247,7 @@ function CountBadge({ count }: { count: number | null }) {
           ? "bg-amber-600 text-white"
           : "bg-zinc-200 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400"
       }`}
-      aria-label={`${count} open ${count === 1 ? "visit" : "visits"}`}
+      aria-label={`${count} ${unit}${count === 1 ? "" : "s"}`}
     >
       {count}
     </span>

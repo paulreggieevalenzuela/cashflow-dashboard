@@ -19,7 +19,8 @@ export type AttemptOutcome =
   | "ok"
   | "wrong_password"
   | "unknown_email"
-  | "locked";
+  | "locked"
+  | "expired_temp";
 
 /** One earlier attempt for the e-mail, newest first. */
 export type EmailAttempt = { at: Date; outcome: AttemptOutcome };

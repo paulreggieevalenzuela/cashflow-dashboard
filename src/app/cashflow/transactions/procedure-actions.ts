@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { auth } from "@/auth";
+import { auth } from "@/lib/auth/access";
 import { isPriceBasis } from "@/lib/cashflow/price-basis";
 import {
   createProcedure,

@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { auth } from "@/auth";
+import { auth } from "@/lib/auth/access";
 import { AddTransactionModal } from "@/components/cashflow/add-transaction-modal";
 import { AutoRefresh } from "@/components/cashflow/auto-refresh";
 import { TodayBoard } from "@/components/cashflow/today-board";

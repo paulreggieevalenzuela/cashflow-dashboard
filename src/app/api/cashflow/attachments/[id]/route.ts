@@ -1,4 +1,4 @@
-import { auth } from "@/auth";
+import { auth } from "@/lib/auth/access";
 import { deleteAttachment, getAttachmentFile } from "@/lib/db/attachments";
 
 export const runtime = "nodejs";

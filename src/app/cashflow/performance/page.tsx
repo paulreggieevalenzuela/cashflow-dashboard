@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { auth } from "@/auth";
+import { auth } from "@/lib/auth/access";
 import { DentistFilter } from "@/components/cashflow/performance/dentist-filter";
 import { DentistPatientsTable } from "@/components/cashflow/performance/dentist-patients-table";
 import { LeaderboardTable } from "@/components/cashflow/performance/leaderboard-table";

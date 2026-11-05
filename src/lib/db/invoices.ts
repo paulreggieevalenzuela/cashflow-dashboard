@@ -805,17 +805,27 @@ export async function createInvoice(
 export async function updateInvoice(
   invoiceId: string,
   input: InvoiceInput,
-  context: { userId: string | null; userName?: string; isAdmin?: boolean },
+  context: {
+    userId: string | null;
+    userName?: string;
+    isAdmin?: boolean;
+    /** Admins and staff may edit a Cleared visit (see canEditClearedVisit). */
+    canEditCleared?: boolean;
+  },
 ): Promise<SaveInvoiceResult> {
   const existing = await getInvoiceById(invoiceId);
   if (!existing) {
     return { ok: false, message: "That transaction no longer exists." };
   }
-  if (isLocked(isVisitStatus(existing.status) ? existing.status : "Cleared") && !context.isAdmin) {
+  if (
+    isLocked(isVisitStatus(existing.status) ? existing.status : "Cleared") &&
+    !context.isAdmin &&
+    !context.canEditCleared
+  ) {
     return {
       ok: false,
       message:
-        "This visit is Cleared, so it is locked. Ask an admin to reopen it if something needs correcting.",
+        "This visit is Cleared, so it is locked. Ask an admin or a staff member to correct it.",
     };
   }
   const existingLines = await listLinesForInvoice(invoiceId);

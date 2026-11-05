@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { auth } from "@/auth";
+import { auth } from "@/lib/auth/access";
 import { createBranch, deleteBranch, renameBranch } from "@/lib/db/branches";
 
 type ActionResult = { ok: true } | { ok: false; message: string };

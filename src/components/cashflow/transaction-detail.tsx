@@ -45,6 +45,7 @@ export function TransactionDetail({
    * the page address use it (any line of the visit opens the whole visit). */
   openedLineId,
   canDelete = false,
+  canEditCleared = false,
   dentistOptions,
   branches,
   procedures,
@@ -57,6 +58,8 @@ export function TransactionDetail({
   detail: InvoiceDetail;
   openedLineId: string;
   canDelete?: boolean;
+  /** Admins and staff can edit a Cleared visit; dentists cannot. */
+  canEditCleared?: boolean;
   dentistOptions: string[];
   branches: Branch[];
   procedures: ProcedureOption[];
@@ -90,8 +93,9 @@ export function TransactionDetail({
     loaNumber: invoice.loaNumber,
     status,
   });
-  // A Cleared visit is locked; only an admin can reopen or edit it.
-  const locked = isLocked(status) && !canDelete;
+  // A Cleared visit is locked for dentists; admins and staff can still edit it
+  // (and only an admin can reopen it or remove it).
+  const locked = isLocked(status) && !canDelete && !canEditCleared;
   const dentistNames = [
     ...new Set(lines.map((line) => line.dentist).filter(Boolean)),
   ].join(", ");
@@ -194,7 +198,7 @@ export function TransactionDetail({
           {locked ? (
             <span
               className="rounded-lg border border-dashed border-zinc-300 px-3.5 py-2 text-sm text-zinc-500 dark:border-zinc-700 dark:text-zinc-400"
-              title="Cleared visits are locked. An admin can reopen it."
+              title="Cleared visits are locked. An admin or staff member can correct it."
             >
               Cleared · locked
             </span>

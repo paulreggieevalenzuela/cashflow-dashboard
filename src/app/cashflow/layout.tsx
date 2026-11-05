@@ -1,10 +1,12 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
-import { auth } from "@/auth";
+import { redirect } from "next/navigation";
+import { getAccess } from "@/lib/auth/access";
 import { SessionGuard } from "@/components/auth/session-guard";
 import { LegalLinks } from "@/components/legal/legal-shell";
 import { CashflowNav } from "@/components/cashflow/cashflow-nav";
 import { countOpenVisits } from "@/lib/db/visit-status";
+import { countActionableResetRequests } from "@/lib/db/password-requests";
 import { RouteFocusManager } from "@/components/navigation/route-focus-manager";
 
 export const metadata: Metadata = {
@@ -15,11 +17,24 @@ export const metadata: Metadata = {
 };
 
 export default async function CashflowLayout({ children }: { children: ReactNode }) {
-  const session = await auth();
+  // Second layer of the password rules (the proxy is the first): a sign-in the
+  // server no longer accepts ends here, and a person who still has to choose
+  // their own password can't see anything else. Pages, actions and API
+  // routes repeat the check through auth(), so this is never the only guard.
+  const access = await getAccess();
+  if (access.status === "revoked") redirect("/session-ended");
+  if (access.status === "must_change") redirect("/change-password");
+  const session = access.status === "ok" ? access.session : null;
+
   const role = session?.user.role ?? "staff";
   const displayName = session?.user.name ?? session?.user.email ?? "";
   const email = session?.user.email ?? undefined;
-  const openVisits = session ? await countOpenVisits() : null;
+  const [openVisits, resetRequests] = await Promise.all([
+    session ? countOpenVisits() : Promise.resolve(null),
+    session?.user.role === "admin"
+      ? countActionableResetRequests(session.user.isSuperuser ? "superuser" : "admin")
+      : Promise.resolve(0),
+  ]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-amber-50/40 via-white to-sky-50/50 dark:from-zinc-950 dark:via-zinc-950 dark:to-zinc-900">
@@ -41,6 +56,7 @@ export default async function CashflowLayout({ children }: { children: ReactNode
             displayName={displayName || undefined}
             email={email}
             openVisits={openVisits}
+            resetRequests={resetRequests}
           />
         </div>
       </header>

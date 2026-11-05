@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { auth } from "@/lib/auth/access";
 import { countOpenVisits } from "@/lib/db/visit-status";
 
 export const dynamic = "force-dynamic";

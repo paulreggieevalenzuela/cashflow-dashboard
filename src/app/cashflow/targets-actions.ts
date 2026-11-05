@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { auth } from "@/auth";
+import { auth } from "@/lib/auth/access";
 import { setSalesTarget } from "@/lib/db/targets";
 import type { TargetPeriodType } from "@/lib/db/schema";
 

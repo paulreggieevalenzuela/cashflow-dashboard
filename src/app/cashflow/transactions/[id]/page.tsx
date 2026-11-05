@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { auth } from "@/auth";
+import { auth } from "@/lib/auth/access";
 import { TransactionDetail } from "@/components/cashflow/transaction-detail";
 import { listAttachmentsForInvoice } from "@/lib/db/attachments";
 import { listBranches } from "@/lib/db/branches";
@@ -10,6 +10,7 @@ import { listProcedureOptions } from "@/lib/db/procedures";
 import { getTransactionById } from "@/lib/db/transactions";
 import { listStatusHistory } from "@/lib/db/visit-status";
 import { listAuditForInvoice } from "@/lib/db/audit";
+import { canEditClearedVisit } from "@/lib/cashflow/visit-status";
 
 function NotFound({ message }: { message: string }) {
   return (
@@ -66,6 +67,7 @@ export default async function TransactionDetailPage({
       detail={detail}
       openedLineId={transaction.id}
       canDelete={session?.user.role === "admin"}
+      canEditCleared={canEditClearedVisit(session?.user.role)}
       canSeeIds={session?.user.role === "admin"}
       dentistOptions={dentists.map((dentist) => dentist.name)}
       branches={branches}

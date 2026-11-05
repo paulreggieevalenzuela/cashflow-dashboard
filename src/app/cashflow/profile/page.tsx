@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { auth } from "@/auth";
+import { auth } from "@/lib/auth/access";
+import { ChangePasswordForm } from "@/components/auth/change-password-form";
 import { BranchSelect } from "@/components/cashflow/branch-select";
 import { ThemeToggle } from "@/components/cashflow/theme-toggle";
 import { listBranches } from "@/lib/db/branches";
@@ -52,6 +53,16 @@ export default async function ProfilePage() {
         <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">Branch</h3>
         <div className="mt-4">
           <BranchSelect branches={branches} initialBranchId={user.branchId ?? ""} />
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-950">
+        <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">Password</h3>
+        <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
+          Changing your password signs you out of your other devices.
+        </p>
+        <div className="mt-4 max-w-sm">
+          <ChangePasswordForm forced={false} compact />
         </div>
       </div>
 

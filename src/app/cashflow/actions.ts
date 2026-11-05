@@ -1,7 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { auth } from "@/auth";
+import { auth } from "@/lib/auth/access";
+import { canEditClearedVisit } from "@/lib/cashflow/visit-status";
 import { InvoiceInputSchema, type InvoiceInput } from "@/lib/cashflow/invoice-schema";
 import { parseCashflowCsv, type CsvRowError } from "@/lib/cashflow/parse-csv";
 import { logAudit } from "@/lib/db/audit";
@@ -110,6 +111,7 @@ export async function updateInvoiceAction(
     userId: session.user.id,
     userName: session.user.name ?? session.user.email ?? "",
     isAdmin: session.user.role === "admin",
+    canEditCleared: canEditClearedVisit(session.user.role),
   });
   if (!result.ok) {
     return result;

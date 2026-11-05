@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { auth } from "@/auth";
+import { auth } from "@/lib/auth/access";
 import { ExpensesTab } from "@/components/cashflow/expenses-tab";
 import { ProceduresManager } from "@/components/cashflow/procedures-manager";
 import { RecallsList } from "@/components/cashflow/recalls-list";
@@ -22,6 +22,7 @@ import { listPendingRecalls } from "@/lib/db/recalls";
 import { listTransactionsPage } from "@/lib/db/transactions";
 import { AuditTrail } from "@/components/cashflow/audit-trail";
 import { listRecentAudit } from "@/lib/db/audit";
+import { canEditClearedVisit } from "@/lib/cashflow/visit-status";
 import {
   ALL_BRANCHES,
   buildTransactionsSearch,
@@ -236,6 +237,7 @@ export default async function TransactionsPage({
       <TransactionsList
         transactions={rows}
         canDelete={canDelete}
+        canEditCleared={canEditClearedVisit(session?.user.role)}
         query={query}
         total={total}
         totalPages={totalPages}

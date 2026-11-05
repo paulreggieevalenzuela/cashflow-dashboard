@@ -3,19 +3,19 @@ import { AuthLayout } from "@/components/auth/auth-layout";
 import { ForgotPasswordForm } from "@/components/auth/forgot-password-form";
 
 export const metadata: Metadata = {
-  title: "Reset password | Cashflow",
-  description: "Reset the password for your Financial & Cashflow Management System account.",
+  title: "Forgot password | ADT Dental Clinic",
+  description: "Ask your clinic admin to reset the password for your account.",
 };
 
 export default function ForgotPasswordPage() {
   return (
     <AuthLayout
       heroTitle="We'll help you get back in"
-      heroDescription="Password resets are quick and secure, so you can get back to running your practice's finances without missing a beat."
+      heroDescription="Your clinic admin checks that it is you and gives you a temporary password, so you can get back to work quickly."
       heroHighlights={[
-        "Reset links expire after a short window for security",
+        "Temporary passwords expire after a few days",
+        "You choose your own password when you sign in",
         "Your patient and billing data stays protected",
-        "Contact support any time if you need a hand",
       ]}
     >
       <ForgotPasswordForm />

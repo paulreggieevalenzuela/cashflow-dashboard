@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { auth } from "@/auth";
+import { auth } from "@/lib/auth/access";
 import { logAudit } from "@/lib/db/audit";
 import {
   BIRTH_DATE_INVALID_MESSAGE,

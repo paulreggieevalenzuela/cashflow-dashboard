@@ -1,12 +1,36 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { rawAuth } from "@/auth";
 
 const DASHBOARD_PATH = "/cashflow";
 const LOGIN_PATH = "/login";
+const CHANGE_PASSWORD_PATH = "/change-password";
 
-export default auth((request) => {
+export default rawAuth((request) => {
   const { pathname } = request.nextUrl;
   const isSignedIn = Boolean(request.auth);
+  const mustChangePassword = Boolean(request.auth?.user?.mustChangePassword);
+
+  // First layer of the "choose your own password first" rule (the server
+  // checks again on every page, action and API call; see lib/auth/access.ts).
+  // A person who must change their password may only see the Change password
+  // page: everything else sends them there. Form actions get a plain refusal.
+  if (isSignedIn && mustChangePassword) {
+    if (pathname.startsWith(DASHBOARD_PATH)) {
+      if (request.method !== "GET" || request.headers.has("next-action")) {
+        return new NextResponse("Change your password first.", { status: 403 });
+      }
+      return NextResponse.redirect(new URL(CHANGE_PASSWORD_PATH, request.url));
+    }
+    if (pathname === "/" || pathname === LOGIN_PATH) {
+      return NextResponse.redirect(new URL(CHANGE_PASSWORD_PATH, request.url));
+    }
+    return;
+  }
+
+  // The Change password page is for signed-in people only.
+  if (!isSignedIn && pathname === CHANGE_PASSWORD_PATH) {
+    return NextResponse.redirect(new URL(LOGIN_PATH, request.url));
+  }
 
   // Already signed in and landing on the marketing homepage or the login
   // page — skip straight to the dashboard instead of showing either again.
@@ -36,5 +60,5 @@ export default auth((request) => {
 });
 
 export const config = {
-  matcher: ["/", "/login", "/cashflow/:path*"],
+  matcher: ["/", "/login", "/cashflow/:path*", "/change-password"],
 };

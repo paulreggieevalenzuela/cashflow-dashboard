@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { auth } from "@/auth";
+import { auth } from "@/lib/auth/access";
 import {
   buildDayEndSheet,
   dayEndFileName,

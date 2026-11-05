@@ -121,7 +121,7 @@ function RowActionsMenu({
   isRemoving: boolean;
   onRemove: () => void;
   onEdit: () => void;
-  /** Cleared visits can only be edited by an admin. */
+  /** Cleared visits can be edited only by admins and staff. */
   editLocked?: boolean;
 }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -207,7 +207,7 @@ function RowActionsMenu({
             disabled={editLocked}
             title={
               editLocked
-                ? "Cleared visits are locked. An admin can reopen it."
+                ? "Cleared visits are locked. An admin or staff member can correct it."
                 : undefined
             }
             onClick={() => {
@@ -263,6 +263,7 @@ function RowActionsMenu({
 export function TransactionsTable({
   transactions,
   canDelete = false,
+  canEditCleared = false,
   invoiceSummaries = {},
   query,
   hasActiveFilters = false,
@@ -273,6 +274,8 @@ export function TransactionsTable({
 }: {
   transactions: CashflowTransaction[];
   canDelete?: boolean;
+  /** Admins and staff can edit a Cleared visit; dentists cannot. */
+  canEditCleared?: boolean;
   invoiceSummaries?: InvoiceSummaries;
   query: TransactionsQueryParams;
   hasActiveFilters?: boolean;
@@ -521,7 +524,9 @@ export function TransactionsTable({
                       onRemove={() => handleRemove(transaction)}
                       onEdit={() => openEditor(transaction)}
                       editLocked={
-                        !canDelete && summary?.status === "Cleared"
+                        !canDelete &&
+                        !canEditCleared &&
+                        summary?.status === "Cleared"
                       }
                     />
                   </div>

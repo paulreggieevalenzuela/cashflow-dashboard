@@ -852,3 +852,30 @@ Items 1 to 4 are the "feels faster" set (small, safe, and they act on what was m
 | Open from earlier | **Open (yours)** | Rotate the Neon password and `AUTH_SECRET` (they were shared in chat); delete the test visit "Gozun, Daniel Leon Petronio"; delete or strengthen the shared test superuser account before real use on the internet; run the pending SQL files (patient HMO details, step 17; indexes, step 18; login attempts, step 19). |
 
 **Other gaps noted in the review and not started:** automated tests and a build check on every change (CI); soft-delete with a restore window (deleting a visit is permanent today); month-end closing; a front-desk / owner role split; patient recall messages (SMS / e-mail); official-receipt numbering and BIR rules (check with the accountant); data export for the accountant; a written paper fallback for internet outages; data-subject request procedure; vendor agreements with Neon and the host.
+
+---
+
+## 11. November 5, 2026: password change on first sign-in and admin-handled reset
+
+Built from `PASSWORD_CHANGE_RESET_ARCHITECTURE.md` (see its "As built" section for the differences from the plan and the full test list).
+
+**What you can do now**
+- **Add user** no longer asks for a password. The system makes a temporary password, shows it once, and it expires after 3 days. The person can open only the Change password page until they choose their own.
+- **Reset password** on any row of the Users page (and on each request): new temporary password, forced change, every device of that person signed out.
+- **Forgot password** on the sign-in page records a request. Admins see a **Password requests** panel on Users and a count beside **Users** in the menu; the superuser handles requests for admin accounts.
+- **Profile** has a Password section (current, new, confirm) that also signs out other devices.
+- **One superuser** with access to everything: cannot be removed, demoted or reset from the app, and only one can exist.
+- **Break-glass:** `yarn db:reset-password someone@example.com` (the forgotten-superuser case).
+
+**Run order (add to section 8)**
+23. Run `scripts/sql/2026-11-password-management.sql` in the Neon SQL editor.
+24. Run `scripts/sql/2026-11-superuser-role.sql` in two separate runs (step 1, then step 2). Change the e-mail in step 2 first if the superuser should be someone other than `superuser@admin.com`.
+25. Restart the app, sign in as the superuser, add a throw-away account to see the flow, then remove it.
+26. Optional, when the clinic decides: switch on the "everyone changes their password at next sign-in" line at the end of the first SQL file (leave out the accounts you are testing with).
+
+**Good to know**
+- Until step 23 runs, everything keeps working as before; Add user and Reset password say the SQL is needed.
+- Every page, form action and API call now also asks the database whether the person's sign-in is still valid. This adds one small query per request; the review's speed list (same region for app and database) matters a little more because of it.
+- Roles now change on the next click, not at the next sign-in refresh.
+- Reset and creation events appear in the audit trail (without any password).
+- Not built: e-mail delivery of temporary passwords (no mail service exists), two-step sign-in, and audit lines for role and branch changes. See `SECURITY_SUGGESTIONS.md`.

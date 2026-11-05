@@ -108,14 +108,23 @@ export function formatCountdown(ms: number): string {
 }
 
 /** Reasons the login page can show a message for (?reason=...). */
-export type SignOutReason = "expired" | "limit";
+export type SignOutReason = "expired" | "limit" | "ended" | "changed";
 
 export function parseSignOutReason(value: unknown): SignOutReason | null {
-  return value === "expired" || value === "limit" ? value : null;
+  return value === "expired" || value === "limit" || value === "ended" || value === "changed"
+    ? value
+    : null;
 }
 
 export function signOutMessage(reason: SignOutReason): string {
-  return reason === "limit"
-    ? "For security, sign-ins last at most 12 hours. Please sign in again."
-    : "You were signed out after 30 minutes of inactivity. Please sign in again.";
+  switch (reason) {
+    case "limit":
+      return "For security, sign-ins last at most 12 hours. Please sign in again.";
+    case "ended":
+      return "Your sign-in was ended because your password was changed or reset, or your account was updated. Please sign in again.";
+    case "changed":
+      return "Your password was changed. Please sign in with your new password.";
+    default:
+      return "You were signed out after 30 minutes of inactivity. Please sign in again.";
+  }
 }

@@ -33,8 +33,9 @@ export default function RegisterPage() {
         <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400">
           Ask your admin to add you from{" "}
           <span className="font-mono text-xs">Cashflow → Users</span>. They&apos;ll
-          set your role (Admin, Dentist, or Staff) and send you a temporary
-          password to sign in with.
+          set your role (Admin, Dentist, or Staff) and give you a temporary
+          password to sign in with. You will be asked to choose your own
+          password the first time you sign in.
         </div>
 
         <p className="mt-8 text-center text-sm text-zinc-500 dark:text-zinc-400">

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import NextTopLoader from "nextjs-toploader";
-import { auth } from "@/auth";
+import { auth } from "@/lib/auth/access";
 import { getUserTheme } from "@/lib/db/user-preferences";
 import "./globals.css";
 

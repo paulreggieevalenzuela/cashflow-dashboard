@@ -18,7 +18,7 @@ import type { AuditAction, AuditEntry } from "@/lib/cashflow/audit-types";
  */
 export async function logAudit(entry: {
   action: AuditAction;
-  entityType: "invoice" | "patient" | "payment" | "expense";
+  entityType: "invoice" | "patient" | "payment" | "expense" | "user";
   entityId?: string;
   invoiceId?: string | null;
   patientId?: string | null;

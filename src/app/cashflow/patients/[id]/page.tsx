@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { auth } from "@/auth";
+import { auth } from "@/lib/auth/access";
 import { AddTransactionModal } from "@/components/cashflow/add-transaction-modal";
 import { AuditTrail } from "@/components/cashflow/audit-trail";
 import { MergePatient } from "@/components/cashflow/merge-patient";

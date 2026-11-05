@@ -1,4 +1,4 @@
-import { auth } from "@/auth";
+import { auth } from "@/lib/auth/access";
 import { CashflowOverview } from "@/components/cashflow/cashflow-overview";
 import { currentPeriodKeys } from "@/lib/cashflow/dashboard-metrics";
 import { todayInManila } from "@/lib/cashflow/visit-status";

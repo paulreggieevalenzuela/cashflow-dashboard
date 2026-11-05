@@ -142,7 +142,7 @@ export type NewTransactionRow = typeof transactions.$inferInsert;
  *
  * See src/lib/cashflow/user-schema.ts for the shared Zod type.
  */
-export const userRoleEnum = pgEnum("user_role", ["admin", "dentist", "staff"]);
+export const userRoleEnum = pgEnum("user_role", ["admin", "dentist", "staff", "superuser"]);
 
 export const users = pgTable("users", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -155,6 +155,16 @@ export const users = pgTable("users", {
   // accounts start unassigned rather than blocking on a backfill.
   branchId: uuid("branch_id").references(() => branches.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  // Password management (scripts/sql/2026-11-password-management.sql).
+  // True after an admin creates or resets the account: the person may only
+  // open the Change password page until they have chosen their own.
+  mustChangePassword: boolean("must_change_password").notNull().default(false),
+  passwordChangedAt: timestamp("password_changed_at", { withTimezone: true }),
+  // When the temporary password stops working (null = not a temporary one).
+  tempPasswordExpiresAt: timestamp("temp_password_expires_at", { withTimezone: true }),
+  // Raised by one on every password change or reset; a sign-in whose token
+  // carries an older number is ended (signs the person out on other devices).
+  sessionVersion: integer("session_version").notNull().default(0),
 });
 
 export type UserRow = typeof users.$inferSelect;
@@ -658,6 +668,30 @@ export const loginAttempts = pgTable("login_attempts", {
   index("login_attempts_email_idx").on(table.emailKey, table.createdAt),
   index("login_attempts_ip_idx").on(table.ip, table.createdAt),
 ]);
+
+/**
+ * "I forgot my password" requests. A request changes nothing by itself: an
+ * admin (or the superuser, for admin accounts) checks who is asking and then
+ * resets the password. `userId` is null when no account has that e-mail.
+ */
+export const passwordResetRequests = pgTable("password_reset_requests", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  userId: uuid("user_id").references(() => users.id, { onDelete: "set null" }),
+  emailKey: text("email_key").notNull(),
+  note: text("note").notNull().default(""),
+  ip: text("ip").notNull().default(""),
+  userAgent: text("user_agent").notNull().default(""),
+  /** "open" | "done" | "dismissed" */
+  status: text("status").notNull().default("open"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  handledBy: uuid("handled_by").references(() => users.id, { onDelete: "set null" }),
+  handledAt: timestamp("handled_at", { withTimezone: true }),
+}, (table) => [
+  index("password_reset_requests_status_idx").on(table.status, table.createdAt.desc()),
+  index("password_reset_requests_email_idx").on(table.emailKey, table.createdAt),
+]);
+
+export type PasswordResetRequestRow = typeof passwordResetRequests.$inferSelect;
 
 export type AuditLogRow = typeof auditLog.$inferSelect;
 

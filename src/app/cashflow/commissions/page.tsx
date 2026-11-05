@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { auth } from "@/auth";
+import { auth } from "@/lib/auth/access";
 import { CommissionTiersManager } from "@/components/cashflow/commission-tiers-manager";
 import { CommissionRatesManager } from "@/components/cashflow/commission-rates-manager";
 import { listCommissionRates } from "@/lib/db/commission-rates";
