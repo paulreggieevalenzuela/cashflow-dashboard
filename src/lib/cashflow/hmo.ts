@@ -15,7 +15,7 @@ import type { VisitStatus } from "@/lib/cashflow/visit-status";
 export const LOA_PENDING_LABEL = "LOA pending";
 
 export const LOA_MISSING_MESSAGE =
-  "This HMO visit has no LOA number yet. Enter it (Edit transaction → HMO authorization) before clearing the visit.";
+  "This HMO visit has a procedure with no LOA number yet. Enter the LOA on each procedure (Edit transaction) before clearing the visit.";
 
 /** Longest LOA / LOE number we keep. */
 export const MAX_HMO_REFERENCE_LENGTH = 60;
@@ -51,3 +51,20 @@ export function isLoaPending(input: {
 /** Tailwind classes for the "LOA pending" chip. */
 export const LOA_PENDING_STYLE =
   "bg-orange-50 text-orange-700 dark:bg-orange-950 dark:text-orange-300";
+
+/**
+ * The visit's LOA summary from its procedures' LOA numbers: the distinct
+ * numbers in order, joined with ", ", but only when EVERY procedure has one.
+ * While any procedure is still waiting for its LOA the summary is blank, so
+ * the visit stays "LOA pending" and cannot be Cleared. A visit with no
+ * procedures has no LOA.
+ */
+export function combineLoaNumbers(
+  numbers: ReadonlyArray<string | null | undefined>,
+): string {
+  const cleaned = numbers.map((value) => (value ?? "").trim());
+  if (cleaned.length === 0 || cleaned.some((value) => !value)) {
+    return "";
+  }
+  return [...new Set(cleaned)].join(", ");
+}

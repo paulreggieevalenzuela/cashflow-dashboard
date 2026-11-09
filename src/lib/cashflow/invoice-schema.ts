@@ -44,6 +44,14 @@ export const InvoiceLineInputSchema = z
     // server looks the procedure up and only falls back to this for a
     // procedure that isn't on the list.
     vatType: z.enum(VAT_TYPES).default("vat"),
+    // HMO Letter of Authorization for this procedure. Optional: it often
+    // arrives the next day (the visit is then "LOA pending").
+    loaNumber: z
+      .string()
+      .trim()
+      .max(MAX_HMO_REFERENCE_LENGTH, "LOA number is too long.")
+      .optional()
+      .default(""),
   })
   .superRefine((line, ctx) => {
     const message = teethError(line.teeth);
@@ -132,14 +140,7 @@ export const InvoiceInputSchema = z.object({
     .optional()
     .default(""),
   recallReason: z.string().trim().optional().default(""),
-  // HMO authorization. Both are optional on the form: the LOA often arrives
-  // the next day (the visit is then "LOA pending" until it is entered).
-  loaNumber: z
-    .string()
-    .trim()
-    .max(MAX_HMO_REFERENCE_LENGTH, "LOA number is too long.")
-    .optional()
-    .default(""),
+  // HMO LOE number (optional). The LOA is per procedure, on each line.
   loeNumber: z
     .string()
     .trim()

@@ -422,6 +422,7 @@ export async function upsertTransactions(
           month: sql`excluded.month`,
           year: sql`excluded.year`,
           invoiceNumber: sql`excluded.invoice_number`,
+          loaNumber: sql`excluded.loa_number`,
           remarks: sql`excluded.remarks`,
           merchantFee: sql`excluded.merchant_fee`,
           withholdingTax: sql`excluded.withholding_tax`,

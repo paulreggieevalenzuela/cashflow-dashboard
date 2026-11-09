@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { SHOW_STAFF_PERFORMANCE } from "@/lib/cashflow/features";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { AccountAvatar, AccountMenu } from "@/components/cashflow/account-menu";
@@ -21,9 +22,9 @@ const BASE_LINKS = [
 const DENTIST_LINKS = [
   { href: "/cashflow/performance", label: "Performance" },
 ] as const;
-const STAFF_LINKS = [
-  { href: "/cashflow/performance", label: "Performance" },
-] as const;
+const STAFF_LINKS = SHOW_STAFF_PERFORMANCE
+  ? ([{ href: "/cashflow/performance", label: "Performance" }] as const)
+  : ([] as const);
 
 const ADMIN_LINKS = [
   { href: "/cashflow/performance", label: "Performance" },

@@ -41,6 +41,8 @@ export const CashflowTransactionSchema = z.object({
   year: z.number().int(),
 
   invoiceNumber: z.string().optional().default(""),
+  // HMO LOA number of this procedure (blank = not received yet).
+  loaNumber: z.string().optional().default(""),
   remarks: z.string().optional().default(""),
 
   merchantFee: z.number().nonnegative().default(0),

@@ -6,6 +6,7 @@ import { DentistPatientsTable } from "@/components/cashflow/performance/dentist-
 import { LeaderboardTable } from "@/components/cashflow/performance/leaderboard-table";
 import { ProcedureBreakdownTable } from "@/components/cashflow/performance/procedure-breakdown-table";
 import { SalesBreakdown } from "@/components/cashflow/performance/sales-breakdown";
+import { SHOW_STAFF_PERFORMANCE } from "@/lib/cashflow/features";
 import { StaffFilter } from "@/components/cashflow/performance/staff-filter";
 import { StaffLeaderboardTable } from "@/components/cashflow/performance/staff-leaderboard-table";
 import { listDentistUsers, listStaffUsers } from "@/lib/db/dentists";
@@ -31,6 +32,10 @@ export default async function PerformancePage({
   if (!session?.user) {
     redirect("/login");
   }
+  // Staff have nothing on this tab while staff performance is hidden.
+  if (!SHOW_STAFF_PERFORMANCE && session.user.role === "staff") {
+    redirect("/cashflow");
+  }
 
   const isAdmin = session.user.role === "admin";
   const isDentist = session.user.role === "dentist";
@@ -46,14 +51,16 @@ export default async function PerformancePage({
     : isDentist
       ? session.user.id
       : undefined;
-  const selectedStaffId = isAdmin
-    ? resolvedSearchParams.staff || undefined
-    : isStaff
-      ? session.user.id
-      : undefined;
+  const selectedStaffId = !SHOW_STAFF_PERFORMANCE
+    ? undefined
+    : isAdmin
+      ? resolvedSearchParams.staff || undefined
+      : isStaff
+        ? session.user.id
+        : undefined;
 
   const showDentistSection = isAdmin || isDentist;
-  const showStaffSection = isAdmin || isStaff;
+  const showStaffSection = SHOW_STAFF_PERFORMANCE && (isAdmin || isStaff);
 
   const [
     dentists,
@@ -70,9 +77,9 @@ export default async function PerformancePage({
     staffAnnual,
   ] = await Promise.all([
     isAdmin ? listDentistUsers() : Promise.resolve([]),
-    isAdmin ? listStaffUsers() : Promise.resolve([]),
+    showStaffSection && isAdmin ? listStaffUsers() : Promise.resolve([]),
     isAdmin ? getDentistLeaderboard({}) : Promise.resolve([]),
-    isAdmin ? getStaffBonusLeaderboard() : Promise.resolve([]),
+    showStaffSection && isAdmin ? getStaffBonusLeaderboard() : Promise.resolve([]),
     showDentistSection
       ? getSalesByPeriod({ dentistUserId: selectedDentistId, granularity: "month" })
       : Promise.resolve([]),
@@ -111,7 +118,9 @@ export default async function PerformancePage({
         <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-50">Performance</h2>
         <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
           {isAdmin
-            ? "Dentist priority and staff bonus, based on transactions linked to each account."
+            ? SHOW_STAFF_PERFORMANCE
+              ? "Dentist priority and staff bonus, based on transactions linked to each account."
+              : "Dentist priority, based on transactions linked to each account."
             : isDentist
               ? "Your sales and commission, based on transactions linked to your account."
               : "Your bonus, based on transactions you recorded that have a bonus rate set."}

@@ -360,7 +360,10 @@ export type BoardVisit = {
  * never paid yesterday should not vanish from the queue), and any visit that
  * was Cleared today, even if the visit itself is from an earlier date.
  */
-export async function listBoardVisits(today: string): Promise<BoardVisit[]> {
+export async function listBoardVisits(
+  today: string,
+  branchId: string | null = null,
+): Promise<BoardVisit[]> {
   const headers = await db
     .select({
       id: invoices.id,
@@ -372,10 +375,13 @@ export async function listBoardVisits(today: string): Promise<BoardVisit[]> {
     .from(invoices)
     .leftJoin(branches, eq(branches.id, invoices.branchId))
     .where(
-      or(
-        eq(invoices.visitDate, today),
-        ne(invoices.status, "Cleared"),
-        gte(invoices.statusChangedAt, new Date(`${today}T00:00:00+08:00`)),
+      and(
+        or(
+          eq(invoices.visitDate, today),
+          ne(invoices.status, "Cleared"),
+          gte(invoices.statusChangedAt, new Date(`${today}T00:00:00+08:00`)),
+        ),
+        branchId ? eq(invoices.branchId, branchId) : undefined,
       ),
     )
     .orderBy(desc(invoices.statusChangedAt))
@@ -454,7 +460,10 @@ export async function listBoardVisits(today: string): Promise<BoardVisit[]> {
 
 /** Average time in each stage for moves made since `fromDate` (YYYY-MM-DD,
  * clinic time). */
-export async function getWaitStats(fromDate: string): Promise<WaitStat[]> {
+export async function getWaitStats(
+  fromDate: string,
+  branchId: string | null = null,
+): Promise<WaitStat[]> {
   const rows = await db
     .select({
       invoiceId: invoiceStatusHistory.invoiceId,
@@ -462,10 +471,14 @@ export async function getWaitStats(fromDate: string): Promise<WaitStat[]> {
       changedAt: invoiceStatusHistory.changedAt,
     })
     .from(invoiceStatusHistory)
+    .innerJoin(invoices, eq(invoices.id, invoiceStatusHistory.invoiceId))
     .where(
-      gte(
-        invoiceStatusHistory.changedAt,
-        new Date(`${fromDate}T00:00:00+08:00`),
+      and(
+        gte(
+          invoiceStatusHistory.changedAt,
+          new Date(`${fromDate}T00:00:00+08:00`),
+        ),
+        branchId ? eq(invoices.branchId, branchId) : undefined,
       ),
     )
     .orderBy(
@@ -492,7 +505,9 @@ export async function getWaitStats(fromDate: string): Promise<WaitStat[]> {
  * and cannot show a visit that has none, so counting such a leftover header
  * made the menu say "9" above an empty board.
  */
-export async function countOpenVisits(): Promise<number | null> {
+export async function countOpenVisits(
+  branchId: string | null = null,
+): Promise<number | null> {
   try {
     const [row] = await db
       .select({ value: sql<number>`count(*)::int` })
@@ -500,6 +515,7 @@ export async function countOpenVisits(): Promise<number | null> {
       .where(
         and(
           ne(invoices.status, "Cleared"),
+          branchId ? eq(invoices.branchId, branchId) : undefined,
           exists(
             db
               .select({ one: sql`1` })

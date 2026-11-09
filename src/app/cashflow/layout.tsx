@@ -5,6 +5,8 @@ import { getAccess } from "@/lib/auth/access";
 import { SessionGuard } from "@/components/auth/session-guard";
 import { LegalLinks } from "@/components/legal/legal-shell";
 import { CashflowNav } from "@/components/cashflow/cashflow-nav";
+import { getBranchPolicy } from "@/lib/auth/branch-policy";
+import { BranchPolicyProvider } from "@/components/cashflow/branch-policy-context";
 import { countOpenVisits } from "@/lib/db/visit-status";
 import { countActionableResetRequests } from "@/lib/db/password-requests";
 import { RouteFocusManager } from "@/components/navigation/route-focus-manager";
@@ -29,8 +31,11 @@ export default async function CashflowLayout({ children }: { children: ReactNode
   const role = session?.user.role ?? "staff";
   const displayName = session?.user.name ?? session?.user.email ?? "";
   const email = session?.user.email ?? undefined;
+  const branchPolicy = await getBranchPolicy(session);
   const [openVisits, resetRequests] = await Promise.all([
-    session ? countOpenVisits() : Promise.resolve(null),
+    session
+      ? countOpenVisits(branchPolicy.branchId)
+      : Promise.resolve(null),
     session?.user.role === "admin"
       ? countActionableResetRequests(session.user.isSuperuser ? "superuser" : "admin")
       : Promise.resolve(0),
@@ -68,7 +73,7 @@ export default async function CashflowLayout({ children }: { children: ReactNode
         tabIndex={-1}
         className="mx-auto max-w-6xl px-4 py-6 outline-none sm:px-6 sm:py-8 print:max-w-none print:p-0"
       >
-        {children}
+        <BranchPolicyProvider value={branchPolicy}>{children}</BranchPolicyProvider>
       </main>
       <footer className="mx-auto max-w-6xl px-4 pb-8 sm:px-6 print:hidden">
         <LegalLinks />

@@ -98,6 +98,10 @@ export const transactions = pgTable("transactions", {
   invoiceId: uuid("invoice_id").references(() => invoices.id, { onDelete: "set null" }),
   patientId: uuid("patient_id").references(() => patients.id, { onDelete: "set null" }),
   lineNumber: integer("line_number").notNull().default(1),
+  // HMO Letter of Authorization for THIS procedure (blank until it arrives;
+  // only used when the visit is billed to an HMO). The visit's own
+  // invoices.loa_number is the summary of these.
+  loaNumber: text("loa_number").notNull().default(""),
   // Price before any discount. `amountPaid` above stays "line total due
   // after discount" (list price - discountAmount), which is what
   // commission, net collection and the dashboards are all built on.

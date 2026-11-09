@@ -52,7 +52,23 @@ export default async function ProfilePage() {
       <div className="rounded-xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-950">
         <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">Branch</h3>
         <div className="mt-4">
-          <BranchSelect branches={branches} initialBranchId={user.branchId ?? ""} />
+          {session.user.role === "admin" ? (
+            <BranchSelect branches={branches} initialBranchId={user.branchId ?? ""} />
+          ) : (
+            <div className="space-y-1">
+              <Field
+                label="My branch"
+                value={
+                  branches.find((branch) => branch.id === user.branchId)?.name ??
+                  "No branch assigned yet"
+                }
+              />
+              <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                Your branch is set by an admin. Visits you add are saved under
+                it and the Queue shows it.
+              </p>
+            </div>
+          )}
         </div>
       </div>
 

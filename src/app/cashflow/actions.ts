@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth/access";
+import { getBranchPolicy, NO_BRANCH_MESSAGE } from "@/lib/auth/branch-policy";
 import { canEditClearedVisit } from "@/lib/cashflow/visit-status";
 import { InvoiceInputSchema, type InvoiceInput } from "@/lib/cashflow/invoice-schema";
 import { parseCashflowCsv, type CsvRowError } from "@/lib/cashflow/parse-csv";
@@ -82,6 +83,16 @@ export async function createInvoiceAction(
     return parsed.result;
   }
 
+  // Only an admin chooses the branch. Anyone else's visit is saved under
+  // their own branch, whatever the screen sent.
+  const policy = await getBranchPolicy(session);
+  if (!policy.canChoose) {
+    if (!policy.branchId) {
+      return { ok: false, message: NO_BRANCH_MESSAGE };
+    }
+    parsed.data = { ...parsed.data, branchId: policy.branchId };
+  }
+
   const result = await createInvoice(parsed.data, {
     userId: session.user.id,
     userName: session.user.name ?? session.user.email ?? "",
@@ -105,6 +116,13 @@ export async function updateInvoiceAction(
   const parsed = parseInvoiceInput(input);
   if (!parsed.ok) {
     return parsed.result;
+  }
+
+  // Only an admin can move a visit to another branch: for anyone else the
+  // visit keeps the branch it has (an empty value means "unchanged").
+  const policy = await getBranchPolicy(session);
+  if (!policy.canChoose) {
+    parsed.data = { ...parsed.data, branchId: "" };
   }
 
   const result = await updateInvoice(invoiceId, parsed.data, {

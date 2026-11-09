@@ -7,7 +7,7 @@ import {
 export function LoaPendingBadge({ className = "" }: { className?: string }) {
   return (
     <span
-      title="HMO visit: the LOA number is not entered yet. It can be added later (Edit transaction), but the visit can't be Cleared without it."
+      title="HMO visit: a procedure has no LOA number yet. It can be added later (Edit transaction), but the visit can't be Cleared until every procedure has its LOA."
       className={`inline-flex w-fit items-center rounded-full px-2 py-0.5 text-xs font-medium ${LOA_PENDING_STYLE} ${className}`}
     >
       {LOA_PENDING_LABEL}

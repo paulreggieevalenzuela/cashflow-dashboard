@@ -70,7 +70,7 @@ const GROUPS: Group[] = [
     items: [
       {
         q: "What is an LOA / LOE and when is it entered?",
-        a: "The LOA (Letter of Authorization) is the HMO's approval to treat the patient; the LOE (Letter of Engagement) is the equivalent used by some HMOs. Attach it to the visit when it arrives. Until then the visit shows as LOA pending.",
+        a: "The LOA (Letter of Authorization) is the HMO's approval to treat the patient; the LOE (Letter of Engagement) is the equivalent used by some HMOs. The LOA number is typed on each procedure (Edit transaction): Maxicare gives one LOA per procedure; for the other HMOs tick \u201cSame LOA for all procedures\u201d to use one number, or untick it to enter one per procedure. The LOE number goes in the Payment section. Until every procedure has its LOA the visit shows as LOA pending.",
       },
       {
         q: "Why is an HMO visit not showing as paid?",

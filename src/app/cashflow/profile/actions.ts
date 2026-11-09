@@ -29,9 +29,10 @@ export async function updateThemeAction(theme: Theme): Promise<ActionResult> {
 }
 
 /**
- * Sets the signed-in user's own branch ("" = no branch). Any role can change
- * their own; an admin can change anyone's from the Users page. The branch
- * decides which branch the Transactions list opens on.
+ * Sets the signed-in user's own branch ("" = no branch). Admin only: the
+ * branch decides where a person's visits are saved and which Queue they see,
+ * so staff and dentists get it from an admin (Users page). An admin can also
+ * change anyone's from the Users page.
  */
 export async function updateMyBranchAction(
   branchId: string,
@@ -39,6 +40,13 @@ export async function updateMyBranchAction(
   const session = await auth();
   if (!session?.user) {
     return { ok: false, message: "You must be signed in to change this." };
+  }
+
+  if (session.user.role !== "admin") {
+    return {
+      ok: false,
+      message: "Only an admin can change a branch. Ask an admin to assign yours.",
+    };
   }
 
   if (branchId && !(await getBranchById(branchId))) {

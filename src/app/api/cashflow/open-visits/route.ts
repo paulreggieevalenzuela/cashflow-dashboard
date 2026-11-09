@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth/access";
+import { getBranchPolicy } from "@/lib/auth/branch-policy";
 import { countOpenVisits } from "@/lib/db/visit-status";
 
 export const dynamic = "force-dynamic";
@@ -15,7 +16,10 @@ export async function GET() {
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  const count = await countOpenVisits();
+  // The count is for the branch assigned to this account (every branch only
+  // when the account has none), whatever the Queue page is filtered to.
+  const policy = await getBranchPolicy(session);
+  const count = await countOpenVisits(policy.branchId);
   return NextResponse.json(
     { count },
     { headers: { "Cache-Control": "no-store" } },

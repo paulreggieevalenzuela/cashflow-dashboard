@@ -65,7 +65,12 @@ import {
   summarizeChanges,
   type AuditSnapshot,
 } from "@/lib/cashflow/audit-diff";
-import { hasHmoPayment, isLoaMissing, isLoaPending } from "@/lib/cashflow/hmo";
+import {
+  combineLoaNumbers,
+  hasHmoPayment,
+  isLoaMissing,
+  isLoaPending,
+} from "@/lib/cashflow/hmo";
 import { getHmoInfoByInvoice } from "@/lib/db/hmo";
 import { getReadinessIssues } from "@/lib/db/visit-readiness";
 import { logAudit } from "@/lib/db/audit";
@@ -408,6 +413,15 @@ function checkVisitFields(
   return errors;
 }
 
+/** The visit's LOA summary (blank while any real procedure has no LOA). */
+function visitLoa(input: InvoiceInput): string {
+  return combineLoaNumbers(
+    input.lines
+      .filter((line) => !isCheckInPlaceholder(line.procedure))
+      .map((line) => line.loaNumber),
+  );
+}
+
 /** The ID and recall columns of the invoice header. An ID is only kept
  * when a discount on the visit needs one. */
 function visitHeaderFields(input: InvoiceInput, priced: PricedLine[]) {
@@ -417,7 +431,8 @@ function visitHeaderFields(input: InvoiceInput, priced: PricedLine[]) {
     discountIdNumber: keepId ? input.discountIdNumber.trim() : "",
     recallDate: input.recallDate || null,
     recallReason: input.recallDate ? input.recallReason.trim() : "",
-    loaNumber: input.loaNumber.trim(),
+    // The visit's LOA is the summary of its procedures' LOAs.
+    loaNumber: visitLoa(input),
     loeNumber: input.loeNumber.trim(),
   };
 }
@@ -465,6 +480,9 @@ function buildLine(args: {
     month: monthYear?.month ?? "",
     year: monthYear?.year ?? 0,
     invoiceNumber: base.invoiceNumber,
+    loaNumber: isCheckInPlaceholder(priced.input.procedure)
+      ? ""
+      : priced.input.loaNumber.trim(),
     remarks: base.remarks,
     merchantFee: args.fee,
     withholdingTax: args.withholding,
@@ -730,7 +748,7 @@ export async function createInvoice(
     collected: appliedToBill(paidNow, input.payment?.paymentType),
     loaMissing: isLoaMissing({
       isHmo: hasHmoPayment([input.payment?.paymentType]),
-      loaNumber: input.loaNumber,
+      loaNumber: visitLoa(input),
     }),
     hasProcedures,
   });
