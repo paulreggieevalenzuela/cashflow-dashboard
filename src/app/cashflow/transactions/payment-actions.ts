@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { auth } from "@/lib/auth/access";
+import { requirePermission } from "@/lib/auth/guards";
 import {
   PaymentInputSchema,
   type PaymentInput,
@@ -32,10 +32,14 @@ export async function addPaymentAction(
   invoiceId: string,
   input: PaymentInput,
 ): Promise<ActionResult> {
-  const session = await auth();
-  if (!session?.user) {
-    return { ok: false, message: "You must be signed in to record a payment." };
+  const guard = await requirePermission(
+    "payment.add",
+    "You don't have permission to record payments.",
+  );
+  if (!guard.ok) {
+    return { ok: false, message: guard.message };
   }
+  const session = guard.session;
 
   const summary = (await getInvoiceSummaries([invoiceId]))[invoiceId];
   if (!summary) {
@@ -92,19 +96,28 @@ export async function addPaymentAction(
 export async function deletePaymentAction(
   paymentId: string,
 ): Promise<ActionResult> {
-  const session = await auth();
-  if (session?.user.role !== "admin") {
-    return { ok: false, message: "Only admins can remove a payment." };
+  const guard = await requirePermission(
+    "payment.delete",
+    "You don't have permission to remove payments.",
+  );
+  if (!guard.ok) {
+    return { ok: false, message: guard.message };
   }
+  const session = guard.session;
+  const actor = {
+    userId: session.user.id,
+    name: session.user.name ?? session.user.email ?? "",
+  };
 
   const removed = await getPaymentById(paymentId);
-  const invoiceId = await deletePayment(paymentId);
+  let invoiceId: string | null;
+  try {
+    invoiceId = await deletePayment(paymentId, actor);
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : "Could not remove the payment." };
+  }
   if (invoiceId) {
     await recomputeInvoiceFees(invoiceId);
-    const actor = {
-      userId: session.user.id,
-      name: session.user.name ?? session.user.email ?? "",
-    };
     await syncStatusWithPayments(invoiceId, actor);
     await logAudit({
       action: "payment.removed",

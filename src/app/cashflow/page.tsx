@@ -1,11 +1,11 @@
 import { auth } from "@/lib/auth/access";
+import { can } from "@/lib/auth/guards";
 import { CashflowOverview } from "@/components/cashflow/cashflow-overview";
 import { currentPeriodKeys } from "@/lib/cashflow/dashboard-metrics";
 import { todayInManila } from "@/lib/cashflow/visit-status";
 import { getBranchById, listBranches } from "@/lib/db/branches";
 import { getOverviewData } from "@/lib/db/overview";
 import { getSalesTarget } from "@/lib/db/targets";
-import { getUserById } from "@/lib/db/users";
 
 /**
  * The Overview. Every figure is added up by the database and only the
@@ -16,8 +16,15 @@ import { getUserById } from "@/lib/db/users";
 export default async function CashflowPage() {
   const session = await auth();
   const isAdmin = session?.user.role === "admin";
-  const me = session?.user ? await getUserById(session.user.id) : undefined;
-  const branchId = !isAdmin && me?.branchId ? me.branchId : null;
+  // Owners and admins see every clinic. Anyone else sees their home clinic
+  // (the first one ticked for them), or everything when none is ticked.
+  const ownBranches = session?.user.branchIds ?? [];
+  const home = session?.user.branchId ?? null;
+  const branchId = isAdmin
+    ? null
+    : home && ownBranches.includes(home)
+      ? home
+      : (ownBranches[0] ?? null);
 
   // "Today" on the clinic's calendar (Manila), parsed as a local date so the
   // current month / quarter / year do not depend on the server's time zone.
@@ -48,7 +55,7 @@ export default async function CashflowPage() {
               year: yearTarget?.targetAmount ?? null,
             }
       }
-      canEditTargets={isAdmin}
+      canEditTargets={can(session, "targets.edit")}
       branchName={branch?.name}
       branches={branches}
     />

@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth/access";
+import { can } from "@/lib/auth/guards";
 import { canRemoveFromQueue, isVisitStatus } from "@/lib/cashflow/visit-status";
 import { deleteInvoice } from "@/lib/db/invoices";
 import { getQueueRemovalFacts, setVisitStatus } from "@/lib/db/visit-status";
@@ -34,7 +35,7 @@ export async function setVisitStatusAction(
     actor: {
       userId: session.user.id,
       name: session.user.name ?? session.user.email ?? "",
-      isAdmin: session.user.role === "admin",
+      isAdmin: can(session, "visit.status_override"),
     },
   });
   if (!result.ok) {
@@ -76,10 +77,14 @@ export async function removeFromQueueAction(
     return check;
   }
 
-  await deleteInvoice(invoiceId, {
-    userId: session.user.id,
-    name: session.user.name ?? session.user.email ?? "",
-  });
+  try {
+    await deleteInvoice(invoiceId, {
+      userId: session.user.id,
+      name: session.user.name ?? session.user.email ?? "",
+    });
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : "Could not remove the visit." };
+  }
 
   revalidatePath("/cashflow/transactions", "layout");
   revalidatePath("/cashflow/patients", "layout");

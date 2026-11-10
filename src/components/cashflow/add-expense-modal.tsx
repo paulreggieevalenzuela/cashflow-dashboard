@@ -1,5 +1,6 @@
 "use client";
 
+import { useCan } from "@/components/cashflow/capabilities-context";
 import { useState } from "react";
 import { ExpenseForm } from "@/components/cashflow/expense-form";
 import { Modal } from "@/components/ui/modal";
@@ -11,7 +12,7 @@ import type { Supplier } from "@/lib/db/suppliers";
  * button-opens-modal-with-form pattern as AddTransactionModal, just for the
  * outflow side.
  */
-export function AddExpenseModal({
+function AddExpenseModalInner({
   branches,
   suppliers,
 }: {
@@ -54,4 +55,12 @@ export function AddExpenseModal({
       </Modal>
     </>
   );
+}
+
+/** Shown only to people who may add one (the server checks it too). */
+export function AddExpenseModal(
+  props: React.ComponentProps<typeof AddExpenseModalInner>,
+) {
+  const allowed = useCan("expense.add");
+  return allowed ? <AddExpenseModalInner {...props} /> : null;
 }

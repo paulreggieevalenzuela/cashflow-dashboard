@@ -1,20 +1,17 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { auth } from "@/lib/auth/access";
+import { requirePermission } from "@/lib/auth/guards";
 import { createBranch, deleteBranch, renameBranch } from "@/lib/db/branches";
 
 type ActionResult = { ok: true } | { ok: false; message: string };
 
 async function requireAdmin(): Promise<ActionResult> {
-  const session = await auth();
-  if (!session?.user) {
-    return { ok: false, message: "You must be signed in." };
-  }
-  if (session.user.role !== "admin") {
-    return { ok: false, message: "Only admins can manage branches." };
-  }
-  return { ok: true };
+  const guard = await requirePermission(
+    "branch.manage",
+    "You don't have permission to manage clinics.",
+  );
+  return guard.ok ? { ok: true } : guard;
 }
 
 function revalidate() {

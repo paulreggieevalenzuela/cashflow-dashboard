@@ -8,6 +8,14 @@ declare module "next-auth" {
       role: SessionRole;
       /** The one person with access to everything (counts as "admin" above). */
       isSuperuser: boolean;
+      /** An owner (counts as "admin" above, with the owner's extra rights). */
+      isOwner: boolean;
+      /** What this person may do right now (role defaults + their own changes). */
+      permissions: string[];
+      /** The clinics they work in; null = every clinic (owner, admin, superuser). */
+      branchIds: string[] | null;
+      /** Their home clinic (the first one ticked), if any. */
+      branchId: string | null;
       /** Still has to choose their own password before using the app. */
       mustChangePassword: boolean;
     } & DefaultSession["user"];

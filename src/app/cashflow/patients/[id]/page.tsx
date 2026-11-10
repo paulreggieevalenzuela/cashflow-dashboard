@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { auth } from "@/lib/auth/access";
+import { can } from "@/lib/auth/guards";
 import { AddTransactionModal } from "@/components/cashflow/add-transaction-modal";
 import { AuditTrail } from "@/components/cashflow/audit-trail";
 import { MergePatient } from "@/components/cashflow/merge-patient";
@@ -62,7 +63,9 @@ export default async function PatientPage({
   const balanceOnly = raw.balance === "1";
 
   const [session, profile] = await Promise.all([auth(), getPatientProfile(id)]);
-  const isAdmin = session?.user.role === "admin";
+  const canSeeAudit = can(session, "audit.view");
+  const canSeeIds = can(session, "patient.ids_reveal");
+  const canOverrideStatus = can(session, "visit.status_override");
 
   if (!profile) {
     return (
@@ -87,7 +90,7 @@ export default async function PatientPage({
       listBranches(),
       listProcedureOptions(),
       listActiveDiscountTypes(),
-      isAdmin ? listAuditForPatient(id) : Promise.resolve([]),
+      canSeeAudit ? listAuditForPatient(id) : Promise.resolve([]),
     ]);
 
   const { patient, totals } = profile;
@@ -127,7 +130,7 @@ export default async function PatientPage({
           <p className="text-sm text-zinc-500 dark:text-zinc-400">
             {patient.contactNumber || "No contact number"}
             {profile.lastDiscountId
-              ? ` · PWD / Senior ID on file${profile.lastDiscountId.type ? ` (${profile.lastDiscountId.type})` : ""}: ${isAdmin ? profile.lastDiscountId.number : maskId(profile.lastDiscountId.number)}`
+              ? ` · PWD / Senior ID on file${profile.lastDiscountId.type ? ` (${profile.lastDiscountId.type})` : ""}: ${canSeeIds ? profile.lastDiscountId.number : maskId(profile.lastDiscountId.number)}`
               : ""}
           </p>
           {(patient.birthDate || patient.hmoCompany || patient.hmoAccountNumber) && (
@@ -332,7 +335,7 @@ export default async function PatientPage({
                         invoiceId={row.invoiceId}
                         status={row.status}
                         balanceDue={row.balanceDue}
-                        isAdmin={isAdmin}
+                        isAdmin={canOverrideStatus}
                         loaMissing={row.loaMissing}
                         visitIssue={row.visitIssue}
                         layout="stacked"
@@ -357,7 +360,7 @@ export default async function PatientPage({
         </div>
       </section>
 
-      {isAdmin && (
+      {canSeeAudit && (
         <>
           <section className="rounded-xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-950">
             <h3 className="mb-3 text-sm font-semibold text-zinc-900 dark:text-zinc-50">

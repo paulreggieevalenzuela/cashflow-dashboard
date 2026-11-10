@@ -1,6 +1,5 @@
 import { and, asc, eq, gte, inArray, lt, notInArray } from "drizzle-orm";
 import { db } from "@/lib/db/client";
-import { getUserById } from "@/lib/db/users";
 import {
   branches,
   invoices,
@@ -367,28 +366,59 @@ export async function getDayEndReport(input: {
 }
 
 /**
- * Which branch a person may look at. An admin picks any branch or "all"; a
- * staff member or dentist who belongs to a branch is kept to it; one with no
- * branch picks any single branch.
+ * Which clinic a person may look at. An owner / admin picks any clinic or
+ * "all"; a dentist or staff member is kept to the clinics ticked for them
+ * (one clinic: locked to it; several: they pick among those). An account
+ * with no clinic ticked picks any single clinic, as before.
  */
+export type DayEndScope = {
+  branchId: string | null;
+  /** True when there is nothing to choose (a single clinic). */
+  locked: boolean;
+  /** The clinics they may look at; null = every clinic. */
+  allowedBranchIds: string[] | null;
+};
+
 export async function resolveDayEndScope(input: {
   userId: string;
   role: string;
+  /** Their home clinic and every clinic ticked for them (from the session). */
+  branchId?: string | null;
+  branchIds?: string[] | null;
   requested: string | undefined;
   branchList: Array<{ id: string }>;
-}): Promise<{ branchId: string | null; locked: boolean }> {
+}): Promise<DayEndScope> {
   const known = (id: string | undefined) =>
     id && input.branchList.some((branch) => branch.id === id) ? id : null;
 
   if (input.role === "admin") {
-    return { branchId: known(input.requested), locked: false };
+    return { branchId: known(input.requested), locked: false, allowedBranchIds: null };
   }
-  const user = await getUserById(input.userId);
-  if (user?.branchId) {
-    return { branchId: user.branchId, locked: true };
+  const allowed = (input.branchIds ?? []).filter((id) => known(id));
+  if (allowed.length === 0) {
+    return {
+      branchId: known(input.requested) ?? input.branchList[0]?.id ?? null,
+      locked: false,
+      allowedBranchIds: input.branchList.map((branch) => branch.id),
+    };
   }
-  return {
-    branchId: known(input.requested) ?? input.branchList[0]?.id ?? null,
-    locked: false,
-  };
+  const requested = known(input.requested);
+  const branchId =
+    requested && allowed.includes(requested)
+      ? requested
+      : input.branchId && allowed.includes(input.branchId)
+        ? input.branchId
+        : allowed[0];
+  return { branchId, locked: allowed.length === 1, allowedBranchIds: allowed };
+}
+
+/** May this scope look at something that belongs to this clinic? */
+export function scopeCoversBranch(
+  scope: Pick<DayEndScope, "allowedBranchIds">,
+  branchId: string | null,
+): boolean {
+  return (
+    scope.allowedBranchIds === null ||
+    (branchId !== null && scope.allowedBranchIds.includes(branchId))
+  );
 }

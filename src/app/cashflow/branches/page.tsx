@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth/access";
+import { can } from "@/lib/auth/guards";
 import { BranchesManager } from "@/components/cashflow/branches-manager";
 import { listBranches } from "@/lib/db/branches";
 
@@ -11,7 +12,7 @@ export const metadata: Metadata = {
 export default async function BranchesPage() {
   const session = await auth();
 
-  if (session?.user.role !== "admin") {
+  if (!can(session, "branch.manage")) {
     redirect("/cashflow");
   }
 

@@ -6,7 +6,7 @@ import {
 } from "@/lib/cashflow/hmo-billing";
 import { buildXlsx, toCsv, XLSX_CONTENT_TYPE } from "@/lib/cashflow/xlsx";
 import { listBranches } from "@/lib/db/branches";
-import { resolveDayEndScope } from "@/lib/db/day-end";
+import { resolveDayEndScope, scopeCoversBranch } from "@/lib/db/day-end";
 import { getHmoBilling } from "@/lib/db/hmo-billing";
 
 export const dynamic = "force-dynamic";
@@ -30,14 +30,16 @@ export async function GET(
   if (!saved) {
     return NextResponse.json({ error: "Billing not found." }, { status: 404 });
   }
-  if (session.user.role !== "admin") {
+  {
     const scope = await resolveDayEndScope({
       userId: session.user.id,
       role: session.user.role,
+      branchId: session.user.branchId,
+      branchIds: session.user.branchIds,
       requested: saved.branchId ?? undefined,
       branchList: await listBranches(),
     });
-    if (scope.locked && scope.branchId !== saved.branchId) {
+    if (!scopeCoversBranch(scope, saved.branchId)) {
       return NextResponse.json({ error: "Billing not found." }, { status: 404 });
     }
   }

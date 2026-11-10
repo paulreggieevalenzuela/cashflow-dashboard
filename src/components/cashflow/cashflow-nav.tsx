@@ -15,22 +15,14 @@ const BASE_LINKS = [
   { href: "/cashflow/patients", label: "Patients" },
 ] as const;
 
-// A dentist sees their own priority/commission here; a staff member sees
-// their own bonus (see the Performance page's own role-based sectioning) —
-// each role only ever sees its own numbers, never a ranked comparison
-// against colleagues, so both get the same nav entry.
-const DENTIST_LINKS = [
-  { href: "/cashflow/performance", label: "Performance" },
-] as const;
-const STAFF_LINKS = SHOW_STAFF_PERFORMANCE
-  ? ([{ href: "/cashflow/performance", label: "Performance" }] as const)
-  : ([] as const);
-
-const ADMIN_LINKS = [
-  { href: "/cashflow/performance", label: "Performance" },
-  { href: "/cashflow/commissions", label: "Commissions" },
-  { href: "/cashflow/branches", label: "Branches" },
-  { href: "/cashflow/users", label: "Users" },
+/** A link that shows only for people with a privilege. Everyone sees
+ * Performance (a dentist or staff member sees only their own numbers there,
+ * see the page's own sectioning). */
+const PERMISSION_LINKS = [
+  { href: "/cashflow/performance", label: "Performance", permission: null },
+  { href: "/cashflow/commissions", label: "Commissions", permission: "commission.manage" },
+  { href: "/cashflow/branches", label: "Branches", permission: "branch.manage" },
+  { href: "/cashflow/users", label: "Users", permission: "user.manage" },
 ] as const;
 
 /**
@@ -44,12 +36,18 @@ const ADMIN_LINKS = [
  */
 export function CashflowNav({
   role,
+  permissions = [],
+  isSuperuser = false,
   displayName,
   email,
   openVisits = null,
   resetRequests = 0,
 }: {
   role: UserRole;
+  /** What this person may do (the menu shows only what they can open). */
+  permissions?: readonly string[];
+  /** Shows "Deleted items" in the profile menu (superuser only, never in the nav). */
+  isSuperuser?: boolean;
   displayName?: string;
   email?: string;
   /** Visits not Cleared yet (null = unknown). Shown next to "Queue". */
@@ -61,12 +59,16 @@ export function CashflowNav({
   const [isOpen, setIsOpen] = useState(false);
   const openCount = useOpenVisitCount(openVisits);
 
-  const links =
-    role === "admin"
-      ? [...BASE_LINKS, ...ADMIN_LINKS]
-      : role === "dentist"
-        ? [...BASE_LINKS, ...DENTIST_LINKS]
-        : [...BASE_LINKS, ...STAFF_LINKS];
+  const links = [
+    ...BASE_LINKS,
+    ...PERMISSION_LINKS.filter((link) => {
+      if (link.permission === null) {
+        // Staff see Performance only while staff performance is shown.
+        return role !== "staff" || SHOW_STAFF_PERFORMANCE || permissions.includes("performance.view_all");
+      }
+      return permissions.includes(link.permission);
+    }),
+  ];
 
   function badgeFor(href: string) {
     // Always shown for the Queue (0 included) so the menu stays an indicator.
@@ -99,7 +101,12 @@ export function CashflowNav({
 
       <div className="hidden items-center gap-3 lg:flex">
         {displayName ? (
-          <AccountMenu role={role} displayName={displayName} email={email} />
+          <AccountMenu
+            role={role}
+            displayName={displayName}
+            email={email}
+            isSuperuser={isSuperuser}
+          />
         ) : (
           <SignOutButton />
         )}
@@ -183,6 +190,15 @@ export function CashflowNav({
                   className="rounded-md px-3 py-2.5 text-sm font-medium text-zinc-600 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
                 >
                   Profile
+                </Link>
+              )}
+              {displayName && isSuperuser && (
+                <Link
+                  href="/cashflow/trash"
+                  onClick={() => setIsOpen(false)}
+                  className="rounded-md px-3 py-2.5 text-sm font-medium text-zinc-600 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+                >
+                  Deleted items
                 </Link>
               )}
               <SignOutButton variant="menu" />

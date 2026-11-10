@@ -28,7 +28,6 @@ export function EditTransactionModal({
   discountTypes,
   payments,
   totalDue,
-  canDelete = false,
   trigger,
 }: {
   invoice: Invoice;
@@ -43,7 +42,6 @@ export function EditTransactionModal({
   payments?: Payment[];
   /** What the visit currently costs, for the Payments section's balance. */
   totalDue?: number;
-  canDelete?: boolean;
   /** Custom trigger; receives an onClick to open the modal. Defaults to a
    * bordered "Edit transaction" button matching the detail page's other
    * action buttons. */
@@ -92,7 +90,6 @@ export function EditTransactionModal({
                 lines.reduce((sum, line) => sum + line.amountPaid, 0)
               }
               payments={payments}
-              canDelete={canDelete}
             />
           )}
         </div>

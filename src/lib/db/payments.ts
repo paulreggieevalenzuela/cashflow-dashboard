@@ -1,3 +1,4 @@
+import { softDeletePayment } from "@/lib/db/deleted-items";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { payments, type PaymentRow } from "@/lib/db/schema";
@@ -77,14 +78,12 @@ export async function getPaymentById(id: string): Promise<Payment | undefined> {
   return row ? toAppPayment(row) : undefined;
 }
 
-export async function deletePayment(id: string): Promise<string | null> {
-  const [row] = await db
-    .select({ invoiceId: payments.invoiceId })
-    .from(payments)
-    .where(eq(payments.id, id))
-    .limit(1);
-  await db.delete(payments).where(eq(payments.id, id));
-  return row?.invoiceId ?? null;
+export async function deletePayment(
+  id: string,
+  actor: { userId: string | null; name: string },
+): Promise<string | null> {
+  // Kept in Deleted items (with its proof files).
+  return softDeletePayment(id, actor);
 }
 
 const CHUNK = 200;

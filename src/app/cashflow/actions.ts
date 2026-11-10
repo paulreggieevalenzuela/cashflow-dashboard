@@ -2,8 +2,12 @@
 
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth/access";
-import { getBranchPolicy, NO_BRANCH_MESSAGE } from "@/lib/auth/branch-policy";
-import { canEditClearedVisit } from "@/lib/cashflow/visit-status";
+import {
+  getBranchPolicy,
+  isBranchAllowed,
+  NO_BRANCH_MESSAGE,
+} from "@/lib/auth/branch-policy";
+import { can, requirePermission } from "@/lib/auth/guards";
 import { InvoiceInputSchema, type InvoiceInput } from "@/lib/cashflow/invoice-schema";
 import { parseCashflowCsv, type CsvRowError } from "@/lib/cashflow/parse-csv";
 import { logAudit } from "@/lib/db/audit";
@@ -73,24 +77,37 @@ type SavedInvoice = { invoiceId: string; firstLineId: string };
 export async function createInvoiceAction(
   input: InvoiceInput,
 ): Promise<ActionResult<SavedInvoice>> {
-  const session = await requireSession();
-  if (!session) {
-    return { ok: false, message: "You must be signed in to add a transaction." };
+  const guard = await requirePermission(
+    "visit.create",
+    "You don't have permission to add visits.",
+  );
+  if (!guard.ok) {
+    return { ok: false, message: guard.message };
   }
+  const session = guard.session;
 
   const parsed = parseInvoiceInput(input);
   if (!parsed.ok) {
     return parsed.result;
   }
 
-  // Only an admin chooses the branch. Anyone else's visit is saved under
-  // their own branch, whatever the screen sent.
+  // Owners and admins pick any clinic. Everyone else saves under a clinic
+  // they are ticked for: their only one, or the one they picked among
+  // several — never one they are not allowed in, whatever the screen sent.
   const policy = await getBranchPolicy(session);
-  if (!policy.canChoose) {
-    if (!policy.branchId) {
-      return { ok: false, message: NO_BRANCH_MESSAGE };
+  if (policy.allowedBranchIds !== null) {
+    if (!policy.canChoose) {
+      if (!policy.branchId) {
+        return { ok: false, message: NO_BRANCH_MESSAGE };
+      }
+      parsed.data = { ...parsed.data, branchId: policy.branchId };
+    } else {
+      const chosen = parsed.data.branchId || policy.branchId;
+      if (!isBranchAllowed(policy, chosen)) {
+        return { ok: false, message: "You can only add visits to your own clinics." };
+      }
+      parsed.data = { ...parsed.data, branchId: chosen ?? "" };
     }
-    parsed.data = { ...parsed.data, branchId: policy.branchId };
   }
 
   const result = await createInvoice(parsed.data, {
@@ -108,28 +125,40 @@ export async function updateInvoiceAction(
   invoiceId: string,
   input: InvoiceInput,
 ): Promise<ActionResult<SavedInvoice>> {
-  const session = await requireSession();
-  if (!session) {
-    return { ok: false, message: "You must be signed in to edit a transaction." };
+  const guard = await requirePermission(
+    "visit.edit",
+    "You don't have permission to edit visits.",
+  );
+  if (!guard.ok) {
+    return { ok: false, message: guard.message };
   }
+  const session = guard.session;
 
   const parsed = parseInvoiceInput(input);
   if (!parsed.ok) {
     return parsed.result;
   }
 
-  // Only an admin can move a visit to another branch: for anyone else the
-  // visit keeps the branch it has (an empty value means "unchanged").
+  // Moving a visit to another clinic: owners and admins anywhere; people
+  // with several clinics only among theirs; anyone else cannot move it (an
+  // empty value means "unchanged").
   const policy = await getBranchPolicy(session);
   if (!policy.canChoose) {
     parsed.data = { ...parsed.data, branchId: "" };
+  } else if (
+    policy.allowedBranchIds !== null &&
+    parsed.data.branchId &&
+    !isBranchAllowed(policy, parsed.data.branchId)
+  ) {
+    return { ok: false, message: "You can only use your own clinics." };
   }
 
+  const mayEditCleared = can(session, "visit.edit_cleared");
   const result = await updateInvoice(invoiceId, parsed.data, {
     userId: session.user.id,
     userName: session.user.name ?? session.user.email ?? "",
-    isAdmin: session.user.role === "admin",
-    canEditCleared: canEditClearedVisit(session.user.role),
+    isAdmin: mayEditCleared,
+    canEditCleared: mayEditCleared,
   });
   if (!result.ok) {
     return result;
@@ -212,14 +241,22 @@ export async function importCsvAction(
   csvText: string,
   branchId?: string,
 ): Promise<ActionResult<ImportCsvData>> {
-  const session = await requireSession();
-  if (!session) {
-    return { ok: false, message: "You must be signed in to import transactions." };
+  const guard = await requirePermission(
+    "import.csv",
+    "You don't have permission to import transactions.",
+  );
+  if (!guard.ok) {
+    return { ok: false, message: guard.message };
   }
+  const session = guard.session;
 
   const { transactions, errors, branchName: detectedName } = parseCashflowCsv(csvText);
+  const importPolicy = await getBranchPolicy(session);
 
   let resolvedBranchId: string | null = branchId || null;
+  if (resolvedBranchId && !isBranchAllowed(importPolicy, resolvedBranchId) && importPolicy.allowedBranchIds !== null) {
+    return { ok: false, message: "You can only import into your own clinics." };
+  }
   let branchName: string | null = null;
   let branchNote: string | null = null;
   if (transactions.length > 0 || resolvedBranchId) {
@@ -232,7 +269,9 @@ export async function importCsvAction(
         branches.find((branch) => branch.name.trim().toLowerCase() === wanted) ??
         branches.find((branch) => branch.name.toLowerCase().includes(wanted)) ??
         branches.find((branch) => wanted.includes(branch.name.trim().toLowerCase()));
-      if (match) {
+      if (match && isBranchAllowed(importPolicy, match.id) === false && importPolicy.allowedBranchIds !== null) {
+        branchNote = `The file is for ${match.name}, which is not one of your clinics, so the rows were saved without a clinic.`;
+      } else if (match) {
         resolvedBranchId = match.id;
         branchName = match.name;
       } else {
@@ -275,34 +314,48 @@ export async function importCsvAction(
 }
 
 export async function removeTransactionAction(id: string): Promise<ActionResult<null>> {
-  const session = await requireSession();
-  if (!session) {
-    return { ok: false, message: "You must be signed in to remove a transaction." };
+  const guard = await requirePermission(
+    "visit.delete",
+    "You don't have permission to remove transactions.",
+  );
+  if (!guard.ok) {
+    return { ok: false, message: guard.message };
   }
-  if (session.user.role !== "admin") {
-    return { ok: false, message: "Only admins can remove transactions." };
-  }
+  const session = guard.session;
 
-  await deleteTransaction(id);
+  try {
+    await deleteTransaction(id, {
+      userId: session.user.id,
+      name: session.user.name ?? session.user.email ?? "",
+    });
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : "Could not remove the transaction." };
+  }
   revalidateCashflowPaths();
   return { ok: true, data: null };
 }
 
 /** Removes a whole visit — all its procedure lines, the invoice and its
- * payments. Admin-only, like removing a single transaction. */
+ * payments. Kept in Deleted items; needs the same privilege as removing a
+ * single transaction. */
 export async function removeInvoiceAction(invoiceId: string): Promise<ActionResult<null>> {
-  const session = await requireSession();
-  if (!session) {
-    return { ok: false, message: "You must be signed in to remove a transaction." };
+  const guard = await requirePermission(
+    "visit.delete",
+    "You don't have permission to remove transactions.",
+  );
+  if (!guard.ok) {
+    return { ok: false, message: guard.message };
   }
-  if (session.user.role !== "admin") {
-    return { ok: false, message: "Only admins can remove transactions." };
-  }
+  const session = guard.session;
 
-  await deleteInvoice(invoiceId, {
-    userId: session.user.id,
-    name: session.user.name ?? session.user.email ?? "",
-  });
+  try {
+    await deleteInvoice(invoiceId, {
+      userId: session.user.id,
+      name: session.user.name ?? session.user.email ?? "",
+    });
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : "Could not remove the visit." };
+  }
   revalidateCashflowPaths();
   return { ok: true, data: null };
 }

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { auth } from "@/lib/auth/access";
-import { canEditClearedVisit, isLocked, isVisitStatus } from "@/lib/cashflow/visit-status";
+import { can } from "@/lib/auth/guards";
+import { isLocked, isVisitStatus } from "@/lib/cashflow/visit-status";
 import { TransactionForm } from "@/components/cashflow/transaction-form";
 import { listBranches } from "@/lib/db/branches";
 import { listDentistUsers } from "@/lib/db/dentists";
@@ -54,7 +55,7 @@ export default async function EditTransactionPage({
 
   if (
     isLocked(isVisitStatus(detail.invoice.status) ? detail.invoice.status : "Cleared") &&
-    !canEditClearedVisit(session?.user.role)
+    !can(session, "visit.edit_cleared")
   ) {
     return (
       <NotFound message="This visit is Cleared, so it is locked. Ask an admin or a staff member to correct it." />

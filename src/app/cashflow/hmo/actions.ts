@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth/access";
+import { can } from "@/lib/auth/guards";
 import { formatRange, rangeProblem } from "@/lib/cashflow/hmo-billing";
 import { logAudit } from "@/lib/db/audit";
 import { listBranches } from "@/lib/db/branches";
@@ -47,6 +48,8 @@ export async function generateHmoBillingAction(formData: FormData): Promise<void
   const scope = await resolveDayEndScope({
     userId: session.user.id,
     role: session.user.role,
+    branchId: session.user.branchId,
+    branchIds: session.user.branchIds,
     requested: fields.branch,
     branchList,
   });
@@ -81,13 +84,13 @@ export async function generateHmoBillingAction(formData: FormData): Promise<void
   redirect(`/cashflow/hmo/${billing.id}`);
 }
 
-/** Void a billing (admin only): its lines can be billed again. */
+/** Void a billing (needs the void privilege): its lines can be billed again. */
 export async function voidHmoBillingAction(formData: FormData): Promise<void> {
   const session = await auth();
   if (!session?.user) redirect("/login");
   const id = String(formData.get("id") ?? "");
-  if (session.user.role !== "admin") {
-    redirect(`/cashflow/hmo/${id}?error=${encodeURIComponent("Only an admin can void a billing.")}`);
+  if (!can(session, "hmo.void")) {
+    redirect(`/cashflow/hmo/${id}?error=${encodeURIComponent("You don't have permission to void a billing.")}`);
   }
   const saved = await getHmoBilling(id);
   if (!saved) redirect("/cashflow/hmo");

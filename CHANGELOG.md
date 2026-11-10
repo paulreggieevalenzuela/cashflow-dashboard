@@ -4,6 +4,96 @@ All notable changes to the ADT Dental Clinic Cashflow app. The version is in
 `package.json` and `src/lib/cashflow/version.ts` (shown at the foot of the Help
 page). Newest first.
 
+## 0.4.0 — 2026-11-10
+
+Roles, per-user access and deleted items.
+
+### Added
+
+- **Owner role.** Owners sit above admins: same controls as an admin, and they
+  can also manage and reset admins. Several owners are allowed. Only the
+  superuser can create or change an owner.
+- **Manage a user** (Users → Manage): a screen with three tabs, like the staff
+  details form: **Personal Information** (name, e-mail), **Access & Permissions**
+  (role, authorized clinics and 24 grouped privilege checkboxes) and **Account
+  Settings** (reset password, remove account).
+- **Per-user privileges.** The role gives default ticks; each can be switched on
+  or off for one person (only the differences are stored, so a later change to a
+  role default still reaches everyone who was not customized). *Extra* /
+  *removed* markers show what differs; *Reset to role defaults* clears it. You
+  can only give privileges you hold yourself, and nobody changes their own access.
+- **Several clinics per person.** Dentists and staff can be ticked for more than
+  one clinic. They save visits only under, and see the Queue, Day end, HMO
+  billing and Overview only for, their own clinics (home clinic first).
+- **Deleted items** (superuser only, `/cashflow/trash`, opened from the
+  avatar/profile menu, not the top navigation). Deleting a visit,
+  procedure line, payment, expense or attached file by an owner or admin now
+  moves it here instead of destroying it; it no longer counts in any report.
+  The superuser can **Restore** it exactly as it was (payments and files
+  included) or **Delete permanently**. Restores are checked first (the visit it
+  belongs to still exists, a reused invoice number is flagged) and never leave
+  half a visit behind.
+
+### Changed
+
+- Every admin-only check now uses a privilege, so what a person can do follows
+  their ticks (visits, payments, files, expenses, reports, rates, targets, users,
+  clinics).
+- The superuser is no longer listed on the Users screen.
+- **CSV import is owner/admin only by default** (it can be given to anyone on
+  the Manage screen).
+- Admins and owners work in every clinic; non-admins with several clinics start
+  on their home clinic.
+
+### Database
+
+Run `scripts/sql/2026-11-roles-permissions-trash.sql` in the Neon SQL Editor
+**before** starting this version: first STEP 1 (adds the `owner` role) on its
+own, then STEP 2 (three new tables; existing users keep their clinic).
+
+## 0.3.0 — 2026-11-10
+
+Commission update: editable rates and transferred patients.
+
+### Added
+
+- **Transferred patients (50 / 50).** The visit form has a new optional field,
+  **Transferred to dentist**. The commission of every procedure on that visit
+  is worked out once, at the **main dentist's** rate (their tier, or their own
+  rate), and then split: 50% to the main dentist and 50% to the dentist the
+  patient was transferred to. The two halves always add up to exactly the
+  commission (an odd centavo goes to the transferred dentist).
+- The **Commission report** (screen, Excel and CSV) lists a transferred line
+  twice, once per dentist, with a new **Note** column
+  ("50% — shared with …" / "50% — transferred from …"). The net collection is
+  divided the same way, so totals are never counted twice; the Rate column
+  still shows the main dentist's rate on both lines.
+- **Performance** counts the transferred dentist's half in their commission
+  (leaderboard, monthly / quarterly / annual, procedure breakdown) and lists
+  the patient under them. Sales stay with the main dentist.
+- The edit history (audit trail) records changes to "Transferred to dentist".
+- Help page: new "Commission" section.
+
+### Changed
+
+- **Commissions page: editable grids.** The tier table is now one grid with
+  every procedure down and Tier 3 / 2 / 1 across: click a rate to change it in
+  place (Enter saves, Esc cancels), click a dash to set one. *More* opens the
+  flat peso value (X-rays) and the HMO rate; *Also set* applies the same rate
+  to other tiers in one save. A procedure search box finds a row quickly.
+- **One person's own rates** is a second grid: choose a dentist (or staff
+  member for a bonus), see the tier rate next to their own rate, and change or
+  remove their own rate per procedure. It replaces the old "Set a commission
+  rate" form and list.
+- Saving a cell shows a spinner and cannot be pressed twice.
+
+### Database
+
+Run `scripts/sql/2026-11-commission-transfer-split.sql` in the Neon SQL Editor
+**before** starting this version (adds three columns to `transactions`; nothing
+existing is changed). Then, optionally, `yarn db:backfill-links` to re-price
+saved visits after rate changes.
+
 ## 0.2.0 — 2026-11-09
 
 HMO billing and a cleaner Day end report.

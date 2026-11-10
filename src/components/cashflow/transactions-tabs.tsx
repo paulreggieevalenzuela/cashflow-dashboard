@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { auth } from "@/lib/auth/access";
+import { can } from "@/lib/auth/guards";
 
 const TABS = [
   {
@@ -49,7 +50,7 @@ export async function TransactionsTabs({
   active: TransactionsTab;
 }) {
   const session = await auth();
-  const isAdmin = session?.user.role === "admin";
+  const isAdmin = can(session, "audit.view");
   const visible = TABS.filter(
     (tab) => !("adminOnly" in tab && tab.adminOnly) || isAdmin,
   );

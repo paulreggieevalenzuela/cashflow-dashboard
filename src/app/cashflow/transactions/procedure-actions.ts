@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { auth } from "@/lib/auth/access";
+import { requirePermission } from "@/lib/auth/guards";
 import { isPriceBasis } from "@/lib/cashflow/price-basis";
 import {
   createProcedure,
@@ -41,16 +42,14 @@ const InputSchema = z.object({
 });
 
 async function requireAdmin() {
-  const session = await auth();
-  if (!session?.user) {
-    return { ok: false as const, message: "You must be signed in." };
+  const guard = await requirePermission(
+    "procedure.manage",
+    "You don't have permission to change the procedure list.",
+  );
+  if (!guard.ok) {
+    return { ok: false as const, message: guard.message };
   }
-  if (session.user.role !== "admin") {
-    return {
-      ok: false as const,
-      message: "Only admins can change the procedure list.",
-    };
-  }
+  const session = guard.session;
   return {
     ok: true as const,
     actor: {

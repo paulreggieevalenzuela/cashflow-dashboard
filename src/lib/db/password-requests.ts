@@ -161,9 +161,14 @@ export async function listOpenResetRequests(): Promise<ResetRequest[]> {
  * typos and would only inflate the number.
  */
 export async function countActionableResetRequests(actorRole: UserRole): Promise<number> {
-  if (actorRole !== "admin" && actorRole !== "superuser") return 0;
+  if (actorRole !== "admin" && actorRole !== "owner" && actorRole !== "superuser") return 0;
   try {
-    const roles = actorRole === "superuser" ? ["admin", "dentist", "staff"] : ["dentist", "staff"];
+    const roles =
+      actorRole === "superuser"
+        ? ["owner", "admin", "dentist", "staff"]
+        : actorRole === "owner"
+          ? ["admin", "dentist", "staff"]
+          : ["dentist", "staff"];
     const [row] = await db
       .select({ value: sql<number>`count(*)::int` })
       .from(passwordResetRequests)
@@ -171,7 +176,7 @@ export async function countActionableResetRequests(actorRole: UserRole): Promise
       .where(
         and(
           eq(passwordResetRequests.status, "open"),
-          inArray(users.role, roles as ("admin" | "dentist" | "staff")[]),
+          inArray(users.role, roles as ("owner" | "admin" | "dentist" | "staff")[]),
         ),
       );
     return row?.value ?? 0;

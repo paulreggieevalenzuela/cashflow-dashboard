@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { auth } from "@/lib/auth/access";
+import { requirePermission } from "@/lib/auth/guards";
 import { setSalesTarget } from "@/lib/db/targets";
 import type { TargetPeriodType } from "@/lib/db/schema";
 
@@ -20,9 +20,12 @@ export async function setSalesTargetAction(
   periodKey: string,
   targetAmount: number,
 ): Promise<ActionResult> {
-  const session = await auth();
-  if (session?.user.role !== "admin") {
-    return { ok: false, message: "Only admins can set sales targets." };
+  const guard = await requirePermission(
+    "targets.edit",
+    "You don't have permission to set sales targets.",
+  );
+  if (!guard.ok) {
+    return guard;
   }
 
   if (!Number.isFinite(targetAmount) || targetAmount < 0) {

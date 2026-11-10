@@ -126,6 +126,7 @@ export type AuthState = {
   name: string;
   email: string;
   role: UserRole;
+  branchId: string | null;
   mustChangePassword: boolean;
   sessionVersion: number;
 };
@@ -143,6 +144,7 @@ export async function getAuthState(id: string): Promise<AuthState | undefined> {
         name: users.name,
         email: users.email,
         role: users.role,
+        branchId: users.branchId,
         mustChangePassword: users.mustChangePassword,
         sessionVersion: users.sessionVersion,
       })
@@ -153,7 +155,7 @@ export async function getAuthState(id: string): Promise<AuthState | undefined> {
   } catch (error) {
     if (!passwordSchemaMissing(error)) throw error;
     const [row] = await db
-      .select({ id: users.id, name: users.name, email: users.email, role: users.role })
+      .select({ id: users.id, name: users.name, email: users.email, role: users.role, branchId: users.branchId })
       .from(users)
       .where(eq(users.id, id))
       .limit(1);
@@ -207,6 +209,17 @@ export async function createUser(data: {
 export async function updateUserRole(id: string, role: AssignableRole): Promise<void> {
   // The superuser's role is never changed from the app.
   await db.update(users).set({ role }).where(and(eq(users.id, id), ne(users.role, "superuser")));
+}
+
+/** Name and e-mail (the e-mail is what they sign in with). */
+export async function updateUserProfile(
+  id: string,
+  data: { name: string; email: string },
+): Promise<void> {
+  await db
+    .update(users)
+    .set({ name: data.name.trim(), email: data.email.trim().toLowerCase() })
+    .where(and(eq(users.id, id), ne(users.role, "superuser")));
 }
 
 export async function updateUserBranch(id: string, branchId: string | null): Promise<void> {

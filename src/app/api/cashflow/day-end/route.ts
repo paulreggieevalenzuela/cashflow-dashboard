@@ -36,6 +36,8 @@ export async function GET(request: NextRequest) {
   const scope = await resolveDayEndScope({
     userId: session.user.id,
     role: session.user.role,
+    branchId: session.user.branchId,
+    branchIds: session.user.branchIds,
     requested: params.get("branch") ?? undefined,
     branchList,
   });

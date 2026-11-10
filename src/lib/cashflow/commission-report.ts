@@ -30,6 +30,10 @@ export type CommissionRow = {
   /** What the line netted after card fees and tax: the base for the rate. */
   netCollection: number;
   commission: number;
+  /** Set on a transferred patient's lines: who the commission is shared
+   * with, e.g. "50% — shared with Katherine Roldan (transferred)". Blank
+   * on an ordinary line. */
+  note?: string;
 };
 
 /** The columns the report's lines can be ordered by. */
@@ -202,6 +206,7 @@ export const COMMISSION_HEADERS = [
   "Net Collection",
   "Commission",
   "Rate",
+  "Note",
 ] as const;
 
 /** "October 3, 2026" or "October 1, 2026 – October 31, 2026". */
@@ -248,6 +253,7 @@ export function buildCommissionDetailSheet(
     isHmoPayment(row.paymentType)
       ? `${effectivePercent(row)}${effectivePercent(row) ? " (HMO)" : "HMO"}`
       : effectivePercent(row),
+    row.note ?? "",
   ];
   if (report.sort === "dentist") {
     // Ordered by dentist: each dentist's lines, then their subtotal.
@@ -284,7 +290,7 @@ export function buildCommissionDetailSheet(
     name: "Detail",
     rows,
     boldRows,
-    columnWidths: [16, 18, 26, 18, 16, 36, 22, 15, 14, 12],
+    columnWidths: [16, 18, 26, 18, 16, 36, 22, 15, 14, 12, 42],
   };
 }
 

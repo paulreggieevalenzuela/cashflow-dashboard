@@ -71,6 +71,13 @@ export const transactions = pgTable("transactions", {
   // history. Zero when there's no linked dentist, no linked procedure, or no
   // rate set for that pair.
   commissionAmount: numeric("commission_amount", { precision: 12, scale: 2 }).notNull().default("0"),
+  // Transferred patient: when a visit is handed to a second dentist, the
+  // commission (worked out once at the MAIN dentist's rate) is split 50/50.
+  // `commissionAmount` above is then the main dentist's half, and these hold
+  // the other dentist and their half. Blank / null / 0 on a normal visit.
+  transferDentist: text("transfer_dentist").notNull().default(""),
+  transferDentistUserId: uuid("transfer_dentist_user_id").references(() => users.id, { onDelete: "set null" }),
+  transferCommissionAmount: numeric("transfer_commission_amount", { precision: 12, scale: 2 }).notNull().default("0"),
   // Which physical location this transaction happened at. CSV imports are
   // tagged with whichever branch is selected for that upload batch (the
   // source CSV has no branch column of its own); manual entries default
@@ -133,6 +140,9 @@ export const transactions = pgTable("transactions", {
   index("transactions_branch_idx").on(table.branchId),
   index("transactions_visit_id_idx").on(table.visitId),
   index("transactions_dentist_user_idx").on(table.dentistUserId),
+  index("transactions_transfer_dentist_user_idx")
+    .on(table.transferDentistUserId)
+    .where(sql`${table.transferDentistUserId} is not null`),
 ]);
 
 export type TransactionRow = typeof transactions.$inferSelect;
@@ -146,7 +156,7 @@ export type NewTransactionRow = typeof transactions.$inferInsert;
  *
  * See src/lib/cashflow/user-schema.ts for the shared Zod type.
  */
-export const userRoleEnum = pgEnum("user_role", ["admin", "dentist", "staff", "superuser"]);
+export const userRoleEnum = pgEnum("user_role", ["admin", "dentist", "staff", "superuser", "owner"]);
 
 export const users = pgTable("users", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -773,3 +783,66 @@ export const hmoBillingCounters = pgTable("hmo_billing_counters", {
 
 export type HmoBillingRow = typeof hmoBillings.$inferSelect;
 export type HmoBillingLineRow = typeof hmoBillingLines.$inferSelect;
+
+/**
+ * The clinics (branches) a person is authorized for
+ * (scripts/sql/2026-11-roles-permissions-trash.sql). Owners, admins and the
+ * superuser work in every clinic and need no rows; a dentist or staff member
+ * works in the clinics listed here. `users.branchId` stays their first
+ * ("home") clinic.
+ */
+export const userBranches = pgTable(
+  "user_branches",
+  {
+    userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    branchId: uuid("branch_id").notNull().references(() => branches.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [primaryKey({ columns: [table.userId, table.branchId] })],
+);
+
+/**
+ * One person's privileges that differ from their role's defaults: granted =
+ * true adds a privilege the role does not have, false takes away one it has.
+ * Only the differences are stored, so changing a role default later still
+ * reaches everyone who was not customized.
+ */
+export const userPermissionOverrides = pgTable(
+  "user_permission_overrides",
+  {
+    userId: uuid("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    permission: text("permission").notNull(),
+    granted: boolean("granted").notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [primaryKey({ columns: [table.userId, table.permission] })],
+);
+
+/**
+ * Everything an owner or admin deletes (a visit, a transaction line, a
+ * payment, an expense or a file) is copied here as a snapshot and removed
+ * from the live tables — so it disappears from every list, total and report
+ * — and the superuser can restore it (or erase it for good). Nothing else
+ * reads this table.
+ */
+export const deletedItems = pgTable(
+  "deleted_items",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    kind: text("kind").notNull(),
+    entityId: text("entity_id").notNull(),
+    label: text("label").notNull().default(""),
+    summary: text("summary").notNull().default(""),
+    branchId: uuid("branch_id"),
+    amount: numeric("amount", { precision: 12, scale: 2 }),
+    snapshot: jsonb("snapshot").notNull(),
+    deletedByUserId: uuid("deleted_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    deletedByName: text("deleted_by_name").notNull().default(""),
+    deletedAt: timestamp("deleted_at", { withTimezone: true }).notNull().defaultNow(),
+    restoredAt: timestamp("restored_at", { withTimezone: true }),
+    restoredByName: text("restored_by_name").notNull().default(""),
+  },
+  (table) => [index("deleted_items_deleted_at_idx").on(table.deletedAt.desc())],
+);
+
+export type DeletedItemRow = typeof deletedItems.$inferSelect;

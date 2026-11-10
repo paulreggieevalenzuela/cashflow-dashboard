@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { auth } from "@/lib/auth/access";
+import { can } from "@/lib/auth/guards";
 import { TransactionDetail } from "@/components/cashflow/transaction-detail";
 import { listAttachmentsForInvoice } from "@/lib/db/attachments";
 import { listBranches } from "@/lib/db/branches";
@@ -10,7 +11,6 @@ import { listProcedureOptions } from "@/lib/db/procedures";
 import { getTransactionById } from "@/lib/db/transactions";
 import { listStatusHistory } from "@/lib/db/visit-status";
 import { listAuditForInvoice } from "@/lib/db/audit";
-import { canEditClearedVisit } from "@/lib/cashflow/visit-status";
 
 function NotFound({ message }: { message: string }) {
   return (
@@ -51,12 +51,12 @@ export default async function TransactionDetailPage({
   }
 
   // Any line of a visit opens the whole visit.
-  const isAdmin = session?.user.role === "admin";
+  const canAudit = can(session, "audit.view");
   const [detail, attachments, statusHistory, auditEntries] = await Promise.all([
     getInvoiceDetail(transaction.invoiceId),
     listAttachmentsForInvoice(transaction.invoiceId),
     listStatusHistory(transaction.invoiceId),
-    isAdmin ? listAuditForInvoice(transaction.invoiceId) : Promise.resolve(undefined),
+    canAudit ? listAuditForInvoice(transaction.invoiceId) : Promise.resolve(undefined),
   ]);
   if (!detail || detail.lines.length === 0) {
     return <NotFound message="We couldn't find that transaction. It may have been removed." />;
@@ -66,9 +66,9 @@ export default async function TransactionDetailPage({
     <TransactionDetail
       detail={detail}
       openedLineId={transaction.id}
-      canDelete={session?.user.role === "admin"}
-      canEditCleared={canEditClearedVisit(session?.user.role)}
-      canSeeIds={session?.user.role === "admin"}
+      canDelete={can(session, "visit.delete")}
+      canEditCleared={can(session, "visit.edit_cleared")}
+      canSeeIds={can(session, "patient.ids_reveal")}
       dentistOptions={dentists.map((dentist) => dentist.name)}
       branches={branches}
       procedures={procedures}

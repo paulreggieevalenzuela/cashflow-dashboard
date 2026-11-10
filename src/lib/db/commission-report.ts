@@ -1,4 +1,4 @@
-import { and, asc, eq, gte, lte, ne } from "drizzle-orm";
+import { and, asc, eq, gte, lte, ne, or } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { branches, transactions } from "@/lib/db/schema";
 import {
@@ -9,6 +9,7 @@ import {
   type CommissionSortKey,
 } from "@/lib/cashflow/commission-report";
 import { round2 } from "@/lib/cashflow/pricing";
+import { splitCommission, TRANSFER_SHARE_PERCENT } from "@/lib/cashflow/commission-split";
 
 /**
  * Every procedure line with a dentist between two visit dates (inclusive),
@@ -31,6 +32,10 @@ export async function getCommissionReport(input: {
       visitId: transactions.visitId,
       patientName: transactions.patientName,
       dentist: transactions.dentist,
+      dentistUserId: transactions.dentistUserId,
+      transferDentist: transactions.transferDentist,
+      transferDentistUserId: transactions.transferDentistUserId,
+      transferCommission: transactions.transferCommissionAmount,
       procedure: transactions.procedure,
       paymentType: transactions.paymentType,
       netCollection: transactions.netCollection,
@@ -45,8 +50,12 @@ export async function getCommissionReport(input: {
         lte(transactions.date, input.to),
         ne(transactions.dentist, ""),
         input.branchId ? eq(transactions.branchId, input.branchId) : undefined,
+        // A dentist's report includes the lines they were transferred.
         input.dentistUserId
-          ? eq(transactions.dentistUserId, input.dentistUserId)
+          ? or(
+              eq(transactions.dentistUserId, input.dentistUserId),
+              eq(transactions.transferDentistUserId, input.dentistUserId),
+            )
           : undefined,
       ),
     )
@@ -57,17 +66,55 @@ export async function getCommissionReport(input: {
       asc(transactions.lineNumber),
     );
 
-  const rows: CommissionRow[] = result.map((row) => ({
-    date: row.date,
-    visitId: row.visitId,
-    patientName: row.patientName,
-    dentist: row.dentist,
-    branchName: row.branchName ?? "",
-    procedure: row.procedure,
-    paymentType: row.paymentType,
-    netCollection: round2(Number(row.netCollection)),
-    commission: round2(Number(row.commission)),
-  }));
+  // A transferred patient's line is two report lines: the main dentist's
+  // half and the transferred dentist's half. The net collection is divided
+  // the same way, so the report still adds up to what was collected and the
+  // Rate column still shows the main dentist's rate on both.
+  const rows: CommissionRow[] = [];
+  for (const row of result) {
+    const net = round2(Number(row.netCollection));
+    const common = {
+      date: row.date,
+      visitId: row.visitId,
+      patientName: row.patientName,
+      branchName: row.branchName ?? "",
+      procedure: row.procedure,
+      paymentType: row.paymentType,
+    };
+    const transferred =
+      Boolean(row.transferDentistUserId) && Boolean(row.transferDentist);
+    if (!transferred) {
+      rows.push({
+        ...common,
+        dentist: row.dentist,
+        netCollection: net,
+        commission: round2(Number(row.commission)),
+      });
+      continue;
+    }
+    const netSplit = splitCommission(net, true);
+    if (!input.dentistUserId || input.dentistUserId === row.dentistUserId) {
+      rows.push({
+        ...common,
+        dentist: row.dentist,
+        netCollection: netSplit.main,
+        commission: round2(Number(row.commission)),
+        note: `${TRANSFER_SHARE_PERCENT}% — shared with ${row.transferDentist} (transferred)`,
+      });
+    }
+    if (
+      !input.dentistUserId ||
+      input.dentistUserId === row.transferDentistUserId
+    ) {
+      rows.push({
+        ...common,
+        dentist: row.transferDentist,
+        netCollection: netSplit.transfer,
+        commission: round2(Number(row.transferCommission)),
+        note: `${TRANSFER_SHARE_PERCENT}% — transferred from ${row.dentist}`,
+      });
+    }
+  }
 
   return {
     from: input.from,

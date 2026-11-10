@@ -1,3 +1,4 @@
+import { softDeleteAttachment } from "@/lib/db/deleted-items";
 import { asc, eq, isNotNull } from "drizzle-orm";
 import {
   ATTACHMENT_KINDS,
@@ -117,8 +118,12 @@ export async function addAttachment(data: {
   return row.id;
 }
 
-export async function deleteAttachment(id: string): Promise<void> {
-  await db.delete(attachments).where(eq(attachments.id, id));
+export async function deleteAttachment(
+  id: string,
+  actor: { userId: string | null; name: string },
+): Promise<void> {
+  // Kept in Deleted items (the file itself included).
+  await softDeleteAttachment(id, actor);
 }
 
 /** The visit's payment ids (to check a payment belongs to the visit, or to

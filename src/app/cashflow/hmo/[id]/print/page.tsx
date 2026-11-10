@@ -5,7 +5,7 @@ import { auth } from "@/lib/auth/access";
 import { LOA_PENDING_TEXT, formatRange } from "@/lib/cashflow/hmo-billing";
 import { pesoFormat, shortDate } from "@/components/cashflow/hmo-billing-table";
 import { listBranches } from "@/lib/db/branches";
-import { resolveDayEndScope } from "@/lib/db/day-end";
+import { resolveDayEndScope, scopeCoversBranch } from "@/lib/db/day-end";
 import { getHmoBilling } from "@/lib/db/hmo-billing";
 import { PrintButton } from "./print-button";
 
@@ -28,14 +28,16 @@ export default async function HmoBillingPrintPage({
   if (!saved) notFound();
   const { billing, lines } = saved;
 
-  if (session.user.role !== "admin") {
+  {
     const scope = await resolveDayEndScope({
       userId: session.user.id,
       role: session.user.role,
+      branchId: session.user.branchId,
+      branchIds: session.user.branchIds,
       requested: saved.branchId ?? undefined,
       branchList: await listBranches(),
     });
-    if (scope.locked && scope.branchId !== saved.branchId) notFound();
+    if (!scopeCoversBranch(scope, saved.branchId)) notFound();
   }
 
   const isVoid = billing.status === "Void";

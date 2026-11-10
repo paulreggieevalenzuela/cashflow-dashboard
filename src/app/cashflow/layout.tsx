@@ -6,7 +6,10 @@ import { SessionGuard } from "@/components/auth/session-guard";
 import { LegalLinks } from "@/components/legal/legal-shell";
 import { CashflowNav } from "@/components/cashflow/cashflow-nav";
 import { getBranchPolicy } from "@/lib/auth/branch-policy";
+import { can } from "@/lib/auth/guards";
+import type { UserRole } from "@/lib/cashflow/user-schema";
 import { BranchPolicyProvider } from "@/components/cashflow/branch-policy-context";
+import { CapabilitiesProvider } from "@/components/cashflow/capabilities-context";
 import { countOpenVisits } from "@/lib/db/visit-status";
 import { countActionableResetRequests } from "@/lib/db/password-requests";
 import { RouteFocusManager } from "@/components/navigation/route-focus-manager";
@@ -28,7 +31,13 @@ export default async function CashflowLayout({ children }: { children: ReactNode
   if (access.status === "must_change") redirect("/change-password");
   const session = access.status === "ok" ? access.session : null;
 
-  const role = session?.user.role ?? "staff";
+  // The role as the person is known (an owner or the superuser counts as
+  // "admin" in the session, but their own title is shown in the menu).
+  const role: UserRole = session?.user.isSuperuser
+    ? "superuser"
+    : session?.user.isOwner
+      ? "owner"
+      : (session?.user.role ?? "staff");
   const displayName = session?.user.name ?? session?.user.email ?? "";
   const email = session?.user.email ?? undefined;
   const branchPolicy = await getBranchPolicy(session);
@@ -36,8 +45,10 @@ export default async function CashflowLayout({ children }: { children: ReactNode
     session
       ? countOpenVisits(branchPolicy.branchId)
       : Promise.resolve(null),
-    session?.user.role === "admin"
-      ? countActionableResetRequests(session.user.isSuperuser ? "superuser" : "admin")
+    can(session, "user.manage")
+      ? countActionableResetRequests(
+          session?.user.isSuperuser ? "superuser" : session?.user.isOwner ? "owner" : "admin",
+        )
       : Promise.resolve(0),
   ]);
 
@@ -58,6 +69,8 @@ export default async function CashflowLayout({ children }: { children: ReactNode
           </span>
           <CashflowNav
             role={role}
+            permissions={session?.user.permissions ?? []}
+            isSuperuser={Boolean(session?.user.isSuperuser)}
             displayName={displayName || undefined}
             email={email}
             openVisits={openVisits}
@@ -73,7 +86,9 @@ export default async function CashflowLayout({ children }: { children: ReactNode
         tabIndex={-1}
         className="mx-auto max-w-6xl px-4 py-6 outline-none sm:px-6 sm:py-8 print:max-w-none print:p-0"
       >
-        <BranchPolicyProvider value={branchPolicy}>{children}</BranchPolicyProvider>
+        <CapabilitiesProvider permissions={session?.user.permissions ?? []}>
+          <BranchPolicyProvider value={branchPolicy}>{children}</BranchPolicyProvider>
+        </CapabilitiesProvider>
       </main>
       <footer className="mx-auto max-w-6xl px-4 pb-8 sm:px-6 print:hidden">
         <LegalLinks />

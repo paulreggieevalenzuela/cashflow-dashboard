@@ -1,3 +1,4 @@
+import { softDeleteVisit } from "@/lib/db/deleted-items";
 import { createHash, randomUUID } from "node:crypto";
 import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
@@ -85,6 +86,7 @@ import {
   toAppTransaction,
   upsertTransactions,
 } from "@/lib/db/transactions";
+import { findDentistUserByName } from "@/lib/db/dentists";
 
 export type Invoice = InvoiceRow;
 
@@ -396,6 +398,29 @@ function visitNeedsDiscountId(priced: PricedLine[]): boolean {
   );
 }
 
+/** The transferred-to dentist must be a real dentist account, and not the
+ * main dentist (the commission is split between two accounts). */
+async function checkTransferDentist(input: InvoiceInput): Promise<string | null> {
+  const transfer = (input.transferDentist ?? "").trim();
+  if (!transfer) {
+    return null;
+  }
+  const [main, other] = await Promise.all([
+    input.dentist ? findDentistUserByName(input.dentist) : undefined,
+    findDentistUserByName(transfer),
+  ]);
+  if (!main) {
+    return "Choose the main dentist first.";
+  }
+  if (!other) {
+    return "Choose a dentist account for the transfer.";
+  }
+  if (other.id === main.id) {
+    return "The transferred-to dentist must be a different dentist.";
+  }
+  return null;
+}
+
 /** Field errors for the PWD / Senior ID and the recall fields. */
 function checkVisitFields(
   input: InvoiceInput,
@@ -449,6 +474,7 @@ function buildLine(args: {
     patientName: string;
     patientId: string | null;
     dentist: string;
+    transferDentist: string;
     transactionType: string;
     visitType: string;
     invoiceNumber: string;
@@ -471,6 +497,7 @@ function buildLine(args: {
     transactionType: base.transactionType,
     visitType: base.visitType,
     dentist: base.dentist,
+    transferDentist: base.transferDentist,
     procedure: priced.input.procedure,
     procedureId: priced.procedureId,
     paymentType: base.paymentType,
@@ -610,7 +637,12 @@ function snapshotOf(
     loaNumber: string;
     loeNumber: string;
   },
-  extra: { patientName: string; branchName: string; dentist: string },
+  extra: {
+    patientName: string;
+    branchName: string;
+    dentist: string;
+    transferDentist?: string;
+  },
   lines: CashflowTransaction[],
 ): AuditSnapshot {
   return {
@@ -621,6 +653,7 @@ function snapshotOf(
     transactionType: header.transactionType,
     visitType: header.visitType,
     dentist: extra.dentist,
+    transferDentist: extra.transferDentist ?? "",
     discountIdType: header.discountIdType,
     discountIdNumber: header.discountIdNumber,
     recallDate: header.recallDate ?? "",
@@ -663,6 +696,10 @@ export async function createInvoice(
   );
 
   const fieldErrors: Record<string, string> = checkVisitFields(input, priced);
+  const transferProblem = await checkTransferDentist(input);
+  if (transferProblem) {
+    fieldErrors.transferDentist = transferProblem;
+  }
   const numberProblem = input.invoiceNumber
     ? await checkInvoiceNumber(input.invoiceNumber, branchId)
     : null;
@@ -724,6 +761,7 @@ export async function createInvoice(
         patientName,
         patientId: patient?.id ?? null,
         dentist: input.dentist,
+        transferDentist: input.transferDentist ?? "",
         transactionType: input.transactionType,
         visitType,
         invoiceNumber: input.invoiceNumber,
@@ -865,6 +903,10 @@ export async function updateInvoice(
   );
 
   const fieldErrors: Record<string, string> = checkVisitFields(input, priced);
+  const transferProblem = await checkTransferDentist(input);
+  if (transferProblem) {
+    fieldErrors.transferDentist = transferProblem;
+  }
   const numberProblem = input.invoiceNumber
     ? await checkInvoiceNumber(input.invoiceNumber, branchId, invoiceId)
     : null;
@@ -946,6 +988,7 @@ export async function updateInvoice(
         patientName,
         patientId: patient?.id ?? null,
         dentist: input.dentist,
+        transferDentist: input.transferDentist ?? "",
         transactionType: input.transactionType,
         visitType,
         invoiceNumber: input.invoiceNumber,
@@ -976,6 +1019,7 @@ export async function updateInvoice(
       patientName: existingLines[0].patientName,
       branchName: beforeBranch,
       dentist: existingLines[0].dentist,
+      transferDentist: existingLines[0].transferDentist ?? "",
     },
     existingLines,
   );
@@ -1025,7 +1069,12 @@ export async function updateInvoice(
         loaNumber: visitHeaderFields(input, priced).loaNumber,
         loeNumber: visitHeaderFields(input, priced).loeNumber,
       },
-      { patientName, branchName: afterBranch, dentist: input.dentist },
+      {
+        patientName,
+        branchName: afterBranch,
+        dentist: input.dentist,
+        transferDentist: input.transferDentist ?? "",
+      },
       lines,
     );
     const changes = diffVisit(beforeSnapshot, afterSnapshot);
@@ -1059,7 +1108,7 @@ export async function updateInvoice(
  */
 export async function deleteInvoice(
   invoiceId: string,
-  actor?: { userId: string | null; name: string },
+  actor: { userId: string | null; name: string },
 ): Promise<void> {
   // Written first, so the trail still says what was removed.
   const [header, lines] = await Promise.all([
@@ -1078,8 +1127,9 @@ export async function deleteInvoice(
       actor,
     });
   }
-  await db.delete(transactions).where(eq(transactions.invoiceId, invoiceId));
-  await db.delete(invoices).where(eq(invoices.id, invoiceId));
+  // Kept in Deleted items (only the superuser can bring it back); the live
+  // rows are removed so every total stays right.
+  await softDeleteVisit(invoiceId, actor);
 }
 
 // ── CSV import ───────────────────────────────────────────────────────

@@ -2,7 +2,7 @@
 
 import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
-import { auth } from "@/lib/auth/access";
+import { requirePermission } from "@/lib/auth/guards";
 import {
   ExpenseSchema,
   ManualExpenseInputSchema,
@@ -32,26 +32,17 @@ type ActionResult<T> =
       duplicate?: boolean;
     };
 
-/**
- * Same policy as transactions (see actions.ts): any signed-in role can
- * record an expense — this isn't admin-gated, since staff are the ones
- * usually handling day-to-day purchases/receipts, not just admins.
- */
-async function requireSession() {
-  const session = await auth();
-  if (!session?.user) {
-    return null;
-  }
-  return session;
-}
-
 export async function addExpenseAction(
   input: ManualExpenseInput,
 ): Promise<ActionResult<{ expenseId: string }>> {
-  const session = await requireSession();
-  if (!session) {
-    return { ok: false, message: "You must be signed in to add an expense." };
+  const guard = await requirePermission(
+    "expense.add",
+    "You don't have permission to add expenses.",
+  );
+  if (!guard.ok) {
+    return { ok: false, message: guard.message };
   }
+  const session = guard.session;
 
   const parsedInput = ManualExpenseInputSchema.safeParse(input);
   if (!parsedInput.success) {
@@ -138,19 +129,18 @@ const peso = new Intl.NumberFormat("en-PH", {
   currency: "PHP",
 });
 
-/** Editing and deleting an expense is admin only (adding is open to all). */
-async function requireAdmin() {
-  const session = await auth();
-  if (!session?.user) {
-    return { session: null, error: "You must be signed in." };
+/** Editing and deleting an expense each need their own privilege. */
+async function requireExpense(permission: "expense.edit" | "expense.delete") {
+  const guard = await requirePermission(
+    permission,
+    permission === "expense.edit"
+      ? "You don't have permission to correct expenses."
+      : "You don't have permission to delete expenses.",
+  );
+  if (!guard.ok) {
+    return { session: null, error: guard.message };
   }
-  if (session.user.role !== "admin") {
-    return {
-      session: null,
-      error: "Only an admin can change or delete an expense.",
-    };
-  }
-  return { session, error: null };
+  return { session: guard.session, error: null };
 }
 
 function revalidateExpenses() {
@@ -172,7 +162,7 @@ export async function updateExpenseAction(
   id: string,
   input: ManualExpenseInput,
 ): Promise<ActionResult<{ expenseId: string }>> {
-  const guard = await requireAdmin();
+  const guard = await requireExpense("expense.edit");
   if (!guard.session) {
     return { ok: false, message: guard.error };
   }
@@ -283,7 +273,7 @@ export async function updateExpenseAction(
 export async function deleteExpenseAction(
   id: string,
 ): Promise<ActionResult<{ expenseId: string }>> {
-  const guard = await requireAdmin();
+  const guard = await requireExpense("expense.delete");
   if (!guard.session) {
     return { ok: false, message: guard.error };
   }
@@ -293,7 +283,14 @@ export async function deleteExpenseAction(
   if (!existing) {
     return { ok: false, message: "That expense no longer exists." };
   }
-  await deleteExpense(id);
+  try {
+    await deleteExpense(id, {
+      userId: session.user.id,
+      name: session.user.name ?? session.user.email ?? "",
+    });
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : "Could not delete the expense." };
+  }
   await logAudit({
     action: "expense.deleted",
     entityType: "expense",

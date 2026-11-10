@@ -1,4 +1,5 @@
 import { auth } from "@/lib/auth/access";
+import { can } from "@/lib/auth/guards";
 import {
   attachmentProblem,
   isAttachmentKind,
@@ -23,6 +24,9 @@ export async function POST(request: Request) {
   const session = await auth();
   if (!session?.user) {
     return problem("You must be signed in to attach a file.", 401);
+  }
+  if (!can(session, "attachment.upload")) {
+    return problem("You don't have permission to attach files.", 403);
   }
 
   let form: FormData;

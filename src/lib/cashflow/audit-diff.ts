@@ -24,6 +24,8 @@ export type AuditSnapshot = {
   transactionType: string;
   visitType: string;
   dentist: string;
+  /** Dentist the patient was transferred to (older entries don't have it). */
+  transferDentist?: string;
   discountIdType: string;
   discountIdNumber: string;
   recallDate: string;
@@ -59,6 +61,7 @@ export function diffVisit(
     ["Transaction type", "transactionType"],
     ["Visit type", "visitType"],
     ["Dentist", "dentist"],
+    ["Transferred to dentist", "transferDentist"],
     ["Payment method", "paymentMethod"],
     ["Recall date", "recallDate"],
     ["LOA number", "loaNumber"],

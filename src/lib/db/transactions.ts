@@ -1,7 +1,9 @@
+import { softDeleteLine } from "@/lib/db/deleted-items";
 import { randomInt } from "node:crypto";
 import { and, asc, desc, eq, gte, ilike, inArray, isNull, lte, ne, or, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { resolveRateSetting } from "@/lib/cashflow/commission-tiers";
+import { splitCommission } from "@/lib/cashflow/commission-split";
 import { getBranchById } from "@/lib/db/branches";
 import { getCommissionRateMap } from "@/lib/db/commission-rates";
 import { getDentistTierMap, getTierRateMap } from "@/lib/db/commission-tiers";
@@ -9,7 +11,6 @@ import { findDentistUserByName } from "@/lib/db/dentists";
 import { findProcedureByName } from "@/lib/db/procedures";
 import {
   dentistCommissionRates,
-  invoices,
   transactions,
   users,
   type NewTransactionRow,
@@ -49,6 +50,10 @@ export function toAppTransaction(row: TransactionRow): CashflowTransaction {
     netCollection: Number(row.netCollection),
     commissionAmount:
       row.commissionAmount === null ? undefined : Number(row.commissionAmount),
+    transferCommissionAmount:
+      row.transferCommissionAmount === null
+        ? undefined
+        : Number(row.transferCommissionAmount),
     listPrice: Number(row.listPrice),
     discountValue: Number(row.discountValue),
     discountAmount: Number(row.discountAmount),
@@ -75,6 +80,7 @@ function toDbRow(transaction: CashflowTransaction): NewTransactionRow {
     withholdingTax: transaction.withholdingTax.toString(),
     netCollection: transaction.netCollection.toString(),
     commissionAmount: transaction.commissionAmount?.toString(),
+    transferCommissionAmount: transaction.transferCommissionAmount?.toString(),
     listPrice: transaction.listPrice?.toString(),
     discountValue: transaction.discountValue?.toString(),
     discountAmount: transaction.discountAmount?.toString(),
@@ -277,7 +283,7 @@ async function resolveCommissionLinks(rows: CashflowTransaction[]) {
   const distinctDentistNames = [
     ...new Set(
       rows
-        .map((row) => row.dentist?.trim())
+        .flatMap((row) => [row.dentist?.trim(), row.transferDentist?.trim()])
         .filter((name): name is string => Boolean(name)),
     ),
   ];
@@ -361,7 +367,27 @@ async function resolveCommissionLinks(rows: CashflowTransaction[]) {
         })
       : 0;
 
-    return { dentistUserId, procedureId, commissionAmount };
+    // A transferred patient: the commission above is the MAIN dentist's
+    // rate; half stays with them and half goes to the dentist the patient
+    // was transferred to (who must be a different, known dentist account).
+    const transferName = (row.transferDentist ?? "").trim();
+    const transferDentistUserId = transferName
+      ? (dentistIdByName.get(transferName.toLowerCase()) ?? null)
+      : null;
+    const transferred =
+      Boolean(dentistUserId) &&
+      transferDentistUserId !== null &&
+      transferDentistUserId !== dentistUserId;
+    const split = splitCommission(commissionAmount, transferred);
+
+    return {
+      dentistUserId,
+      procedureId,
+      commissionAmount: split.main,
+      transferDentist: transferred ? transferName : "",
+      transferDentistUserId: transferred ? transferDentistUserId : null,
+      transferCommissionAmount: split.transfer,
+    };
   });
 }
 
@@ -396,6 +422,9 @@ export async function upsertTransactions(
     dentistUserId: links[index].dentistUserId,
     procedureId: links[index].procedureId,
     commissionAmount: links[index].commissionAmount.toString(),
+    transferDentist: links[index].transferDentist,
+    transferDentistUserId: links[index].transferDentistUserId,
+    transferCommissionAmount: links[index].transferCommissionAmount.toString(),
   }));
 
   for (let i = 0; i < values.length; i += UPSERT_CHUNK_SIZE) {
@@ -428,6 +457,9 @@ export async function upsertTransactions(
           withholdingTax: sql`excluded.withholding_tax`,
           netCollection: sql`excluded.net_collection`,
           commissionAmount: sql`excluded.commission_amount`,
+          transferDentist: sql`excluded.transfer_dentist`,
+          transferDentistUserId: sql`excluded.transfer_dentist_user_id`,
+          transferCommissionAmount: sql`excluded.transfer_commission_amount`,
           branchId: sql`excluded.branch_id`,
           createdByUserId: sql`excluded.created_by_user_id`,
           transactionNumber: sql`excluded.transaction_number`,
@@ -544,24 +576,15 @@ export async function generateVisitId(visitDate: string): Promise<string> {
   return `${prefix}-${String(nextSeq).padStart(3, "0")}`;
 }
 
-export async function deleteTransaction(id: string): Promise<void> {
-  const [row] = await db
-    .select({ invoiceId: transactions.invoiceId })
-    .from(transactions)
-    .where(eq(transactions.id, id))
-    .limit(1);
-
-  await db.delete(transactions).where(eq(transactions.id, id));
-
-  // An invoice with no lines left is just an empty shell (and would keep
-  // its payments alive) — remove it, which also removes its payments.
-  if (row?.invoiceId) {
-    await db
-      .delete(invoices)
-      .where(
-        sql`${invoices.id} = ${row.invoiceId} and not exists (select 1 from ${transactions} where ${transactions.invoiceId} = ${row.invoiceId})`,
-      );
-  }
+/**
+ * Removes one procedure line. It is kept in Deleted items; when it was the
+ * visit's last line the whole visit (with its payments and files) is kept.
+ */
+export async function deleteTransaction(
+  id: string,
+  actor: { userId: string | null; name: string },
+): Promise<void> {
+  await softDeleteLine(id, actor);
 }
 
 export type DentistSalesRow = {
@@ -590,27 +613,84 @@ export async function getDentistLeaderboard({
   if (from) conditions.push(sql`${transactions.date} >= ${from}`);
   if (to) conditions.push(sql`${transactions.date} <= ${to}`);
 
+  // Sales stay with the main dentist of a visit (they are not split); the
+  // commission column is what each dentist EARNED: their own commission on
+  // visits where they are the main dentist, plus their half of every visit
+  // they were transferred.
+  const [rows, shared] = await Promise.all([
+    db
+      .select({
+        dentistUserId: transactions.dentistUserId,
+        dentistName: users.name,
+        netCollection: sql<string>`coalesce(sum(${transactions.netCollection}), 0)`,
+        commissionAmount: sql<string>`coalesce(sum(${transactions.commissionAmount}), 0)`,
+        transactionCount: visitCount,
+      })
+      .from(transactions)
+      .innerJoin(users, eq(users.id, transactions.dentistUserId))
+      .where(and(...conditions))
+      .groupBy(transactions.dentistUserId, users.name)
+      .orderBy(desc(sql`sum(${transactions.netCollection})`)),
+    getTransferredCommissionByDentist({ from, to }),
+  ]);
+
+  const result: DentistSalesRow[] = rows.map((row) => {
+    const id = row.dentistUserId as string;
+    const extra = shared.get(id);
+    return {
+      dentistUserId: id,
+      dentistName: row.dentistName,
+      netCollection: Number(row.netCollection),
+      commissionAmount: round2(Number(row.commissionAmount) + (extra?.amount ?? 0)),
+      transactionCount: row.transactionCount,
+    };
+  });
+  // A dentist who only received transferred patients in the period still
+  // earned commission, so they are listed too (with no sales of their own).
+  for (const [id, extra] of shared) {
+    if (!result.some((row) => row.dentistUserId === id)) {
+      result.push({
+        dentistUserId: id,
+        dentistName: extra.name,
+        netCollection: 0,
+        commissionAmount: round2(extra.amount),
+        transactionCount: 0,
+      });
+    }
+  }
+  return result;
+}
+
+/**
+ * What each dentist earned as the TRANSFERRED dentist (their half of a
+ * transferred patient's commission) over an optional date range.
+ */
+async function getTransferredCommissionByDentist({
+  from,
+  to,
+}: {
+  from?: string;
+  to?: string;
+}): Promise<Map<string, { name: string; amount: number }>> {
+  const conditions = [sql`${transactions.transferDentistUserId} is not null`];
+  if (from) conditions.push(sql`${transactions.date} >= ${from}`);
+  if (to) conditions.push(sql`${transactions.date} <= ${to}`);
   const rows = await db
     .select({
-      dentistUserId: transactions.dentistUserId,
-      dentistName: users.name,
-      netCollection: sql<string>`coalesce(sum(${transactions.netCollection}), 0)`,
-      commissionAmount: sql<string>`coalesce(sum(${transactions.commissionAmount}), 0)`,
-      transactionCount: visitCount,
+      id: transactions.transferDentistUserId,
+      name: users.name,
+      amount: sql<string>`coalesce(sum(${transactions.transferCommissionAmount}), 0)`,
     })
     .from(transactions)
-    .innerJoin(users, eq(users.id, transactions.dentistUserId))
+    .innerJoin(users, eq(users.id, transactions.transferDentistUserId))
     .where(and(...conditions))
-    .groupBy(transactions.dentistUserId, users.name)
-    .orderBy(desc(sql`sum(${transactions.netCollection})`));
-
-  return rows.map((row) => ({
-    dentistUserId: row.dentistUserId as string,
-    dentistName: row.dentistName,
-    netCollection: Number(row.netCollection),
-    commissionAmount: Number(row.commissionAmount),
-    transactionCount: row.transactionCount,
-  }));
+    .groupBy(transactions.transferDentistUserId, users.name);
+  return new Map(
+    rows.map((row) => [
+      row.id as string,
+      { name: row.name, amount: Number(row.amount) },
+    ]),
+  );
 }
 
 export type SalesPeriod = "month" | "quarter" | "year";
@@ -644,16 +724,28 @@ export async function getSalesByPeriod({
         ? sql<string>`substring(${transactions.date}, 1, 4) || '-Q' || ceil(substring(${transactions.date}, 6, 2)::int / 3.0)::int`
         : sql<string>`substring(${transactions.date}, 1, 7)`;
 
+  // For one dentist: their sales are the visits where they are the main
+  // dentist, their commission also includes their half of transferred
+  // patients. Clinic-wide, the commission is both halves.
   const whereClause = dentistUserId
-    ? eq(transactions.dentistUserId, dentistUserId)
+    ? or(
+        eq(transactions.dentistUserId, dentistUserId),
+        eq(transactions.transferDentistUserId, dentistUserId),
+      )
     : undefined;
+  const isMain = dentistUserId
+    ? sql`${transactions.dentistUserId} = ${dentistUserId}`
+    : sql`true`;
+  const earned = dentistUserId
+    ? sql<string>`coalesce(sum(case when ${transactions.dentistUserId} = ${dentistUserId} then ${transactions.commissionAmount} else 0 end), 0) + coalesce(sum(case when ${transactions.transferDentistUserId} = ${dentistUserId} then ${transactions.transferCommissionAmount} else 0 end), 0)`
+    : sql<string>`coalesce(sum(${transactions.commissionAmount} + ${transactions.transferCommissionAmount}), 0)`;
 
   const rows = await db
     .select({
       periodLabel: periodExpr,
-      netCollection: sql<string>`coalesce(sum(${transactions.netCollection}), 0)`,
-      commissionAmount: sql<string>`coalesce(sum(${transactions.commissionAmount}), 0)`,
-      transactionCount: visitCount,
+      netCollection: sql<string>`coalesce(sum(case when ${isMain} then ${transactions.netCollection} else 0 end), 0)`,
+      commissionAmount: earned,
+      transactionCount: sql<number>`count(distinct case when ${isMain} then ${visitKey} end)::int`,
     })
     .from(transactions)
     .where(whereClause)
@@ -689,13 +781,16 @@ export async function getDentistProcedureBreakdown(
     .select({
       procedure: transactions.procedure,
       transactionCount: sql<number>`count(*)::int`,
-      netCollection: sql<string>`coalesce(sum(${transactions.netCollection}), 0)`,
-      commissionAmount: sql<string>`coalesce(sum(${transactions.commissionAmount}), 0)`,
+      netCollection: sql<string>`coalesce(sum(case when ${transactions.dentistUserId} = ${dentistUserId} then ${transactions.netCollection} else 0 end), 0)`,
+      commissionAmount: sql<string>`coalesce(sum(case when ${transactions.dentistUserId} = ${dentistUserId} then ${transactions.commissionAmount} else 0 end), 0) + coalesce(sum(case when ${transactions.transferDentistUserId} = ${dentistUserId} then ${transactions.transferCommissionAmount} else 0 end), 0)`,
     })
     .from(transactions)
     .where(
       and(
-        eq(transactions.dentistUserId, dentistUserId),
+        or(
+          eq(transactions.dentistUserId, dentistUserId),
+          eq(transactions.transferDentistUserId, dentistUserId),
+        ),
         ne(transactions.procedure, CHECK_IN_PLACEHOLDER),
       ),
     )
@@ -731,11 +826,16 @@ export async function getDentistPatients(
     .select({
       patientName: transactions.patientName,
       visitCount: sql<number>`count(*)::int`,
-      netCollection: sql<string>`coalesce(sum(${transactions.netCollection}), 0)`,
+      netCollection: sql<string>`coalesce(sum(case when ${transactions.dentistUserId} = ${dentistUserId} then ${transactions.netCollection} else 0 end), 0)`,
       lastVisitDate: sql<string>`max(${transactions.date})`,
     })
     .from(transactions)
-    .where(eq(transactions.dentistUserId, dentistUserId))
+    .where(
+      or(
+        eq(transactions.dentistUserId, dentistUserId),
+        eq(transactions.transferDentistUserId, dentistUserId),
+      ),
+    )
     .groupBy(transactions.patientName)
     .orderBy(desc(sql`max(${transactions.date})`));
 

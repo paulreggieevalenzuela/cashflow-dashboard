@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { auth } from "@/lib/auth/access";
+import { can } from "@/lib/auth/guards";
 import { DownloadButton } from "@/components/ui/download-button";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { TransactionsTabs } from "@/components/cashflow/transactions-tabs";
@@ -12,7 +13,7 @@ import {
 } from "@/components/cashflow/hmo-billing-table";
 import { formatRange } from "@/lib/cashflow/hmo-billing";
 import { listBranches } from "@/lib/db/branches";
-import { resolveDayEndScope } from "@/lib/db/day-end";
+import { resolveDayEndScope, scopeCoversBranch } from "@/lib/db/day-end";
 import { getHmoBilling } from "@/lib/db/hmo-billing";
 import { voidHmoBillingAction } from "../actions";
 
@@ -35,15 +36,17 @@ export default async function HmoBillingDetailPage({
   if (!saved) notFound();
   const { billing, lines } = saved;
 
-  const isAdmin = session.user.role === "admin";
-  if (!isAdmin) {
+  const canVoid = can(session, "hmo.void");
+  {
     const scope = await resolveDayEndScope({
       userId: session.user.id,
       role: session.user.role,
+      branchId: session.user.branchId,
+      branchIds: session.user.branchIds,
       requested: saved.branchId ?? undefined,
       branchList: await listBranches(),
     });
-    if (scope.locked && scope.branchId !== saved.branchId) notFound();
+    if (!scopeCoversBranch(scope, saved.branchId)) notFound();
   }
 
   const isVoid = billing.status === "Void";
@@ -140,12 +143,12 @@ export default async function HmoBillingDetailPage({
 
       <HmoBillingTable lines={lines} total={billing.totalAmount} />
 
-      {isAdmin && !isVoid && (
+      {canVoid && !isVoid && (
         <form action={voidHmoBillingAction} className="border-t border-zinc-200 pt-4 dark:border-zinc-800">
           <input type="hidden" name="id" value={billing.id} />
           <SubmitButton pendingLabel="Voiding…" className="rounded-lg border border-red-300 px-3.5 py-2 text-sm font-medium text-red-700 hover:bg-red-50 dark:border-red-900 dark:text-red-300 dark:hover:bg-red-950">Void this billing</SubmitButton>
           <span className="ml-3 text-xs text-zinc-500 dark:text-zinc-400">
-            Releases its lines so they can be billed again. Admin only.
+            Releases its lines so they can be billed again. Needs the void privilege.
           </span>
         </form>
       )}

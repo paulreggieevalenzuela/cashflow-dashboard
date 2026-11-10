@@ -115,6 +115,8 @@ type FormState = {
   patientName: string;
   /** One dentist for the whole transaction. */
   dentist: string;
+  /** Optional second dentist the patient was transferred to ("" = none). */
+  transferDentist: string;
   transactionType: string;
   /** "" = automatic (new/returning worked out from earlier visits). */
   visitType: string;
@@ -166,6 +168,7 @@ function blankFormState(branchId = ""): FormState {
     invoiceNumber: "",
     patientName: "",
     dentist: "",
+    transferDentist: "",
     transactionType: "",
     visitType: "",
     branchId,
@@ -242,6 +245,7 @@ function formStateFromInvoice(
     invoiceNumber: invoice.invoiceNumber,
     patientName: first?.patientName ?? "",
     dentist: first?.dentist ?? "",
+    transferDentist: first?.transferDentist ?? "",
     transactionType: invoice.transactionType,
     visitType: invoice.visitType,
     branchId: invoice.branchId ?? "",
@@ -835,6 +839,7 @@ export function TransactionForm(props: TransactionFormProps) {
       invoiceNumber: form.invoiceNumber,
       patientName: form.patientName,
       dentist: form.dentist,
+      transferDentist: form.dentist ? form.transferDentist : "",
       transactionType: form.transactionType,
       visitType: form.visitType,
       branchId: form.branchId,
@@ -1073,8 +1078,40 @@ export function TransactionForm(props: TransactionFormProps) {
             value={form.dentist}
             error={errors.dentist}
             disabled={props.dentistOptions.length === 0}
-            onChange={(event) => updateField("dentist", event.target.value)}
+            onChange={(event) => {
+              const value = event.target.value;
+              setForm((prev) => ({
+                ...prev,
+                dentist: value,
+                // The main dentist can't also be the transferred-to dentist.
+                transferDentist:
+                  prev.transferDentist === value ? "" : prev.transferDentist,
+              }));
+            }}
           />
+        </div>
+        <div className={queueMode && !showMore ? "hidden" : undefined}>
+          <SelectField
+            label="Transferred to dentist"
+            placeholder="None (not transferred)"
+            options={dentistChoicesFor(form.transferDentist).filter(
+              (name) => name !== form.dentist,
+            )}
+            value={form.transferDentist}
+            error={errors.transferDentist}
+            disabled={props.dentistOptions.length < 2 || !form.dentist}
+            onChange={(event) =>
+              updateField("transferDentist", event.target.value)
+            }
+          />
+          <p
+            data-testid="transfer-hint"
+            className="mt-1 text-xs text-zinc-500 dark:text-zinc-400"
+          >
+            {form.transferDentist
+              ? `Commission is worked out at ${form.dentist}'s rate, then split 50% ${form.dentist} / 50% ${form.transferDentist}.`
+              : "Only if the patient is handed to another dentist: the commission is then split 50 / 50."}
+          </p>
         </div>
         <div className={queueMode && !showMore ? "hidden" : undefined}>
           <SelectField
@@ -1105,8 +1142,16 @@ export function TransactionForm(props: TransactionFormProps) {
                 }}
                 className={selectClass}
               >
-                <option value="">No branch</option>
-                {props.branches.map((branch) => (
+                {branchPolicy.allowedBranchIds === null && (
+                  <option value="">No branch</option>
+                )}
+                {props.branches
+                  .filter(
+                    (branch) =>
+                      branchPolicy.allowedBranchIds === null ||
+                      branchPolicy.allowedBranchIds.includes(branch.id),
+                  )
+                  .map((branch) => (
                   <option key={branch.id} value={branch.id}>
                     {branch.name}
                   </option>

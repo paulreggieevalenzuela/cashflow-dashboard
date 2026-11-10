@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { deleteExpenseAction } from "@/app/cashflow/expense-actions";
+import { useCan } from "@/components/cashflow/capabilities-context";
 import { ExpenseForm } from "@/components/cashflow/expense-form";
 import { Modal } from "@/components/ui/modal";
 import type { Expense } from "@/lib/cashflow/expense-schema";
@@ -15,9 +16,9 @@ const peso = new Intl.NumberFormat("en-PH", {
 });
 
 /**
- * Edit and Delete on an expense row (admins only: the Expenses tab decides
- * whether to show it, and the server refuses anyone else). Delete asks
- * first, because it is permanent; it is recorded in the audit trail.
+ * Edit and Delete on an expense row (each needs its own privilege, and the
+ * server refuses anyone without it). Delete asks first; the expense is kept
+ * in Deleted items and the removal is recorded in the audit trail.
  */
 export function ExpenseRowActions({
   expense,
@@ -29,6 +30,8 @@ export function ExpenseRowActions({
   suppliers: Supplier[];
 }) {
   const router = useRouter();
+  const mayEdit = useCan("expense.edit");
+  const mayDelete = useCan("expense.delete");
   const [editing, setEditing] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -55,6 +58,7 @@ export function ExpenseRowActions({
   return (
     <>
       <div className="flex flex-col items-start gap-1">
+        {mayEdit && (
         <button
           type="button"
           onClick={() => setEditing(true)}
@@ -63,6 +67,8 @@ export function ExpenseRowActions({
         >
           Edit
         </button>
+        )}
+        {mayDelete && (
         <button
           type="button"
           onClick={() => setDeleting(true)}
@@ -71,6 +77,7 @@ export function ExpenseRowActions({
         >
           Delete
         </button>
+        )}
       </div>
 
       <Modal
@@ -91,7 +98,7 @@ export function ExpenseRowActions({
         open={deleting}
         onClose={closeDelete}
         title="Delete this expense?"
-        description={`${expense.category}, ${peso.format(expense.amount)} on ${expense.date}, and its attached receipts will be deleted for good. This is recorded in the audit trail.`}
+        description={`${expense.category}, ${peso.format(expense.amount)} on ${expense.date}, and its attached receipts will be removed from the expenses. It is kept in Deleted items, so the superuser can bring it back. This is recorded in the audit trail.`}
       >
         <div className="space-y-4">
           {error && (

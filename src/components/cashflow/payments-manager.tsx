@@ -8,6 +8,7 @@ import {
 } from "@/app/cashflow/transactions/payment-actions";
 import { FormField } from "@/components/auth/form-field";
 import { AttachmentsPanel } from "@/components/cashflow/attachments-panel";
+import { useCan } from "@/components/cashflow/capabilities-context";
 import { SelectField } from "@/components/cashflow/select-field";
 import { PAYMENT_TYPES } from "@/lib/cashflow/constants";
 import {
@@ -53,7 +54,6 @@ export function PaymentsManager({
   invoiceId,
   totalDue,
   payments,
-  canDelete = false,
   readOnly = false,
   attachments,
   onChanged,
@@ -61,7 +61,6 @@ export function PaymentsManager({
   invoiceId: string;
   totalDue: number;
   payments: Payment[];
-  canDelete?: boolean;
   /** When given, each payment shows its proof-of-payment files with an
    * "Attach proof" button (the transaction page passes them). */
   attachments?: AttachmentInfo[];
@@ -74,6 +73,8 @@ export function PaymentsManager({
    * holds its own copy of the payments (the table's edit pop-up). */
   onChanged?: () => void;
 }) {
+  const canDelete = useCan("payment.delete");
+  const canAdd = useCan("payment.add");
   const router = useRouter();
   const [form, setForm] = useState<FormState>(emptyForm);
   const [formError, setFormError] = useState<string | null>(null);
@@ -217,7 +218,6 @@ export function PaymentsManager({
                       items={attachments.filter(
                         (item) => item.paymentId === payment.id,
                       )}
-                      canDelete={canDelete}
                       buttonLabel="Attach proof of payment"
                     />
                   </div>
@@ -238,7 +238,7 @@ export function PaymentsManager({
         </ul>
       )}
 
-      {!readOnly && (
+      {!readOnly && canAdd && (
         <div>
           <h4 className="mb-3 text-xs font-medium uppercase tracking-wide text-zinc-400 dark:text-zinc-500">
             Record a payment

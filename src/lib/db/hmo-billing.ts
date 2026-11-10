@@ -301,15 +301,25 @@ export async function createHmoBilling(input: {
 }
 
 /** Saved billings, newest first. */
+const NO_BRANCH_UUID = "00000000-0000-0000-0000-000000000000";
+
 export async function listHmoBillings(input: {
   branchId: string | null;
+  /** When set, only billings of these clinics (a person with several). */
+  branchIds?: string[] | null;
   limit?: number;
 }): Promise<{ billings: HmoBilling[]; tablesMissing: boolean }> {
   try {
     const rows = await db
       .select()
       .from(hmoBillings)
-      .where(input.branchId ? eq(hmoBillings.branchId, input.branchId) : undefined)
+      .where(
+        input.branchId
+          ? eq(hmoBillings.branchId, input.branchId)
+          : input.branchIds
+            ? inArray(hmoBillings.branchId, input.branchIds.length > 0 ? input.branchIds : [NO_BRANCH_UUID])
+            : undefined,
+      )
       .orderBy(desc(hmoBillings.createdAt))
       .limit(input.limit ?? 50);
     return { billings: rows.map(toBilling), tablesMissing: false };

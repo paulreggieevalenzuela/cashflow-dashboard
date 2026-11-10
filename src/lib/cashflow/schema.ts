@@ -56,6 +56,11 @@ export const CashflowTransactionSchema = z.object({
   dentistUserId: z.string().nullable().optional(),
   procedureId: z.string().nullable().optional(),
   commissionAmount: z.number().nonnegative().optional(),
+  // Transferred patient (see schema.ts): the second dentist and their half
+  // of the commission. `commissionAmount` is then the main dentist's half.
+  transferDentist: z.string().optional(),
+  transferDentistUserId: z.string().nullable().optional(),
+  transferCommissionAmount: z.number().nonnegative().optional(),
   branchId: z.string().nullable().optional(),
   createdByUserId: z.string().nullable().optional(),
   transactionNumber: z.string().nullable().optional(),

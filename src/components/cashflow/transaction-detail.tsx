@@ -212,7 +212,6 @@ export function TransactionDetail({
               discountTypes={discountTypes}
               payments={payments}
               totalDue={totalDue}
-              canDelete={canDelete}
             />
           )}
           {canDelete && (
@@ -390,7 +389,6 @@ export function TransactionDetail({
         invoiceId={invoice.id}
         totalDue={totalDue}
         payments={payments}
-        canDelete={canDelete}
         readOnly
         attachments={attachments}
       />
@@ -424,7 +422,6 @@ export function TransactionDetail({
           items={attachments.filter(
             (item) => item.kind === "invoice" && item.paymentId === null,
           )}
-          canDelete={canDelete}
           buttonLabel="Attach invoice photo / PDF"
           emptyText="No invoice file attached yet."
         />
@@ -441,7 +438,6 @@ export function TransactionDetail({
               items={attachments.filter(
                 (item) => item.kind === "receipt" && item.paymentId === null,
               )}
-              canDelete={canDelete}
               buttonLabel="Attach proof of payment"
             />
           </div>

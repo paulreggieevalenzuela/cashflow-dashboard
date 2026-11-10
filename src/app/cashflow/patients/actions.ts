@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth/access";
+import { can } from "@/lib/auth/guards";
 import { logAudit } from "@/lib/db/audit";
 import {
   BIRTH_DATE_INVALID_MESSAGE,
@@ -108,7 +109,7 @@ export async function updatePatientAction(
   return result;
 }
 
-/** Combines a duplicate record into another patient. Admin only. */
+/** Combines a duplicate record into another patient (needs the merge privilege). */
 export async function mergePatientsAction(
   sourceId: string,
   targetId: string,
@@ -117,8 +118,8 @@ export async function mergePatientsAction(
   if (!who) {
     return { ok: false, message: "You must be signed in." };
   }
-  if (who.session.user.role !== "admin") {
-    return { ok: false, message: "Only admins can merge patients." };
+  if (!can(who.session, "patient.merge")) {
+    return { ok: false, message: "You don't have permission to merge patients." };
   }
   const result = await mergePatients(sourceId, targetId);
   if (!result.ok) {

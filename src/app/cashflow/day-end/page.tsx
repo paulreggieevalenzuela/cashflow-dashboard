@@ -43,12 +43,13 @@ export default async function DayEndPage({
   const scope = await resolveDayEndScope({
     userId: session.user.id,
     role: session.user.role,
+    branchId: session.user.branchId,
+    branchIds: session.user.branchIds,
     requested: raw.branch,
     branchList,
   });
   const report = await getDayEndReport({ branchId: scope.branchId, date });
   const { breakdown, totals } = summarizeDayEnd(report);
-  const isAdmin = session.user.role === "admin";
 
   const query = new URLSearchParams({
     date,
@@ -99,8 +100,16 @@ export default async function DayEndPage({
             disabled={scope.locked}
             className="select-chevron rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
           >
-            {isAdmin && <option value="all">All branches</option>}
-            {branchList.map((branch) => (
+            {scope.allowedBranchIds === null && (
+              <option value="all">All branches</option>
+            )}
+            {branchList
+              .filter(
+                (branch) =>
+                  scope.allowedBranchIds === null ||
+                  scope.allowedBranchIds.includes(branch.id),
+              )
+              .map((branch) => (
               <option key={branch.id} value={branch.id}>
                 {branch.name}
               </option>
@@ -118,7 +127,7 @@ export default async function DayEndPage({
         </button>
         {scope.locked && (
           <span className="text-xs text-zinc-500 dark:text-zinc-400">
-            You can see your own branch only.
+            You can see your own clinic only.
           </span>
         )}
       </form>

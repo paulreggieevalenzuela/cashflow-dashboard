@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth/access";
+import { can } from "@/lib/auth/guards";
 import { DentistFilter } from "@/components/cashflow/performance/dentist-filter";
 import { DentistPatientsTable } from "@/components/cashflow/performance/dentist-patients-table";
 import { LeaderboardTable } from "@/components/cashflow/performance/leaderboard-table";
@@ -37,7 +38,7 @@ export default async function PerformancePage({
     redirect("/cashflow");
   }
 
-  const isAdmin = session.user.role === "admin";
+  const isAdmin = can(session, "performance.view_all");
   const isDentist = session.user.role === "dentist";
   const isStaff = session.user.role === "staff";
   const resolvedSearchParams = await searchParams;

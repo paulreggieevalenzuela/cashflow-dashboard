@@ -12,12 +12,15 @@ export type BranchPolicyValue = {
   canChoose: boolean;
   branchId: string | null;
   branchName: string;
+  /** The clinics they may pick from; null = every clinic. */
+  allowedBranchIds: string[] | null;
 };
 
 const BranchPolicyContext = createContext<BranchPolicyValue>({
   canChoose: true,
   branchId: null,
   branchName: "",
+  allowedBranchIds: null,
 });
 
 export function BranchPolicyProvider({

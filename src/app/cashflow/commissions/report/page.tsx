@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth/access";
+import { can } from "@/lib/auth/guards";
 import { DownloadButton } from "@/components/ui/download-button";
 import {
   COMMISSION_HEADERS,
@@ -47,7 +48,7 @@ export default async function CommissionReportPage({
   }>;
 }) {
   const session = await auth();
-  if (session?.user.role !== "admin") {
+  if (!can(session, "commission.report")) {
     redirect("/cashflow");
   }
   const raw = await searchParams;
@@ -300,6 +301,9 @@ export default async function CommissionReportPage({
                     {isHmoPayment(row.paymentType) &&
                       row.commission !== 0 &&
                       " (HMO)"}
+                  </td>
+                  <td className="px-3 py-2.5 text-xs text-zinc-500 dark:text-zinc-400">
+                    {row.note ?? ""}
                   </td>
                 </tr>
               ))}

@@ -1,5 +1,6 @@
 "use client";
 
+import { useCan } from "@/components/cashflow/capabilities-context";
 import { useState } from "react";
 import { TransactionForm } from "@/components/cashflow/transaction-form";
 import { Modal } from "@/components/ui/modal";
@@ -7,7 +8,7 @@ import type { Branch } from "@/lib/db/branches";
 import type { DiscountTypeOption } from "@/lib/db/discount-types";
 import type { ProcedureOption } from "@/lib/db/procedures";
 
-export function AddTransactionModal({
+function AddTransactionModalInner({
   initialPatientName,
   buttonLabel = "Add transaction",
   title = "Add transaction",
@@ -71,4 +72,12 @@ export function AddTransactionModal({
       </Modal>
     </>
   );
+}
+
+/** Shown only to people who may add one (the server checks it too). */
+export function AddTransactionModal(
+  props: React.ComponentProps<typeof AddTransactionModalInner>,
+) {
+  const allowed = useCan("visit.create");
+  return allowed ? <AddTransactionModalInner {...props} /> : null;
 }

@@ -5,8 +5,9 @@ import type { UserRole } from "@/lib/cashflow/user-schema";
  * buttons to show) and the server action (to refuse) use the same table.
  *
  * - The superuser can reset anyone except themselves.
- * - An admin can reset dentists and staff only (not other admins, not the
- *   superuser, not themselves).
+ * - An owner can reset admins, dentists and staff (not other owners).
+ * - An admin can reset dentists and staff only (not owners, other admins, the
+ *   superuser, or themselves).
  * - Nobody resets their own password this way: use Profile > Change password.
  * - Nobody can reset the superuser: that is the developer's break-glass
  *   script (scripts/reset-password.ts).
@@ -32,16 +33,28 @@ export function canResetPassword(
   if (actor.role === "superuser") {
     return { ok: true };
   }
-  if (actor.role === "admin") {
-    if (target.role === "admin") {
+  if (actor.role === "owner") {
+    if (target.role === "owner") {
       return {
         ok: false,
-        reason: "Only the superuser can reset an admin's password.",
+        reason: "Only the superuser can reset an owner's password.",
       };
     }
     return { ok: true };
   }
-  return { ok: false, reason: "Only admins can reset passwords." };
+  if (actor.role === "admin") {
+    if (target.role === "admin" || target.role === "owner") {
+      return {
+        ok: false,
+        reason:
+          target.role === "owner"
+            ? "Only the superuser can reset an owner's password."
+            : "Only an owner or the superuser can reset an admin's password.",
+      };
+    }
+    return { ok: true };
+  }
+  return { ok: false, reason: "Only owners and admins can reset passwords." };
 }
 
 /** Can this person see (and act on) a reset request for an account with this role? */
@@ -49,6 +62,8 @@ export function canActOnRequestFor(
   actorRole: UserRole,
   targetRole: UserRole | null,
 ): boolean {
-  if (targetRole === null) return actorRole === "admin" || actorRole === "superuser";
+  if (targetRole === null) {
+    return actorRole === "admin" || actorRole === "owner" || actorRole === "superuser";
+  }
   return canResetPassword({ id: "actor", role: actorRole }, { id: "target", role: targetRole }).ok;
 }

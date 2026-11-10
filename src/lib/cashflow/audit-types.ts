@@ -6,6 +6,12 @@ export type AuditAction =
   | "visit.created"
   | "visit.updated"
   | "visit.deleted"
+  | "visit.restored"
+  | "line.restored"
+  | "payment.restored"
+  | "expense.restored"
+  | "attachment.restored"
+  | "user.access_changed"
   | "visit.imported"
   | "payment.added"
   | "payment.removed"
@@ -39,6 +45,12 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   "visit.created": "Visit created",
   "visit.updated": "Visit edited",
   "visit.deleted": "Visit removed",
+  "visit.restored": "Visit restored",
+  "line.restored": "Procedure line restored",
+  "payment.restored": "Payment restored",
+  "expense.restored": "Expense restored",
+  "attachment.restored": "File restored",
+  "user.access_changed": "Access changed",
   "visit.imported": "Visits imported",
   "payment.added": "Payment added",
   "payment.removed": "Payment removed",

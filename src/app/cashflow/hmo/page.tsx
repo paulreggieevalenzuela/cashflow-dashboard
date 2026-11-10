@@ -59,10 +59,11 @@ export default async function HmoBillingPage({
   const scope = await resolveDayEndScope({
     userId: session.user.id,
     role: session.user.role,
+    branchId: session.user.branchId,
+    branchIds: session.user.branchIds,
     requested: raw.branch,
     branchList,
   });
-  const isAdmin = session.user.role === "admin";
 
   const problem = rangeProblem(from, to);
   const allLines = problem
@@ -80,6 +81,7 @@ export default async function HmoBillingPage({
 
   const { billings, tablesMissing } = await listHmoBillings({
     branchId: scope.locked ? scope.branchId : null,
+    branchIds: scope.allowedBranchIds,
   });
 
   const branchName =
@@ -145,8 +147,16 @@ export default async function HmoBillingPage({
             disabled={scope.locked}
             className="select-chevron rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
           >
-            {isAdmin && <option value="all">All branches (preview only)</option>}
-            {branchList.map((branch) => (
+            {scope.allowedBranchIds === null && (
+              <option value="all">All branches (preview only)</option>
+            )}
+            {branchList
+              .filter(
+                (branch) =>
+                  scope.allowedBranchIds === null ||
+                  scope.allowedBranchIds.includes(branch.id),
+              )
+              .map((branch) => (
               <option key={branch.id} value={branch.id}>
                 {branch.name}
               </option>
@@ -186,7 +196,7 @@ export default async function HmoBillingPage({
         </button>
         {scope.locked && (
           <span className="text-xs text-zinc-500 dark:text-zinc-400">
-            You can bill your own branch only.
+            You can bill your own clinic only.
           </span>
         )}
       </form>

@@ -100,7 +100,7 @@ export function ExpensesTab({
           <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
             {matching.length} {filtered ? "matching" : "recorded"} &middot;{" "}
             {currencyFormatter.format(total)} total. Newest first, with the
-            receipt or proof.{canDelete && " Admins can edit or delete an expense."}
+            receipt or proof.{canDelete && " You can edit or delete an expense."}
           </p>
         </div>
         <AddExpenseModal branches={branches} suppliers={suppliers} />
@@ -259,7 +259,6 @@ export function ExpensesTab({
                       items={files.filter(
                         (file) => file.expenseId === expense.id,
                       )}
-                      canDelete={canDelete}
                       buttonLabel="Attach receipt / proof"
                     />
                   </td>

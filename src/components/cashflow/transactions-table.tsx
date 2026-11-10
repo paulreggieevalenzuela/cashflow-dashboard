@@ -389,7 +389,6 @@ export function TransactionsTable({
               0,
             )}
             payments={editing.data.payments}
-            canDelete={canDelete}
             onChanged={() => void reloadPayments(editing.data!.invoice.id)}
           />
         </div>

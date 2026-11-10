@@ -122,6 +122,40 @@ const GROUPS: Group[] = [
     ],
   },
   {
+    title: "Commission",
+    items: [
+      {
+        q: "How do I change a commission rate?",
+        a: "Admins open the Commissions tab. The big table has every procedure down the side and Tier 3, Tier 2 and Tier 1 across: click a percentage, type the new one and press Save (Enter also saves, Esc cancels). Click a dash to set a rate that is missing. To give one dentist a different rate for a single procedure, choose them under One person's own rates and set their own rate there; remove it to go back to the tier rate. A new rate applies to visits saved from then on.",
+      },
+      {
+        q: "A patient was transferred to another dentist. How is the commission shared?",
+        a: "On the visit, pick the second dentist in Transferred to dentist. The commission is worked out at the main dentist's rate for every procedure of that visit, then split 50% to the main dentist and 50% to the dentist the patient was transferred to. Both halves show on the Commission report and on Performance. Clear the field to give the whole commission back to the main dentist.",
+      },
+    ],
+  },
+  {
+    title: "Roles, access and deleted items",
+    items: [
+      {
+        q: "What are the roles?",
+        a: "Superuser, Owner, Admin, Dentist and Staff. Owners and admins work in every clinic and have the same controls; an owner can also manage admins, and only the superuser can manage owners. Dentists and staff work in the clinics ticked for them.",
+      },
+      {
+        q: "How do I change what one person can do?",
+        a: "Owners and admins open Users, press Manage on the person, then Access & Permissions. The role gives a starting set of ticked privileges; tick or untick any of them for that person and press Save access. Reset to role defaults puts them back. You can only give a privilege you hold yourself, and you cannot change your own access.",
+      },
+      {
+        q: "Which clinics can someone work in?",
+        a: "Tick them under Authorized clinics on the same screen. A person with one clinic always saves under it; with several they choose among those only. The first clinic ticked is their home clinic for the Queue and Overview. Owners and admins do not need clinics ticked.",
+      },
+      {
+        q: "I deleted something by mistake.",
+        a: "Owners and admins cannot undo a delete, but nothing is lost: deleted visits, procedure lines, payments, expenses and attached files are kept in Deleted items, which only the superuser can open. Tell the superuser what was deleted and when, and they can restore it exactly as it was.",
+      },
+    ],
+  },
+  {
     title: "Mistakes",
     items: [
       {

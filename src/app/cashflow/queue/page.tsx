@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { auth } from "@/lib/auth/access";
+import { can } from "@/lib/auth/guards";
 import { getBranchPolicy, resolveQueueBranch } from "@/lib/auth/branch-policy";
 import { AddTransactionModal } from "@/components/cashflow/add-transaction-modal";
 import { AutoRefresh } from "@/components/cashflow/auto-refresh";
@@ -73,8 +74,16 @@ export default async function QueuePage({
                   defaultValue={branchId ?? "all"}
                   className="select-chevron rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
                 >
-                  <option value="all">All branches</option>
-                  {branches.map((branch) => (
+                  {policy.allowedBranchIds === null && (
+                    <option value="all">All branches</option>
+                  )}
+                  {branches
+                    .filter(
+                      (branch) =>
+                        policy.allowedBranchIds === null ||
+                        policy.allowedBranchIds.includes(branch.id),
+                    )
+                    .map((branch) => (
                     <option key={branch.id} value={branch.id}>
                       {branch.name}
                     </option>
@@ -91,8 +100,8 @@ export default async function QueuePage({
           ) : (
             <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
               {policy.branchId
-                ? "You see your own branch's queue. An admin can change your branch."
-                : "No branch is assigned to your account yet, so you see every branch and cannot add visits. Ask an admin to assign one."}
+                ? "You see your own clinic's queue. An owner or admin can change your clinics."
+                : "No clinic is assigned to your account yet, so you see every clinic and cannot add visits. Ask an owner or admin to assign one."}
             </p>
           )}
         </div>
@@ -111,7 +120,7 @@ export default async function QueuePage({
       <TodayBoard
         visits={visits}
         today={today}
-        isAdmin={session?.user.role === "admin"}
+        isAdmin={can(session, "visit.status_override")}
       />
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">

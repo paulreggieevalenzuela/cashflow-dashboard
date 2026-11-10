@@ -2,8 +2,9 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth/access";
+import { can } from "@/lib/auth/guards";
 import { CommissionTiersManager } from "@/components/cashflow/commission-tiers-manager";
-import { CommissionRatesManager } from "@/components/cashflow/commission-rates-manager";
+import { PersonRateGrid } from "@/components/cashflow/commission-rate-grids";
 import { listCommissionRates } from "@/lib/db/commission-rates";
 import { listDentistTiers, listTierRates } from "@/lib/db/commission-tiers";
 import { listCommissionEligibleUsers } from "@/lib/db/dentists";
@@ -16,7 +17,7 @@ export const metadata: Metadata = {
 export default async function CommissionsPage() {
   const session = await auth();
 
-  if (session?.user.role !== "admin") {
+  if (!can(session, "commission.manage")) {
     redirect("/cashflow");
   }
 
@@ -52,7 +53,9 @@ export default async function CommissionsPage() {
           an HMO (Maxicare, Medicard, Intellicare, Avega, Valucare, Elite
           Dental Network) use the HMO columns, and an HMO visit for a
           procedure with no HMO rate earns no commission. A rate applies to
-          transactions saved after it is set.
+          transactions saved after it is set. When a patient is transferred
+          to a second dentist on a visit, the commission is worked out at the
+          main dentist&apos;s rate and split 50% / 50% between the two.
         </p>
       </div>
       <CommissionTiersManager
@@ -62,20 +65,12 @@ export default async function CommissionsPage() {
         tierRates={tierRates}
         overrideCount={overrideCount}
       />
-      <div>
-        <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">
-          Individual rates &amp; staff bonuses
-        </h3>
-        <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-          Use this only for staff bonuses, or for one dentist who needs a
-          different rate than their tier. An individual rate takes priority
-          over the tier.
-        </p>
-      </div>
-      <CommissionRatesManager
-        dentists={dentists}
+      <PersonRateGrid
+        people={dentists}
         procedures={procedures}
         rates={rates}
+        tierRates={tierRates}
+        dentistTiers={dentistTiers}
       />
     </div>
   );

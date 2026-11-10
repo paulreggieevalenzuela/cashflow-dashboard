@@ -1,20 +1,23 @@
 "use client";
 
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, type FormEvent, type ReactNode } from "react";
+import { useState, type FormEvent } from "react";
 import {
   createUserAction,
   deleteUserAction,
   dismissResetRequestAction,
   resetUserPasswordAction,
-  updateUserBranchAction,
-  updateUserRoleAction,
-  type TempPasswordIssued,
 } from "@/app/cashflow/users/actions";
 import { FormField } from "@/components/auth/form-field";
+import {
+  PasswordDialog,
+  type PasswordDialogState,
+} from "@/components/cashflow/password-dialog";
+import { Spinner } from "@/components/ui/spinner";
+import { canManageUser, worksInEveryClinic } from "@/lib/auth/permissions";
 import { canActOnRequestFor, canResetPassword } from "@/lib/auth/reset-rules";
 import {
-  USER_ROLES,
   USER_ROLE_LABELS,
   type AssignableRole,
   type UserRole,
@@ -27,7 +30,10 @@ export type ManagedUserView = {
   name: string;
   email: string;
   role: UserRole;
-  branchId: string | null;
+  /** The clinics ticked for the person; null = works in every clinic. */
+  branchIds: string[] | null;
+  /** True when their privileges differ from their role's defaults. */
+  customized: boolean;
   createdAt: string;
   mustChangePassword: boolean;
   tempPasswordExpiresAt: string | null;
@@ -52,14 +58,14 @@ type FormState = {
   name: string;
   email: string;
   role: AssignableRole;
-  branchId: string;
+  branchIds: string[];
 };
 
 const INITIAL_STATE: FormState = {
   name: "",
   email: "",
   role: "staff",
-  branchId: "",
+  branchIds: [],
 };
 
 type FieldErrors = Partial<Record<keyof FormState, string>>;
@@ -71,38 +77,59 @@ const dateTimeFormatter = new Intl.DateTimeFormat("en-US", {
   timeStyle: "short",
 });
 
-type Dialog =
-  | { kind: "confirm-reset"; userId: string; userName: string; email: string }
-  | { kind: "issued"; reason: "created" | "reset"; issued: TempPasswordIssued }
-  | null;
+const ROLE_BADGE: Record<UserRole, string> = {
+  superuser: "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900",
+  owner: "bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300",
+  admin: "bg-sky-100 text-sky-800 dark:bg-sky-950 dark:text-sky-300",
+  dentist: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300",
+  staff: "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300",
+};
+
+const SELECT_CLASS =
+  "select-chevron w-full rounded-lg border border-zinc-300 bg-white px-3.5 py-2.5 text-sm text-zinc-900 shadow-sm outline-none transition-colors focus:border-amber-500 focus:ring-2 focus:ring-amber-100 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50 dark:focus:ring-amber-900/40";
 
 export function UsersManager({
   users,
   currentUserId,
   currentUserRole,
+  assignableRoles,
   branches,
   requests,
 }: {
   users: ManagedUserView[];
   currentUserId: string;
   currentUserRole: UserRole;
+  /** The roles this person may give (from `assignableRolesFor`). */
+  assignableRoles: UserRole[];
   branches: Branch[];
   requests: ResetRequestView[];
 }) {
   const router = useRouter();
-  const [form, setForm] = useState<FormState>(INITIAL_STATE);
+  const [form, setForm] = useState<FormState>({
+    ...INITIAL_STATE,
+    role: (assignableRoles.includes("staff") ? "staff" : (assignableRoles[0] ?? "staff")) as AssignableRole,
+  });
   const [errors, setErrors] = useState<FieldErrors>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [status, setStatus] = useState<"idle" | "submitting">("idle");
   const [rowBusyId, setRowBusyId] = useState<string | null>(null);
-  const [dialog, setDialog] = useState<Dialog>(null);
+  const [dialog, setDialog] = useState<PasswordDialogState>(null);
   const [dialogError, setDialogError] = useState<string | null>(null);
   const [dialogBusy, setDialogBusy] = useState(false);
   const branchName = (id: string | null) =>
-    branches.find((branch) => branch.id === id)?.name ?? "No branch";
+    branches.find((branch) => branch.id === id)?.name ?? "No clinic";
 
   function updateField<K extends keyof FormState>(key: K, value: FormState[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
+  }
+
+  function toggleClinic(id: string) {
+    setForm((prev) => ({
+      ...prev,
+      branchIds: prev.branchIds.includes(id)
+        ? prev.branchIds.filter((existing) => existing !== id)
+        : [...prev.branchIds, id],
+    }));
   }
 
   async function handleCreate(event: FormEvent<HTMLFormElement>) {
@@ -123,7 +150,7 @@ export function UsersManager({
     }
 
     setStatus("idle");
-    setForm(INITIAL_STATE);
+    setForm((prev) => ({ ...INITIAL_STATE, role: prev.role }));
     setDialogError(null);
     setDialog({ kind: "issued", reason: "created", issued: result.data });
     router.refresh();
@@ -163,32 +190,6 @@ export function UsersManager({
     setDialog({ kind: "confirm-reset", userId, userName, email });
   }
 
-  async function handleRoleChange(userId: string, role: AssignableRole) {
-    setRowBusyId(userId);
-    try {
-      const result = await updateUserRoleAction(userId, role);
-      if (!result.ok) {
-        window.alert(result.message);
-      }
-      router.refresh();
-    } finally {
-      setRowBusyId(null);
-    }
-  }
-
-  async function handleBranchChange(userId: string, branchId: string) {
-    setRowBusyId(userId);
-    try {
-      const result = await updateUserBranchAction(userId, branchId);
-      if (!result.ok) {
-        window.alert(result.message);
-      }
-      router.refresh();
-    } finally {
-      setRowBusyId(null);
-    }
-  }
-
   async function handleDelete(user: ManagedUserView) {
     if (
       !window.confirm(
@@ -201,13 +202,15 @@ export function UsersManager({
     try {
       const result = await deleteUserAction(user.id);
       if (!result.ok) {
-        window.alert(result.message);
+        setFormError(result.message);
       }
       router.refresh();
     } finally {
       setRowBusyId(null);
     }
   }
+
+  const everyClinic = worksInEveryClinic(form.role);
 
   return (
     <div className="space-y-6">
@@ -255,7 +258,7 @@ export function UsersManager({
                     )}
                     {request.userId && !canAct && (
                       <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
-                        Only the superuser can reset an admin&apos;s password.
+                        Only someone above this account&apos;s level can reset its password.
                       </p>
                     )}
                   </div>
@@ -288,13 +291,15 @@ export function UsersManager({
         </section>
       )}
 
+
       <div className="rounded-xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-950">
         <h3 className="mb-1 text-sm font-semibold text-zinc-900 dark:text-zinc-50">
           Add a user
         </h3>
         <p className="mb-4 text-sm text-zinc-500 dark:text-zinc-400">
           The system makes a temporary password and shows it to you once. The
-          person chooses their own the first time they sign in.
+          person chooses their own the first time they sign in. You can fine-tune
+          what they may do afterwards with <strong>Manage</strong>.
         </p>
 
         {formError && (
@@ -328,17 +333,21 @@ export function UsersManager({
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+              <label
+                htmlFor="new-user-role"
+                className="text-sm font-medium text-zinc-700 dark:text-zinc-300"
+              >
                 Role
               </label>
               <select
+                id="new-user-role"
                 value={form.role}
                 onChange={(event) =>
                   updateField("role", event.target.value as AssignableRole)
                 }
-                className="select-chevron w-full rounded-lg border border-zinc-300 bg-white px-3.5 py-2.5 text-sm text-zinc-900 shadow-sm outline-none transition-colors focus:border-amber-500 focus:ring-2 focus:ring-amber-100 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50 dark:focus:ring-amber-900/40"
+                className={SELECT_CLASS}
               >
-                {USER_ROLES.map((role) => (
+                {assignableRoles.map((role) => (
                   <option key={role} value={role}>
                     {USER_ROLE_LABELS[role]}
                   </option>
@@ -348,47 +357,54 @@ export function UsersManager({
           </div>
 
           {branches.length > 0 && (
-            <div className="flex flex-col gap-1.5 sm:w-1/2 sm:pr-2">
-              <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-                Branch
-              </label>
-              <select
-                value={form.branchId}
-                onChange={(event) =>
-                  updateField("branchId", event.target.value)
-                }
-                className="select-chevron w-full rounded-lg border border-zinc-300 bg-white px-3.5 py-2.5 text-sm text-zinc-900 shadow-sm outline-none transition-colors focus:border-amber-500 focus:ring-2 focus:ring-amber-100 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50 dark:focus:ring-amber-900/40"
-              >
-                <option value="">No branch</option>
-                {branches.map((branch) => (
-                  <option key={branch.id} value={branch.id}>
-                    {branch.name}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <fieldset className="space-y-2">
+              <legend className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                Authorized clinics
+              </legend>
+              {everyClinic ? (
+                <p className="text-sm text-zinc-500 dark:text-zinc-400">
+                  Owners and admins work in every clinic.
+                </p>
+              ) : (
+                <div className="flex flex-wrap gap-x-5 gap-y-2">
+                  {branches.map((branch) => (
+                    <label
+                      key={branch.id}
+                      className="flex items-center gap-2 text-sm text-zinc-700 dark:text-zinc-300"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={form.branchIds.includes(branch.id)}
+                        onChange={() => toggleClinic(branch.id)}
+                        className="h-4 w-4 rounded border-zinc-300 text-amber-600 focus:ring-amber-500"
+                      />
+                      {branch.name}
+                    </label>
+                  ))}
+                </div>
+              )}
+            </fieldset>
           )}
 
           <button
             type="submit"
             disabled={status === "submitting"}
-            className="rounded-lg bg-amber-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-70"
+            className="inline-flex items-center gap-2 rounded-lg bg-amber-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-70"
           >
+            {status === "submitting" && <Spinner />}
             {status === "submitting" ? "Adding..." : "Add user"}
           </button>
         </form>
       </div>
 
       <div className="overflow-x-auto rounded-lg border border-zinc-200 dark:border-zinc-800">
-        <table className="w-full min-w-[640px] text-left text-sm">
+        <table className="w-full min-w-[780px] text-left text-sm">
           <thead className="bg-zinc-50 text-xs uppercase tracking-wide text-zinc-500 dark:bg-zinc-900 dark:text-zinc-400">
             <tr>
               <th className="px-4 py-3 font-medium">Name</th>
               <th className="px-4 py-3 font-medium">Email</th>
               <th className="px-4 py-3 font-medium">Role</th>
-              {branches.length > 0 && (
-                <th className="px-4 py-3 font-medium">Branch</th>
-              )}
+              <th className="px-4 py-3 font-medium">Clinics</th>
               <th className="px-4 py-3 font-medium">Added</th>
               <th className="px-4 py-3" />
             </tr>
@@ -397,6 +413,9 @@ export function UsersManager({
             {users.map((user) => {
               const isSelf = user.id === currentUserId;
               const isBusy = rowBusyId === user.id;
+              const me = { id: currentUserId, role: currentUserRole };
+              const mayManage = canManageUser(me, { id: user.id, role: user.role }).ok;
+              const mayReset = canResetPassword(me, { id: user.id, role: user.role }).ok;
 
               return (
                 <tr key={user.id} className="text-zinc-700 dark:text-zinc-300">
@@ -405,11 +424,6 @@ export function UsersManager({
                     {isSelf && (
                       <span className="ml-2 text-xs font-normal text-zinc-400">
                         (you)
-                      </span>
-                    )}
-                    {user.role === "superuser" && (
-                      <span className="ml-2 rounded-full bg-zinc-900 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white dark:bg-zinc-100 dark:text-zinc-900">
-                        Superuser
                       </span>
                     )}
                     {user.mustChangePassword && (
@@ -424,57 +438,40 @@ export function UsersManager({
                   </td>
                   <td className="px-4 py-3">{user.email}</td>
                   <td className="px-4 py-3">
-                    {user.role === "superuser" ? (
-                      <span className="text-xs text-zinc-500 dark:text-zinc-400">
-                        {USER_ROLE_LABELS.superuser}
-                      </span>
-                    ) : (
-                    <select
-                      value={user.role}
-                      disabled={isBusy || isSelf}
-                      onChange={(event) =>
-                        handleRoleChange(
-                          user.id,
-                          event.target.value as AssignableRole,
-                        )
-                      }
-                      className="select-chevron-sm rounded-md border border-zinc-300 bg-white px-2 py-1 text-xs text-zinc-900 outline-none disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-xs font-medium ${ROLE_BADGE[user.role]}`}
                     >
-                      {USER_ROLES.map((role) => (
-                        <option key={role} value={role}>
-                          {USER_ROLE_LABELS[role]}
-                        </option>
-                      ))}
-                    </select>
+                      {USER_ROLE_LABELS[user.role]}
+                    </span>
+                    {user.customized && (
+                      <span
+                        className="ml-2 text-xs text-zinc-500 dark:text-zinc-400"
+                        title="Their privileges differ from the role's defaults"
+                      >
+                        customized
+                      </span>
                     )}
                   </td>
-                  {branches.length > 0 && (
-                    <td className="px-4 py-3">
-                      <select
-                        value={user.branchId ?? ""}
-                        disabled={isBusy}
-                        onChange={(event) =>
-                          handleBranchChange(user.id, event.target.value)
-                        }
-                        className="select-chevron-sm rounded-md border border-zinc-300 bg-white px-2 py-1 text-xs text-zinc-900 outline-none disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
-                      >
-                        <option value="">No branch</option>
-                        {branches.map((branch) => (
-                          <option key={branch.id} value={branch.id}>
-                            {branch.name}
-                          </option>
-                        ))}
-                      </select>
-                    </td>
-                  )}
+                  <td className="px-4 py-3 text-xs">
+                    {user.branchIds === null
+                      ? "All clinics"
+                      : user.branchIds.length === 0
+                        ? <span className="text-amber-700 dark:text-amber-300">None yet</span>
+                        : user.branchIds.map((id) => branchName(id)).join(", ")}
+                  </td>
                   <td className="whitespace-nowrap px-4 py-3">
                     {dateFormatter.format(new Date(user.createdAt))}
                   </td>
                   <td className="whitespace-nowrap px-4 py-3 text-right">
-                    {canResetPassword(
-                      { id: currentUserId, role: currentUserRole },
-                      { id: user.id, role: user.role },
-                    ).ok && (
+                    {mayManage && (
+                      <Link
+                        href={`/cashflow/users/${user.id}`}
+                        className="mr-1 rounded-md px-2 py-1.5 text-xs font-medium text-amber-700 transition-colors hover:bg-amber-50 dark:text-amber-300 dark:hover:bg-amber-950/40"
+                      >
+                        Manage
+                      </Link>
+                    )}
+                    {mayReset && (
                       <button
                         type="button"
                         onClick={() => askReset(user.id, user.name, user.email)}
@@ -484,15 +481,16 @@ export function UsersManager({
                         Reset password
                       </button>
                     )}
-                    {user.role !== "superuser" && (
-                    <button
-                      type="button"
-                      onClick={() => handleDelete(user)}
-                      disabled={isBusy || isSelf}
-                      className="rounded-md px-2 py-1.5 text-xs font-medium text-zinc-400 transition-colors hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-40 dark:hover:bg-red-950/40 dark:hover:text-red-400"
-                    >
-                      {isBusy ? "Working..." : "Remove"}
-                    </button>
+                    {mayManage && !isSelf && (
+                      <button
+                        type="button"
+                        onClick={() => handleDelete(user)}
+                        disabled={isBusy}
+                        className="inline-flex items-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-medium text-zinc-400 transition-colors hover:bg-red-50 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-40 dark:hover:bg-red-950/40 dark:hover:text-red-400"
+                      >
+                        {isBusy && <Spinner className="h-3 w-3" />}
+                        {isBusy ? "Working..." : "Remove"}
+                      </button>
                     )}
                   </td>
                 </tr>
@@ -515,143 +513,5 @@ export function UsersManager({
         />
       )}
     </div>
-  );
-}
-
-/**
- * One window for both steps: confirm a reset, then show the temporary
- * password. The password exists only in this window's memory; closing it
- * loses it (reset again to get a new one).
- */
-function PasswordDialog({
-  dialog,
-  busy,
-  error,
-  onConfirmReset,
-  onClose,
-}: {
-  dialog: NonNullable<Dialog>;
-  busy: boolean;
-  error: string | null;
-  onConfirmReset: () => void;
-  onClose: () => void;
-}) {
-  const [copied, setCopied] = useState<"password" | "message" | null>(null);
-
-  async function copy(kind: "password" | "message", text: string) {
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopied(kind);
-      window.setTimeout(() => setCopied(null), 2000);
-    } catch {
-      // Clipboard blocked: the text is on screen to copy by hand.
-    }
-  }
-
-  const shell = (children: ReactNode, title: string) => (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-900/50 p-4"
-      role="presentation"
-    >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label={title}
-        className="w-full max-w-md rounded-xl border border-zinc-200 bg-white p-6 shadow-xl dark:border-zinc-800 dark:bg-zinc-950"
-      >
-        {children}
-      </div>
-    </div>
-  );
-
-  if (dialog.kind === "confirm-reset") {
-    return shell(
-      <>
-        <h3 className="text-base font-semibold text-zinc-900 dark:text-zinc-50">
-          Reset password for {dialog.userName}?
-        </h3>
-        <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
-          {dialog.email} gets a new temporary password and must choose their own
-          the next time they sign in. They are signed out of every device now.
-          Only continue if you are sure it is really them asking.
-        </p>
-        {error && (
-          <p role="alert" className="mt-3 text-sm text-red-600 dark:text-red-400">
-            {error}
-          </p>
-        )}
-        <div className="mt-5 flex justify-end gap-2">
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={busy}
-            className="rounded-lg border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-900"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={onConfirmReset}
-            disabled={busy}
-            className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-700 disabled:opacity-60"
-          >
-            {busy ? "Resetting..." : "Reset password"}
-          </button>
-        </div>
-      </>,
-      "Confirm password reset",
-    );
-  }
-
-  const { issued, reason } = dialog;
-  const firstName = issued.userName.split(" ")[0] ?? issued.userName;
-  const expires = dateFormatter.format(new Date(issued.expiresAt));
-  const message = `Hi ${firstName}, your temporary Cashflow password is ${issued.tempPassword}. Sign in at ${typeof window === "undefined" ? "" : window.location.origin}/login and you will be asked to choose your own password. The temporary one stops working on ${expires}.`;
-
-  return shell(
-    <>
-      <h3 className="text-base font-semibold text-zinc-900 dark:text-zinc-50">
-        {reason === "created" ? "Account created" : "Password reset"} for {issued.userName}
-      </h3>
-      <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">
-        Give this temporary password to {firstName}. It is shown <strong>only once</strong>.
-        Hand it over in person or by phone or chat, not by e-mail.
-      </p>
-      <p
-        data-testid="temp-password"
-        className="mt-4 select-all rounded-lg bg-zinc-100 px-4 py-3 text-center font-mono text-2xl font-semibold tracking-wider text-zinc-900 dark:bg-zinc-900 dark:text-zinc-50"
-      >
-        {issued.tempPassword}
-      </p>
-      <p className="mt-2 text-center text-xs text-zinc-500 dark:text-zinc-400">
-        Valid until {expires}. They must choose their own password when they sign in.
-      </p>
-      <div className="mt-4 flex flex-wrap gap-2">
-        <button
-          type="button"
-          onClick={() => copy("password", issued.tempPassword)}
-          className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-900"
-        >
-          {copied === "password" ? "Copied" : "Copy password"}
-        </button>
-        <button
-          type="button"
-          onClick={() => copy("message", message)}
-          className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-900"
-        >
-          {copied === "message" ? "Copied" : "Copy message"}
-        </button>
-      </div>
-      <div className="mt-5 flex justify-end">
-        <button
-          type="button"
-          onClick={onClose}
-          className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-700"
-        >
-          Done
-        </button>
-      </div>
-    </>,
-    "Temporary password",
   );
 }

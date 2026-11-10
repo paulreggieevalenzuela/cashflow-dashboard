@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth/access";
+import { can } from "@/lib/auth/guards";
 import { ExpensesTab } from "@/components/cashflow/expenses-tab";
 import { ProceduresManager } from "@/components/cashflow/procedures-manager";
 import { RecallsList } from "@/components/cashflow/recalls-list";
@@ -22,7 +23,6 @@ import { listPendingRecalls } from "@/lib/db/recalls";
 import { listTransactionsPage } from "@/lib/db/transactions";
 import { AuditTrail } from "@/components/cashflow/audit-trail";
 import { listRecentAudit } from "@/lib/db/audit";
-import { canEditClearedVisit } from "@/lib/cashflow/visit-status";
 import {
   ALL_BRANCHES,
   buildTransactionsSearch,
@@ -65,7 +65,7 @@ export default async function TransactionsPage({
 
   if (tab === "audit") {
     const session = await auth();
-    if (session?.user.role !== "admin") {
+    if (!can(session, "audit.view")) {
       redirect("/cashflow/transactions");
     }
     const group =
@@ -135,7 +135,7 @@ export default async function TransactionsPage({
           suppliers={suppliers}
           branches={branches}
           files={files}
-          canDelete={session?.user.role === "admin"}
+          canDelete={can(session, "expense.edit") || can(session, "expense.delete")}
           filters={{
             q: resolvedSearchParams.q ?? "",
             from: resolvedSearchParams.from ?? "",
@@ -157,7 +157,7 @@ export default async function TransactionsPage({
         <TransactionsTabs active="procedures" />
         <ProceduresManager
           rows={rows}
-          canEdit={session?.user.role === "admin"}
+          canEdit={can(session, "procedure.manage")}
         />
       </div>
     );
@@ -229,7 +229,7 @@ export default async function TransactionsPage({
     redirect(`/cashflow/transactions${search}`);
   }
 
-  const canDelete = session?.user.role === "admin";
+  const canDelete = can(session, "visit.delete");
 
   return (
     <div className="space-y-6">
@@ -237,7 +237,7 @@ export default async function TransactionsPage({
       <TransactionsList
         transactions={rows}
         canDelete={canDelete}
-        canEditCleared={canEditClearedVisit(session?.user.role)}
+        canEditCleared={can(session, "visit.edit_cleared")}
         query={query}
         total={total}
         totalPages={totalPages}

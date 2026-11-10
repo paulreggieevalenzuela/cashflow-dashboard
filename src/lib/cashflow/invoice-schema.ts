@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { transferDentistError } from "@/lib/cashflow/commission-split";
 import { MAX_HMO_REFERENCE_LENGTH } from "@/lib/cashflow/hmo";
 import { computeListPrice, isStatutoryDiscount, VAT_TYPES } from "@/lib/cashflow/pricing";
 import { teethError } from "@/lib/cashflow/teeth";
@@ -122,6 +123,10 @@ export const InvoiceInputSchema = z.object({
   patientName: z.string().trim().min(1, "Patient name is required."),
   // One dentist per transaction; every procedure line is saved under them.
   dentist: z.string().optional().default(""),
+  // Optional: a second dentist the patient was transferred to on this visit.
+  // The commission (at the main dentist's rate) is then split 50/50 between
+  // the two for every procedure of the visit.
+  transferDentist: z.string().optional().default(""),
   transactionType: z.string().min(1, "Select a transaction type."),
   // "" = work it out automatically (new vs returning from past visits).
   visitType: z.enum(["", "NEW", "RETURNING"]).default(""),
@@ -151,6 +156,17 @@ export const InvoiceInputSchema = z.object({
   payment: InvoicePaymentInputSchema.optional(),
 })
 .superRefine((input, ctx) => {
+  const transferProblem = transferDentistError(
+    input.dentist ?? "",
+    input.transferDentist ?? "",
+  );
+  if (transferProblem) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["transferDentist"],
+      message: transferProblem,
+    });
+  }
   const needsId = input.lines.some(
     (line) => line.discountValue > 0 && isStatutoryDiscount(line.discountReason),
   );

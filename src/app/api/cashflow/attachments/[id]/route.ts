@@ -1,4 +1,6 @@
 import { auth } from "@/lib/auth/access";
+import { can } from "@/lib/auth/guards";
+import { ARCHIVE_NOT_READY } from "@/lib/db/deleted-items";
 import { deleteAttachment, getAttachmentFile } from "@/lib/db/attachments";
 
 export const runtime = "nodejs";
@@ -34,7 +36,7 @@ export async function GET(
   });
 }
 
-/** Removes a file (admins only). */
+/** Removes a file (needs the "remove attached files" privilege). The file is kept in Deleted items. */
 export async function DELETE(
   _request: Request,
   { params }: { params: Promise<{ id: string }> },
@@ -46,14 +48,25 @@ export async function DELETE(
       { status: 401 },
     );
   }
-  if (session.user.role !== "admin") {
+  if (!can(session, "attachment.delete")) {
     return Response.json(
-      { message: "Only admins can remove a file." },
+      { message: "You don't have permission to remove files." },
       { status: 403 },
     );
   }
 
   const { id } = await params;
-  await deleteAttachment(id);
+  try {
+    await deleteAttachment(id, {
+      userId: session.user.id,
+      name: session.user.name ?? session.user.email ?? "",
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Could not remove the file.";
+    return Response.json(
+      { message: message === ARCHIVE_NOT_READY ? message : "Could not remove the file." },
+      { status: 500 },
+    );
+  }
   return Response.json({ ok: true });
 }

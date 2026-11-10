@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useRef, useState, type ChangeEvent } from "react";
+import { useCan } from "@/components/cashflow/capabilities-context";
 import {
   prepareUpload,
   uploadAttachment,
@@ -26,7 +27,6 @@ export function AttachmentsPanel({
   kind,
   paymentId,
   items,
-  canDelete = false,
   buttonLabel,
   emptyText,
 }: {
@@ -37,10 +37,11 @@ export function AttachmentsPanel({
   kind: AttachmentKind;
   paymentId?: string;
   items: AttachmentInfo[];
-  canDelete?: boolean;
   buttonLabel: string;
   emptyText?: string;
 }) {
+  const canDelete = useCan("attachment.delete");
+  const canUpload = useCan("attachment.upload");
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
@@ -149,22 +150,26 @@ export function AttachmentsPanel({
         </p>
       )}
 
-      <input
-        ref={inputRef}
-        type="file"
-        multiple
-        accept={ATTACHMENT_ACCEPT}
-        onChange={handleChoose}
-        className="hidden"
-      />
-      <button
-        type="button"
-        onClick={() => inputRef.current?.click()}
-        disabled={busy}
-        className="rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 shadow-sm transition-colors hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
-      >
-        {busy ? "Uploading..." : buttonLabel}
-      </button>
+      {canUpload && (
+        <>
+          <input
+            ref={inputRef}
+            type="file"
+            multiple
+            accept={ATTACHMENT_ACCEPT}
+            onChange={handleChoose}
+            className="hidden"
+          />
+          <button
+            type="button"
+            onClick={() => inputRef.current?.click()}
+            disabled={busy}
+            className="rounded-lg border border-zinc-300 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 shadow-sm transition-colors hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800"
+          >
+            {busy ? "Uploading..." : buttonLabel}
+          </button>
+        </>
+      )}
     </div>
   );
 }

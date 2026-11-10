@@ -2,16 +2,27 @@
 
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth/access";
+import { can, permissionLabel } from "@/lib/auth/guards";
 import { hashPassword } from "@/lib/auth/password";
+import {
+  ALL_PERMISSIONS,
+  assignableRolesFor,
+  canManageUser,
+  effectivePermissions,
+  worksInEveryClinic,
+  type Permission,
+} from "@/lib/auth/permissions";
 import { canActOnRequestFor, canResetPassword } from "@/lib/auth/reset-rules";
 import { generateTempPassword, tempPasswordExpiry } from "@/lib/auth/temp-password";
 import { logAudit } from "@/lib/db/audit";
+import { listBranches } from "@/lib/db/branches";
 import { recordLoginAttempt } from "@/lib/db/login-attempts";
 import {
   closeRequestsForUser,
   dismissResetRequest,
   getResetRequest,
 } from "@/lib/db/password-requests";
+import { getOverrides, saveUserAccess, setUserBranches } from "@/lib/db/user-access";
 import {
   createUser,
   deleteUser,
@@ -19,13 +30,12 @@ import {
   getUserById,
   passwordSchemaReady,
   setUserPassword,
-  updateUserBranch,
-  updateUserRole,
+  updateUserProfile,
 } from "@/lib/db/users";
 import {
   CreateUserInputSchema,
-  USER_ROLES,
-  type AssignableRole,
+  SaveAccessInputSchema,
+  UpdateProfileInputSchema,
   type UserRole,
 } from "@/lib/cashflow/user-schema";
 
@@ -45,42 +55,74 @@ export type TempPasswordIssued = {
 const NEEDS_SQL =
   "Password management isn't set up in the database yet. Run scripts/sql/2026-11-password-management.sql in Neon first.";
 
-async function requireAdminSession() {
+type Session = NonNullable<Awaited<ReturnType<typeof auth>>>;
+
+/** The signed-in person, when they may manage users. */
+async function requireUserManager(): Promise<Session | null> {
   const session = await auth();
-  if (session?.user.role !== "admin") {
+  if (!session?.user || !can(session, "user.manage")) {
     return null;
   }
   return session;
 }
 
-/** The stored role of the signed-in admin (the superuser counts as "admin" in the session). */
-function actorRole(session: NonNullable<Awaited<ReturnType<typeof requireAdminSession>>>): UserRole {
-  return session.user.isSuperuser ? "superuser" : "admin";
+/** The stored role of the signed-in person (owner / superuser count as "admin" in the session). */
+function actorRole(session: Session): UserRole {
+  if (session.user.isSuperuser) return "superuser";
+  if (session.user.isOwner) return "owner";
+  return "admin";
 }
 
-function actorOf(session: NonNullable<Awaited<ReturnType<typeof requireAdminSession>>>) {
+function actorOf(session: Session) {
   return {
     userId: session.user.id,
     name: session.user.name ?? session.user.email ?? "Admin",
   };
 }
 
+const DENIED = "You don't have permission to manage users.";
+
+function fieldErrorsOf(error: { issues: Array<{ path: PropertyKey[]; message: string }> }) {
+  const fieldErrors: Record<string, string> = {};
+  for (const issue of error.issues) {
+    const key = issue.path[0];
+    if (typeof key === "string" && !fieldErrors[key]) {
+      fieldErrors[key] = issue.message;
+    }
+  }
+  return fieldErrors;
+}
+
+/** Keeps only clinics that exist (a stale tick must not break the save). */
+async function knownBranchIds(ids: readonly string[]): Promise<string[]> {
+  const branches = await listBranches();
+  const known = new Set(branches.map((branch) => branch.id));
+  return [...new Set(ids)].filter((id) => known.has(id));
+}
+
 export async function createUserAction(input: unknown): Promise<ActionResult<TempPasswordIssued>> {
-  const session = await requireAdminSession();
+  const session = await requireUserManager();
   if (!session) {
-    return { ok: false, message: "Only admins can create users." };
+    return { ok: false, message: DENIED };
   }
 
   const parsed = CreateUserInputSchema.safeParse(input);
   if (!parsed.success) {
-    const fieldErrors: Record<string, string> = {};
-    for (const issue of parsed.error.issues) {
-      const key = issue.path[0];
-      if (typeof key === "string" && !fieldErrors[key]) {
-        fieldErrors[key] = issue.message;
-      }
-    }
-    return { ok: false, message: "Please fix the highlighted fields.", fieldErrors };
+    return {
+      ok: false,
+      message: "Please fix the highlighted fields.",
+      fieldErrors: fieldErrorsOf(parsed.error),
+    };
+  }
+
+  if (!assignableRolesFor(actorRole(session)).includes(parsed.data.role)) {
+    return {
+      ok: false,
+      message:
+        parsed.data.role === "owner"
+          ? "Only the superuser can create an owner."
+          : "You can't give that role.",
+    };
   }
 
   if (!(await passwordSchemaReady())) {
@@ -96,6 +138,10 @@ export async function createUserAction(input: unknown): Promise<ActionResult<Tem
     };
   }
 
+  const clinics = worksInEveryClinic(parsed.data.role)
+    ? []
+    : await knownBranchIds(parsed.data.branchIds);
+
   // The system makes the password; the admin never chooses someone's real one.
   const tempPassword = generateTempPassword();
   const expiresAt = tempPasswordExpiry();
@@ -104,10 +150,13 @@ export async function createUserAction(input: unknown): Promise<ActionResult<Tem
     email: parsed.data.email,
     passwordHash: await hashPassword(tempPassword),
     role: parsed.data.role,
-    branchId: parsed.data.branchId || null,
+    branchId: clinics[0] ?? null,
     mustChangePassword: true,
     tempPasswordExpiresAt: expiresAt,
   });
+  if (clinics.length > 0) {
+    await setUserBranches(created.id, clinics);
+  }
 
   await logAudit({
     action: "user.created",
@@ -137,9 +186,9 @@ export async function createUserAction(input: unknown): Promise<ActionResult<Tem
 export async function resetUserPasswordAction(
   userId: string,
 ): Promise<ActionResult<TempPasswordIssued>> {
-  const session = await requireAdminSession();
+  const session = await requireUserManager();
   if (!session) {
-    return { ok: false, message: "Only admins can reset passwords." };
+    return { ok: false, message: DENIED };
   }
   if (!(await passwordSchemaReady())) {
     return { ok: false, message: NEEDS_SQL };
@@ -199,9 +248,9 @@ export async function resetUserPasswordAction(
 }
 
 export async function dismissResetRequestAction(requestId: string): Promise<ActionResult<null>> {
-  const session = await requireAdminSession();
+  const session = await requireUserManager();
   if (!session) {
-    return { ok: false, message: "Only admins can handle reset requests." };
+    return { ok: false, message: DENIED };
   }
   const request = await getResetRequest(requestId);
   if (!request || request.status !== "open") {
@@ -223,66 +272,172 @@ export async function dismissResetRequestAction(requestId: string): Promise<Acti
   return { ok: true, data: null };
 }
 
-export async function updateUserRoleAction(
+/** "Personal Information" tab: name and e-mail. */
+export async function updateUserProfileAction(
   userId: string,
-  role: AssignableRole,
+  input: unknown,
 ): Promise<ActionResult<null>> {
-  const session = await requireAdminSession();
+  const session = await requireUserManager();
   if (!session) {
-    return { ok: false, message: "Only admins can change roles." };
+    return { ok: false, message: DENIED };
+  }
+  const parsed = UpdateProfileInputSchema.safeParse(input);
+  if (!parsed.success) {
+    return {
+      ok: false,
+      message: "Please fix the highlighted fields.",
+      fieldErrors: fieldErrorsOf(parsed.error),
+    };
+  }
+  const target = await getUserById(userId);
+  if (!target) {
+    return { ok: false, message: "That user no longer exists." };
+  }
+  const decision = canManageUser(
+    { id: session.user.id, role: actorRole(session) },
+    { id: target.id, role: target.role },
+  );
+  if (!decision.ok) {
+    return { ok: false, message: decision.reason };
   }
 
-  if (!USER_ROLES.includes(role)) {
-    return { ok: false, message: "That role can't be given from here." };
+  if (parsed.data.email !== target.email) {
+    const clash = await getUserByEmail(parsed.data.email);
+    if (clash && clash.id !== target.id) {
+      return {
+        ok: false,
+        message: "A user with that email already exists.",
+        fieldErrors: { email: "Already in use." },
+      };
+    }
+  }
+
+  await updateUserProfile(target.id, parsed.data);
+  await logAudit({
+    action: "user.access_changed",
+    entityType: "user",
+    entityId: target.id,
+    summary: `${session.user.name ?? "An admin"} updated the details of ${parsed.data.name}${parsed.data.email !== target.email ? ` (e-mail ${target.email} → ${parsed.data.email})` : ""}`,
+    actor: actorOf(session),
+  });
+  revalidatePath("/cashflow/users");
+  revalidatePath(`/cashflow/users/${target.id}`);
+  return { ok: true, data: null };
+}
+
+/**
+ * "Access & Permissions" tab: the role, the clinics and the privileges of one
+ * person, saved together. Rules (all enforced here, whatever the screen sent):
+ * - you can't change your own access, nor anyone at your level or above;
+ * - you can only give a role you are allowed to give;
+ * - you can't switch on a privilege you don't hold yourself.
+ */
+export async function saveUserAccessAction(
+  userId: string,
+  input: unknown,
+): Promise<ActionResult<null>> {
+  const session = await requireUserManager();
+  if (!session) {
+    return { ok: false, message: DENIED };
+  }
+  const parsed = SaveAccessInputSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, message: "That access setting isn't valid." };
+  }
+  const target = await getUserById(userId);
+  if (!target) {
+    return { ok: false, message: "That user no longer exists." };
+  }
+  const me = { id: session.user.id, role: actorRole(session) };
+  const decision = canManageUser(me, { id: target.id, role: target.role });
+  if (!decision.ok) {
+    return { ok: false, message: decision.reason };
+  }
+
+  const role = parsed.data.role;
+  if (role !== target.role && !assignableRolesFor(me.role).includes(role)) {
+    return {
+      ok: false,
+      message:
+        role === "owner" ? "Only the superuser can make someone an owner." : "You can't give that role.",
+    };
+  }
+
+  const known = new Set<string>(ALL_PERMISSIONS);
+  const chosen = [...new Set(parsed.data.permissions.filter((key) => known.has(key)))] as Permission[];
+  const before = effectivePermissions(target.role, await getOverrides(target.id));
+  const mine = new Set<string>(session.user.permissions ?? []);
+  const notHeld = chosen.filter(
+    (key) => !before.includes(key) && me.role !== "superuser" && !mine.has(key),
+  );
+  if (notHeld.length > 0) {
+    return {
+      ok: false,
+      message: `You can only give privileges you have yourself. Not allowed: ${notHeld
+        .map((key) => permissionLabel(key))
+        .join("; ")}.`,
+    };
+  }
+
+  const clinics = worksInEveryClinic(role) ? [] : await knownBranchIds(parsed.data.branchIds);
+
+  await saveUserAccess({
+    userId: target.id,
+    role,
+    branchIds: clinics,
+    permissions: chosen,
+  });
+
+  const added = chosen.filter((key) => !before.includes(key));
+  const removed = before.filter((key) => !chosen.includes(key));
+  const parts = [
+    role !== target.role ? `role ${target.role} → ${role}` : null,
+    added.length ? `added: ${added.map((key) => permissionLabel(key)).join("; ")}` : null,
+    removed.length ? `removed: ${removed.map((key) => permissionLabel(key)).join("; ")}` : null,
+    worksInEveryClinic(role) ? "all clinics" : `${clinics.length} ${clinics.length === 1 ? "clinic" : "clinics"}`,
+  ].filter(Boolean);
+  await logAudit({
+    action: "user.access_changed",
+    entityType: "user",
+    entityId: target.id,
+    summary: `${session.user.name ?? "An admin"} changed the access of ${target.name}: ${parts.join(" · ")}`,
+    actor: actorOf(session),
+  });
+
+  revalidatePath("/cashflow", "layout");
+  revalidatePath(`/cashflow/users/${target.id}`);
+  return { ok: true, data: null };
+}
+
+export async function deleteUserAction(userId: string): Promise<ActionResult<null>> {
+  const session = await requireUserManager();
+  if (!session) {
+    return { ok: false, message: DENIED };
   }
 
   const target = await getUserById(userId);
   if (!target) {
     return { ok: false, message: "That user no longer exists." };
   }
-  if (target.role === "superuser") {
-    return { ok: false, message: "The superuser's role can't be changed here." };
-  }
-
-  if (session.user.id === userId && role !== "admin") {
-    return { ok: false, message: "You can't remove your own admin access." };
-  }
-
-  await updateUserRole(userId, role);
-  revalidatePath("/cashflow/users");
-  return { ok: true, data: null };
-}
-
-export async function updateUserBranchAction(
-  userId: string,
-  branchId: string,
-): Promise<ActionResult<null>> {
-  const session = await requireAdminSession();
-  if (!session) {
-    return { ok: false, message: "Only admins can change a user's branch." };
-  }
-
-  await updateUserBranch(userId, branchId || null);
-  revalidatePath("/cashflow/users");
-  return { ok: true, data: null };
-}
-
-export async function deleteUserAction(userId: string): Promise<ActionResult<null>> {
-  const session = await requireAdminSession();
-  if (!session) {
-    return { ok: false, message: "Only admins can remove users." };
-  }
-
   if (session.user.id === userId) {
     return { ok: false, message: "You can't remove your own account." };
   }
-
-  const target = await getUserById(userId);
-  if (target?.role === "superuser") {
-    return { ok: false, message: "The superuser account can't be removed." };
+  const decision = canManageUser(
+    { id: session.user.id, role: actorRole(session) },
+    { id: target.id, role: target.role },
+  );
+  if (!decision.ok) {
+    return { ok: false, message: decision.reason };
   }
 
   await deleteUser(userId);
+  await logAudit({
+    action: "user.access_changed",
+    entityType: "user",
+    entityId: target.id,
+    summary: `${session.user.name ?? "An admin"} removed the account of ${target.name} (${target.email})`,
+    actor: actorOf(session),
+  });
   revalidatePath("/cashflow/users");
   return { ok: true, data: null };
 }

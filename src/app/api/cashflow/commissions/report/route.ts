@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { auth } from "@/lib/auth/access";
+import { can } from "@/lib/auth/guards";
 import {
   buildCommissionCsvRows,
   buildCommissionDetailSheet,
@@ -24,7 +25,7 @@ export async function GET(request: NextRequest) {
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (session.user.role !== "admin") {
+  if (!can(session, "commission.report")) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
   const params = request.nextUrl.searchParams;

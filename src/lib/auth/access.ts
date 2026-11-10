@@ -2,6 +2,7 @@ import { cache } from "react";
 import type { Session } from "next-auth";
 import { rawAuth } from "@/auth";
 import { getAuthState } from "@/lib/db/users";
+import { getAccessProfile } from "@/lib/db/user-access";
 import { sessionRoleOf } from "@/lib/cashflow/user-schema";
 
 /**
@@ -39,6 +40,13 @@ export const getAccess = cache(async (): Promise<Access> => {
   }
 
   const tokenSaysMustChange = Boolean(session.user.mustChangePassword);
+  // What this person may do, and in which clinics, from the database right now
+  // (a change made on the Users screen applies on their next click).
+  const profile = await getAccessProfile({
+    userId: state.id,
+    role: state.role,
+    branchId: state.branchId,
+  });
   const fresh: Session = {
     ...session,
     user: {
@@ -47,6 +55,10 @@ export const getAccess = cache(async (): Promise<Access> => {
       email: state.email,
       role: sessionRoleOf(state.role),
       isSuperuser: state.role === "superuser",
+      isOwner: state.role === "owner",
+      permissions: profile.permissions,
+      branchIds: profile.branchIds,
+      branchId: state.branchId,
       mustChangePassword: state.mustChangePassword,
     },
   };

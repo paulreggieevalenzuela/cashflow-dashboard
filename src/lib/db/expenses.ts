@@ -1,3 +1,4 @@
+import { softDeleteExpense } from "@/lib/db/deleted-items";
 import { and, desc, eq, or, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import { expenses, type ExpenseRow, type NewExpenseRow } from "@/lib/db/schema";
@@ -51,8 +52,12 @@ export async function updateExpense(id: string, expense: Expense): Promise<Expen
   return toAppExpense(row);
 }
 
-export async function deleteExpense(id: string): Promise<void> {
-  await db.delete(expenses).where(eq(expenses.id, id));
+export async function deleteExpense(
+  id: string,
+  actor: { userId: string | null; name: string },
+): Promise<void> {
+  // Kept in Deleted items (with its receipts).
+  await softDeleteExpense(id, actor);
 }
 
 /**
