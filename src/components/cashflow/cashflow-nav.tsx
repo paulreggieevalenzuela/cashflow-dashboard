@@ -38,6 +38,7 @@ export function CashflowNav({
   role,
   permissions = [],
   isSuperuser = false,
+  deletedCount = null,
   displayName,
   email,
   openVisits = null,
@@ -48,6 +49,8 @@ export function CashflowNav({
   permissions?: readonly string[];
   /** Shows "Deleted items" in the profile menu (superuser only, never in the nav). */
   isSuperuser?: boolean;
+  /** Items waiting in Deleted items (superuser only; null = unknown / not set up). */
+  deletedCount?: number | null;
   displayName?: string;
   email?: string;
   /** Visits not Cleared yet (null = unknown). Shown next to "Queue". */
@@ -106,6 +109,7 @@ export function CashflowNav({
             displayName={displayName}
             email={email}
             isSuperuser={isSuperuser}
+            deletedCount={deletedCount}
           />
         ) : (
           <SignOutButton />
@@ -196,9 +200,10 @@ export function CashflowNav({
                 <Link
                   href="/cashflow/trash"
                   onClick={() => setIsOpen(false)}
-                  className="rounded-md px-3 py-2.5 text-sm font-medium text-zinc-600 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+                  className="flex items-center gap-2 rounded-md px-3 py-2.5 text-sm font-medium text-zinc-600 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
                 >
                   Deleted items
+                  <CountBadge count={deletedCount} unit="deleted item" />
                 </Link>
               )}
               <SignOutButton variant="menu" />

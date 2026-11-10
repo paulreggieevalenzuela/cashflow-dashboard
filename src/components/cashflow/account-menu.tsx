@@ -59,12 +59,15 @@ export function AccountMenu({
   displayName,
   email,
   isSuperuser = false,
+  deletedCount = null,
 }: {
   role: UserRole;
   displayName: string;
   email?: string;
   /** Adds "Deleted items" (the recycle bin), which only the superuser has. */
   isSuperuser?: boolean;
+  /** Items waiting in Deleted items; shown on the avatar and next to the link. */
+  deletedCount?: number | null;
 }) {
   const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
@@ -108,7 +111,17 @@ export function AccountMenu({
         aria-haspopup="menu"
         className="flex items-center gap-2.5 rounded-lg py-1 pl-1 pr-2 text-left transition-colors hover:bg-zinc-100 dark:hover:bg-zinc-900"
       >
-        <AccountAvatar displayName={displayName} />
+        <span className="relative">
+          <AccountAvatar displayName={displayName} />
+          {isSuperuser && deletedCount !== null && deletedCount > 0 && (
+            <span
+              className="absolute -right-1.5 -top-1.5 inline-flex min-w-4 items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-semibold leading-4 text-white ring-2 ring-white tabular-nums dark:ring-zinc-950"
+              aria-label={`${deletedCount} deleted item${deletedCount === 1 ? "" : "s"} waiting`}
+            >
+              {deletedCount > 99 ? "99+" : deletedCount}
+            </span>
+          )}
+        </span>
         <span className="hidden leading-tight lg:block">
           <span className="block max-w-[140px] truncate text-sm font-medium text-zinc-900 dark:text-zinc-50">
             {displayName}
@@ -189,6 +202,18 @@ export function AccountMenu({
                 />
               </svg>
               Deleted items
+              {deletedCount !== null && (
+                <span
+                  className={`ml-auto inline-flex min-w-5 items-center justify-center rounded-full px-1.5 text-xs font-semibold leading-5 tabular-nums ${
+                    deletedCount > 0
+                      ? "bg-red-600 text-white"
+                      : "bg-zinc-200 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400"
+                  }`}
+                  aria-label={`${deletedCount} deleted item${deletedCount === 1 ? "" : "s"}`}
+                >
+                  {deletedCount}
+                </span>
+              )}
             </Link>
           )}
           <button

@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
 import {
   getTableConfig,
   type AnyPgColumn,
@@ -16,6 +16,7 @@ import {
   transactions,
 } from "@/lib/db/schema";
 import { logAudit } from "@/lib/db/audit";
+import { DELETED_ITEMS_RETENTION_DAYS } from "@/lib/cashflow/deleted-retention";
 
 /**
  * Deleted items. Nothing an owner or admin deletes is really gone: the rows
@@ -140,6 +141,10 @@ async function archive(input: {
     }
     throw error;
   }
+  // The archive only grows when something is deleted, so this is also the
+  // moment to clear what has been kept long enough (no scheduled job needed).
+  // It never blocks or fails the delete itself.
+  await purgeExpiredDeletedItems().catch(() => undefined);
 }
 
 // ---------------------------------------------------------------------------
@@ -622,4 +627,76 @@ export async function purgeDeletedItem(archiveId: string): Promise<boolean> {
     .where(eq(deletedItems.id, archiveId))
     .returning({ id: deletedItems.id });
   return removed.length > 0;
+}
+
+// ---------------------------------------------------------------------------
+// Retention: kept for DELETED_ITEMS_RETENTION_DAYS, then removed for good
+// ---------------------------------------------------------------------------
+
+let lastExpiredPurge = 0;
+const PURGE_EVERY_MS = 60 * 60 * 1000;
+
+/**
+ * Removes archived items that have been kept for the retention period (30
+ * days). The archive holds JSON copies, including photos, so this is what
+ * keeps the database from growing for ever. Items waiting to be restored and
+ * items already restored (empty copies, kept only as history) both expire
+ * 30 days after they were deleted / restored. The audit trail keeps the
+ * record of what was deleted and restored.
+ *
+ * Runs by itself when something is deleted (at most once an hour per server),
+ * when the superuser opens Deleted items, and from the optional cron route.
+ * Pass `force` to skip the once-an-hour limit. Never throws.
+ */
+export async function purgeExpiredDeletedItems(
+  options: { force?: boolean; now?: Date } = {},
+): Promise<number> {
+  const now = options.now ?? new Date();
+  if (!options.force && now.getTime() - lastExpiredPurge < PURGE_EVERY_MS) return 0;
+  lastExpiredPurge = now.getTime();
+
+  const cutoff = new Date(now.getTime() - DELETED_ITEMS_RETENTION_DAYS * 24 * 60 * 60 * 1000);
+  try {
+    const removed = await db
+      .delete(deletedItems)
+      .where(
+        or(
+          and(isNull(deletedItems.restoredAt), lt(deletedItems.deletedAt, cutoff)),
+          and(isNotNull(deletedItems.restoredAt), lt(deletedItems.restoredAt, cutoff)),
+        ),
+      )
+      .returning({ id: deletedItems.id, restoredAt: deletedItems.restoredAt });
+    if (removed.length > 0) {
+      const gone = removed.filter((row) => row.restoredAt === null).length;
+      await logAudit({
+        action: "deleted_items.purged",
+        entityType: "user",
+        summary: `Clean-up: ${gone} deleted item${gone === 1 ? "" : "s"} kept ${DELETED_ITEMS_RETENTION_DAYS} days were removed for good${
+          removed.length > gone ? ` (and ${removed.length - gone} restored record${removed.length - gone === 1 ? "" : "s"})` : ""
+        }.`,
+        actor: { userId: null, name: "System (30-day clean-up)" },
+      });
+    }
+    return removed.length;
+  } catch (error) {
+    if (!deletedItemsSchemaMissing(error)) console.error("Deleted items clean-up failed", error);
+    return 0;
+  }
+}
+
+/** Items that will be removed within `days` days (for the page's heads-up). */
+export async function countExpiringSoon(days: number): Promise<number> {
+  const cutoff = new Date(
+    Date.now() - (DELETED_ITEMS_RETENTION_DAYS - days) * 24 * 60 * 60 * 1000,
+  );
+  try {
+    const [row] = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(deletedItems)
+      .where(and(isNull(deletedItems.restoredAt), lt(deletedItems.deletedAt, cutoff)));
+    return row?.count ?? 0;
+  } catch (error) {
+    if (deletedItemsSchemaMissing(error)) return 0;
+    throw error;
+  }
 }

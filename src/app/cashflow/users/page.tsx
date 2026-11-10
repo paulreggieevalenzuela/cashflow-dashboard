@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth/access";
 import { can } from "@/lib/auth/guards";
@@ -61,7 +62,15 @@ export default async function UsersPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-50">Users</h2>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-50">Users</h2>
+          <Link
+            href="/cashflow/users/review"
+            className="rounded-lg border border-zinc-300 px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+          >
+            Access review: who has extra privileges
+          </Link>
+        </div>
         <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
           Manage who can sign in and what they can do. Owners and admins work in
           every clinic and have the same controls; dentists and staff work in the

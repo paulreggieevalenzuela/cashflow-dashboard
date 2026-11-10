@@ -21,6 +21,10 @@ export type DeletedItemView = {
   deletedAt: string;
   restoredAt: string | null;
   restoredByName: string;
+  /** Days until it is removed for good (null once restored). */
+  daysLeft: number | null;
+  /** True when few days are left, so it is shown as a warning. */
+  expiresSoon: boolean;
 };
 
 const money = new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" });
@@ -157,6 +161,19 @@ export function DeletedItemsList({ items }: { items: DeletedItemView[] }) {
                       {restored && (
                         <p className="mt-1 text-emerald-700 dark:text-emerald-400">
                           Restored {item.restoredAt} by {item.restoredByName}
+                        </p>
+                      )}
+                      {!restored && item.daysLeft !== null && (
+                        <p
+                          className={`mt-1 font-medium ${
+                            item.expiresSoon
+                              ? "text-red-600 dark:text-red-400"
+                              : "text-zinc-500 dark:text-zinc-400"
+                          }`}
+                        >
+                          {item.daysLeft === 0
+                            ? "Removed for good in the next clean-up"
+                            : `Removed for good in ${item.daysLeft} day${item.daysLeft === 1 ? "" : "s"}`}
                         </p>
                       )}
                     </td>

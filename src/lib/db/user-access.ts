@@ -184,3 +184,26 @@ export async function listCustomizedUserIds(userIds: string[]): Promise<Set<stri
   }
 }
 
+
+/** Every person's overrides at once (the access review). */
+export async function listAllOverrides(): Promise<Map<string, PermissionOverride[]>> {
+  const map = new Map<string, PermissionOverride[]>();
+  try {
+    const rows = await db
+      .select({
+        userId: userPermissionOverrides.userId,
+        permission: userPermissionOverrides.permission,
+        granted: userPermissionOverrides.granted,
+      })
+      .from(userPermissionOverrides);
+    for (const row of rows) {
+      map.set(row.userId, [
+        ...(map.get(row.userId) ?? []),
+        { permission: row.permission, granted: row.granted },
+      ]);
+    }
+  } catch (error) {
+    if (!accessSchemaMissing(error)) throw error;
+  }
+  return map;
+}

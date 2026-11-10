@@ -40,7 +40,7 @@ export const PERMISSION_GROUPS = [
       {
         key: "visit.delete",
         label: "Delete visits and transaction lines",
-        hint: "Deleted items are kept: only the superuser can restore them.",
+        hint: "Deleted items are kept for 30 days: only the superuser can restore them.",
       },
       { key: "import.csv", label: "Import transactions from a CSV file" },
     ],
@@ -101,6 +101,28 @@ export type Permission =
 export const ALL_PERMISSIONS: readonly Permission[] = PERMISSION_GROUPS.flatMap(
   (group) => group.permissions.map((permission) => permission.key),
 );
+
+/**
+ * Privileges that change money, remove records, reveal identities or hand out
+ * access. When one of these is an "extra" on someone (beyond their role), the
+ * access review highlights it so it gets a second look.
+ */
+export const SENSITIVE_PERMISSIONS: readonly Permission[] = [
+  "user.manage",
+  "branch.manage",
+  "visit.delete",
+  "payment.delete",
+  "expense.delete",
+  "attachment.delete",
+  "visit.status_override",
+  "visit.edit_cleared",
+  "import.csv",
+  "patient.merge",
+  "patient.ids_reveal",
+  "hmo.void",
+  "commission.manage",
+  "audit.view",
+];
 
 const EVERYONE = ["owner", "admin", "dentist", "staff"] as const;
 const OWNER_ADMIN = ["owner", "admin"] as const;

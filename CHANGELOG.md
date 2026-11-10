@@ -4,6 +4,30 @@ All notable changes to the ADT Dental Clinic Cashflow app. The version is in
 `package.json` and `src/lib/cashflow/version.ts` (shown at the foot of the Help
 page). Newest first.
 
+## 0.4.1 — 2026-11-10
+
+Deleted items housekeeping and an access review. No database changes.
+
+### Added
+
+- **Count badge on Deleted items.** The superuser sees the number of items
+  waiting on the avatar and next to "Deleted items" in the profile menu (desktop
+  and mobile), so a deletion is noticed without opening the page.
+- **30-day retention.** Deleted items are removed for good 30 days after they
+  were deleted (restored records, which are empty, 30 days after restoring), so
+  deleted photos do not fill the database. The clean-up runs by itself when
+  something is deleted and when the superuser opens Deleted items (at most once an
+  hour), is written to the audit trail ("Deleted items cleaned up"), and has an
+  optional daily route, `/api/cron/purge-deleted`, which stays switched off until
+  a `CRON_SECRET` is set. The page shows the days left for each item and a red
+  warning when any will go within 7 days.
+- **Access review** (Users → "Access review: who has extra privileges", for
+  owners, admins and the superuser; each sees only the people they manage). Lists
+  every person's extra and removed privileges beyond their role, their clinics and
+  when/by whom their access was last changed, with sensitive extras in red and
+  people with exceptions first. Can be printed or saved as PDF.
+- Help: "What are extra privileges?".
+
 ## 0.4.0 — 2026-11-10
 
 Roles, per-user access and deleted items.

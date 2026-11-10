@@ -10,6 +10,7 @@ import { can } from "@/lib/auth/guards";
 import type { UserRole } from "@/lib/cashflow/user-schema";
 import { BranchPolicyProvider } from "@/components/cashflow/branch-policy-context";
 import { CapabilitiesProvider } from "@/components/cashflow/capabilities-context";
+import { countDeletedItems } from "@/lib/db/deleted-items";
 import { countOpenVisits } from "@/lib/db/visit-status";
 import { countActionableResetRequests } from "@/lib/db/password-requests";
 import { RouteFocusManager } from "@/components/navigation/route-focus-manager";
@@ -41,7 +42,7 @@ export default async function CashflowLayout({ children }: { children: ReactNode
   const displayName = session?.user.name ?? session?.user.email ?? "";
   const email = session?.user.email ?? undefined;
   const branchPolicy = await getBranchPolicy(session);
-  const [openVisits, resetRequests] = await Promise.all([
+  const [openVisits, resetRequests, deletedCount] = await Promise.all([
     session
       ? countOpenVisits(branchPolicy.branchId)
       : Promise.resolve(null),
@@ -50,6 +51,8 @@ export default async function CashflowLayout({ children }: { children: ReactNode
           session?.user.isSuperuser ? "superuser" : session?.user.isOwner ? "owner" : "admin",
         )
       : Promise.resolve(0),
+    // Only the superuser sees Deleted items, so only they pay for the count.
+    session?.user.isSuperuser ? countDeletedItems() : Promise.resolve(null),
   ]);
 
   return (
@@ -71,6 +74,7 @@ export default async function CashflowLayout({ children }: { children: ReactNode
             role={role}
             permissions={session?.user.permissions ?? []}
             isSuperuser={Boolean(session?.user.isSuperuser)}
+            deletedCount={deletedCount}
             displayName={displayName || undefined}
             email={email}
             openVisits={openVisits}

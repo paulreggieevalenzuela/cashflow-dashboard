@@ -151,7 +151,11 @@ const GROUPS: Group[] = [
       },
       {
         q: "I deleted something by mistake.",
-        a: "Owners and admins cannot undo a delete, but nothing is lost: deleted visits, procedure lines, payments, expenses and attached files are kept in Deleted items, which only the superuser can open. Tell the superuser what was deleted and when, and they can restore it exactly as it was.",
+        a: "Owners and admins cannot undo a delete, but nothing is lost: deleted visits, procedure lines, payments, expenses and attached files are kept in Deleted items for 30 days, and only the superuser can open it. Tell the superuser what was deleted and when, and they can restore it exactly as it was. After 30 days it is removed for good.",
+      },
+      {
+        q: "What are extra privileges?",
+        a: "Each role has a standard set of privileges. An extra privilege is one a person has on top of their role, ticked for them under Manage; a removed privilege is one their role would give but was taken away. Users → Access review lists everyone who has exceptions, with sensitive ones in red, so they can be checked now and then.",
       },
     ],
   },

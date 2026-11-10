@@ -115,3 +115,28 @@ export async function listRecentAudit(input: {
     .limit(input.limit ?? 200);
   return rows.map(toEntry);
 }
+
+/** When (and by whom) each person's access was last changed, by user id. */
+export async function lastAccessChanges(): Promise<
+  Map<string, { at: Date; by: string }>
+> {
+  const rows = await db
+    .select({
+      entityId: auditLog.entityId,
+      createdAt: auditLog.createdAt,
+      userName: auditLog.userName,
+    })
+    .from(auditLog)
+    .where(
+      and(
+        eq(auditLog.action, "user.access_changed"),
+        like(auditLog.summary, "%changed the access of%"),
+      ),
+    )
+    .orderBy(desc(auditLog.createdAt));
+  const map = new Map<string, { at: Date; by: string }>();
+  for (const row of rows) {
+    if (!map.has(row.entityId)) map.set(row.entityId, { at: row.createdAt, by: row.userName });
+  }
+  return map;
+}

@@ -6,10 +6,17 @@ import { listBranches } from "@/lib/db/branches";
 import {
   DELETED_KINDS,
   DELETED_KIND_LABELS,
+  countExpiringSoon,
   deletedItemsReady,
   listDeletedItems,
+  purgeExpiredDeletedItems,
   type DeletedKind,
 } from "@/lib/db/deleted-items";
+import {
+  DELETED_ITEMS_RETENTION_DAYS,
+  DELETED_ITEMS_WARN_DAYS,
+  deletedItemDaysLeft,
+} from "@/lib/cashflow/deleted-retention";
 import { DeletedItemsList } from "@/components/cashflow/deleted-items-list";
 
 export const metadata: Metadata = { title: "Deleted items" };
@@ -40,6 +47,9 @@ export default async function DeletedItemsPage({
   const showRestored = raw.restored === "1";
 
   const ready = await deletedItemsReady();
+  // Clear what has been kept long enough before showing the list.
+  if (ready) await purgeExpiredDeletedItems();
+  const expiringSoon = ready ? await countExpiringSoon(DELETED_ITEMS_WARN_DAYS) : 0;
   const [items, branches] = await Promise.all([
     ready ? listDeletedItems({ kind, showRestored }) : Promise.resolve([]),
     listBranches(),
@@ -77,8 +87,10 @@ export default async function DeletedItemsPage({
           When an owner or admin deletes a visit, payment, expense or attached
           file, it comes here instead of disappearing. It no longer counts in any
           report. <strong>Restore</strong> puts it back exactly as it was;{" "}
-          <strong>Delete permanently</strong> removes it for good. Only you, as
-          the superuser, can see this page.
+          <strong>Delete permanently</strong> removes it for good. Items are kept
+          for {DELETED_ITEMS_RETENTION_DAYS} days and then removed automatically,
+          so deleted photos don&apos;t fill the database. Only you, as the
+          superuser, can see this page.
         </p>
       </div>
 
@@ -87,6 +99,17 @@ export default async function DeletedItemsPage({
           Deleted items aren&apos;t set up in the database yet. Run{" "}
           <code>scripts/sql/2026-11-roles-permissions-trash.sql</code> in Neon.
           Until then, deleting is switched off so nothing is lost.
+        </p>
+      )}
+
+      {expiringSoon > 0 && (
+        <p
+          role="status"
+          className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-300"
+        >
+          {expiringSoon} item{expiringSoon === 1 ? "" : "s"} will be removed for
+          good within {DELETED_ITEMS_WARN_DAYS} days. Restore anything you still
+          need before then.
         </p>
       )}
 
@@ -116,6 +139,10 @@ export default async function DeletedItemsPage({
           deletedAt: stamp.format(item.deletedAt),
           restoredAt: item.restoredAt ? stamp.format(item.restoredAt) : null,
           restoredByName: item.restoredByName,
+          daysLeft: item.restoredAt ? null : deletedItemDaysLeft(item.deletedAt),
+          expiresSoon:
+            !item.restoredAt &&
+            deletedItemDaysLeft(item.deletedAt) <= DELETED_ITEMS_WARN_DAYS,
         }))}
       />
     </div>

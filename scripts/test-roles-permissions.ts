@@ -338,6 +338,64 @@ async function main() {
     const toPurge = await lastArchive("expense");
     check("purge removes the entry for good", (await trash.purgeDeletedItem(toPurge.id)) === true && (await trash.purgeDeletedItem(toPurge.id)) === false);
     check("purged entry is gone", !(await trash.listDeletedItems({ showRestored: true })).some((i) => i.id === toPurge.id));
+
+    // ---- 30-day retention
+    const retention = await import("../src/lib/cashflow/deleted-retention");
+    const day = 24 * 60 * 60 * 1000;
+    const ago = (days: number) => new Date(Date.now() - days * day);
+    check("retention is 30 days", retention.DELETED_ITEMS_RETENTION_DAYS === 30);
+    check("a fresh delete has 30 days left", retention.deletedItemDaysLeft(new Date()) === 30);
+    check("a delete from 25 days ago has 5 days left", retention.deletedItemDaysLeft(ago(25)) === 5);
+    check("an old delete never shows negative days", retention.deletedItemDaysLeft(ago(80)) === 0);
+    const seed = async (label: string, deletedAt: Date, restoredAt: Date | null) => {
+      const [row] = await db
+        .insert(schema.deletedItems)
+        .values({ kind: "expense", entityId: randomUUID(), label, snapshot: restoredAt ? {} : { expenses: [] }, deletedAt, restoredAt, deletedByName: "Test Runner" })
+        .returning({ id: schema.deletedItems.id });
+      return row.id;
+    };
+    const oldId = await seed("zz-roles-old", ago(31), null);
+    const edgeId = await seed("zz-roles-edge", ago(29), null);
+    const freshId = await seed("zz-roles-fresh", ago(1), null);
+    const oldRestoredId = await seed("zz-roles-restored-old", ago(60), ago(31));
+    const newRestoredId = await seed("zz-roles-restored-new", ago(60), ago(5));
+    const exists = async (id: string) =>
+      (await db.select({ id: schema.deletedItems.id }).from(schema.deletedItems).where(eq(schema.deletedItems.id, id))).length === 1;
+    check("expiring-soon count includes the 29-day item", (await trash.countExpiringSoon(7)) >= 2);
+    const removedCount = await trash.purgeExpiredDeletedItems({ force: true });
+    check("clean-up removed the 31-day-old item and the old restored record", removedCount >= 2, removedCount);
+    check("31-day-old item is gone", !(await exists(oldId)));
+    check("29-day-old item is kept", await exists(edgeId));
+    check("1-day-old item is kept", await exists(freshId));
+    check("restored record older than 30 days is removed", !(await exists(oldRestoredId)));
+    check("recently restored record is kept", await exists(newRestoredId));
+    const cleanedAudit = await db.execute(sql`select 1 from audit_log where action = 'deleted_items.purged' and created_at > now() - interval '1 minute'`);
+    check("the clean-up is written to the audit trail", cleanedAudit.rows.length >= 1);
+    // Throttle: a second call without force does nothing, even with an old item.
+    const lateId = await seed("zz-roles-late", ago(40), null);
+    check("clean-up without force is limited to once an hour", (await trash.purgeExpiredDeletedItems()) === 0 && (await exists(lateId)));
+    // Deleting something triggers the clean-up path without failing the delete.
+    check("forced clean-up removes the late item", (await trash.purgeExpiredDeletedItems({ force: true })) >= 1 && !(await exists(lateId)));
+    check("count of waiting items ignores restored ones", (await trash.countDeletedItems())! >= 2);
+
+    // ---- access review data
+    const reviewUser = await usersDb.createUser({
+      name: "ZZ Roles Review", email: `${MARK}review@test.local`, role: "staff", branchId: A.id, passwordHash: "x",
+    });
+    await access.saveUserAccess({
+      userId: reviewUser.id, role: "staff", branchIds: [A.id],
+      permissions: [...perms.roleDefaults("staff"), "visit.delete", "hmo.void"].filter((p, i, all) => p !== "payment.add" && all.indexOf(p) === i),
+    });
+    const allOverrides = await access.listAllOverrides();
+    const mine = allOverrides.get(reviewUser.id) ?? [];
+    check("review lists extra privileges", mine.some((o) => o.permission === "visit.delete" && o.granted) && mine.some((o) => o.permission === "hmo.void" && o.granted), mine);
+    check("review lists removed privileges", mine.some((o) => o.permission === "payment.add" && !o.granted), mine);
+    check("sensitive list is part of the catalog", perms.SENSITIVE_PERMISSIONS.every((p) => perms.ALL_PERMISSIONS.includes(p)));
+    check("visit.delete and hmo.void count as sensitive", perms.SENSITIVE_PERMISSIONS.includes("visit.delete") && perms.SENSITIVE_PERMISSIONS.includes("hmo.void"));
+    const audit = await import("../src/lib/db/audit");
+    await audit.logAudit({ action: "user.access_changed", entityType: "user", entityId: reviewUser.id, summary: "Test Runner changed the access of ZZ Roles Review: added: x", actor });
+    const changed = await audit.lastAccessChanges();
+    check("last access change is found with who made it", changed.get(reviewUser.id)?.by === "Test Runner", changed.get(reviewUser.id));
   } finally {
     await cleanup();
   }
