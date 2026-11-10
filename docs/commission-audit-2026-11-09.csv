@@ -1,0 +1,532 @@
+Dentist,Tier,Sheet procedure,App procedure,Paid,Sheet says,App pays,Status
+Dawn Rufino Rey Teope,Tier 3,Consultation,Consultation,CASH,10%,₱1000.00 (10.00% of ₱10000.00),OK
+Dawn Rufino Rey Teope,Tier 3,OP,Oral Prophylaxis (MILD),HMO,10%,₱1000.00 (10.00% of ₱10000.00),OK
+Dawn Rufino Rey Teope,Tier 3,OP,Oral Prophylaxis (MODERATE),HMO,10%,₱1000.00 (10.00% of ₱10000.00),OK
+Dawn Rufino Rey Teope,Tier 3,OP,Oral Prophylaxis (SEVERE),HMO,10%,₱1000.00 (10.00% of ₱10000.00),OK
+Dawn Rufino Rey Teope,Tier 3,OP,Oral Prophylaxis (PEDIA),HMO,10%,₱1000.00 (10.00% of ₱10000.00),OK
+Dawn Rufino Rey Teope,Tier 3,OP,Oral Prophylaxis (MILD),CASH,10%,₱1000.00 (10.00% of ₱10000.00),OK
+Dawn Rufino Rey Teope,Tier 3,OP,Oral Prophylaxis (MODERATE),CASH,10%,₱1000.00 (10.00% of ₱10000.00),OK
+Dawn Rufino Rey Teope,Tier 3,OP,Oral Prophylaxis (SEVERE),CASH,10%,₱1000.00 (10.00% of ₱10000.00),OK
+Dawn Rufino Rey Teope,Tier 3,OP,Oral Prophylaxis (PEDIA),CASH,10%,₱1000.00 (10.00% of ₱10000.00),OK
+Dawn Rufino Rey Teope,Tier 3,PF,Permanent Filling (Posterior),HMO,10%,pays nothing,MISSING
+Dawn Rufino Rey Teope,Tier 3,PF,Permanent Filling (Anterior),HMO,10%,pays nothing,MISSING
+Dawn Rufino Rey Teope,Tier 3,PF,Permanent Filling - Per Surface (Voco),HMO,10%,pays nothing,MISSING
+Dawn Rufino Rey Teope,Tier 3,PF,Permanent Filling (Posterior),CASH,10%,₱1000.00 (10.00% of ₱10000.00),OK
+Dawn Rufino Rey Teope,Tier 3,PF,Permanent Filling (Anterior),CASH,10%,₱1000.00 (10.00% of ₱10000.00),OK
+Dawn Rufino Rey Teope,Tier 3,PF,Permanent Filling - Per Surface (Voco),CASH,10%,₱1000.00 (10.00% of ₱10000.00),OK
+Dawn Rufino Rey Teope,Tier 3,TF,Temporary Filling,HMO,10%,pays nothing,MISSING
+Dawn Rufino Rey Teope,Tier 3,TF,Temporary Filling,CASH,10%,₱1000.00 (10.00% of ₱10000.00),OK
+Dawn Rufino Rey Teope,Tier 3,Simple extraction,Simple Tooth Extraction,HMO,10%,pays nothing,MISSING
+Dawn Rufino Rey Teope,Tier 3,Simple extraction,Simple Tooth Extraction,CASH,10%,₱1000.00 (10.00% of ₱10000.00),OK
+Dawn Rufino Rey Teope,Tier 3,Flouride,Fluoride (Pedia Only),CASH,10%,₱1000.00 (10.00% of ₱10000.00),OK
+Dawn Rufino Rey Teope,Tier 3,Flouride,Flouride Varnish,CASH,10%,pays nothing,MISSING
+Dawn Rufino Rey Teope,Tier 3,Panoramic xray,Panoramic Xray w/ hard copy,HMO,₱50.00,₱70.00 (0.70% of ₱10000.00),DIFFERENT
+Dawn Rufino Rey Teope,Tier 3,Calcimol,Calcimol,CASH,10%,₱1000.00 (10.00% of ₱10000.00),OK
+Dawn Rufino Rey Teope,Tier 3,Periapical Xray,Periapical Xray,HMO,₱30.00,₱30.00 (0.30% of ₱10000.00),OK
+Dawn Rufino Rey Teope,Tier 3,Ortho Install,Ortho Package (Simple Case),CASH,25%,₱2800.00 (25.00% of ₱11200.00),OK
+Dawn Rufino Rey Teope,Tier 3,Ortho Install,Ortho Package (Complex Case),CASH,25%,₱2800.00 (25.00% of ₱11200.00),OK
+Dawn Rufino Rey Teope,Tier 3,Transcranial Xray,(not on the price list),HMO,₱50.00,—,NOT ON PRICE LIST
+Dawn Rufino Rey Teope,Tier 3,Ortho Adj,Ortho Adj,CASH,25%,pays nothing,MISSING
+Dawn Rufino Rey Teope,Tier 3,RCM,RCM,CASH,25%,pays nothing,MISSING
+Dawn Rufino Rey Teope,Tier 3,Loss Bracket,Lost Bracket,CASH,25%,pays nothing,MISSING
+Dawn Rufino Rey Teope,Tier 3,Expander,(not on the price list),CASH,25%,—,NOT ON PRICE LIST
+Dawn Rufino Rey Teope,Tier 3,Bite plane,Bite Raiser per arch,CASH,25%,₱2500.00 (25.00% of ₱10000.00),OK
+Dawn Rufino Rey Teope,Tier 3,Twin block,(not on the price list),CASH,25%,—,NOT ON PRICE LIST
+Dawn Rufino Rey Teope,Tier 3,Ortho Diagnostic Fee Simple case,Ortho Diagnostic Fee Simple case,CASH,25%,₱2800.00 (25.00% of ₱11200.00),OK
+Dawn Rufino Rey Teope,Tier 3,Retainers,Retainers (Hawley)-per arch,CASH,25%,₱2500.00 (25.00% of ₱10000.00),OK
+Dawn Rufino Rey Teope,Tier 3,Retainers,Retainers (Invisible)-per arch,CASH,25%,₱2500.00 (25.00% of ₱10000.00),OK
+Dawn Rufino Rey Teope,Tier 3,Ortho Removal w/ OP,Ortho Removal w/ OP,CASH,25%,₱2800.00 (25.00% of ₱11200.00),OK
+Dawn Rufino Rey Teope,Tier 3,Retainers (additional pontic),Retainers (additional pontic),CASH,25%,₱2500.00 (25.00% of ₱10000.00),OK
+Dawn Rufino Rey Teope,Tier 3,TMJ Consultation,TMJ Consultation,CASH,25%,₱2500.00 (25.00% of ₱10000.00),OK
+Dawn Rufino Rey Teope,Tier 3,TMJ Down payment,(not on the price list),CASH,25%,—,NOT ON PRICE LIST
+Dawn Rufino Rey Teope,Tier 3,TMJ Adjust,(not on the price list),CASH,25%,—,NOT ON PRICE LIST
+Dawn Rufino Rey Teope,Tier 3,Myofunctional Appliance,Myofunctional Appliance,CASH,25%,₱2500.00 (25.00% of ₱10000.00),OK
+Dawn Rufino Rey Teope,Tier 3,Splint per arch,Splint per arch,CASH,25%,₱2500.00 (25.00% of ₱10000.00),OK
+Dawn Rufino Rey Teope,Tier 3,Complicated extraction,Complicated Tooth Extraction w/ suture (silk),CASH,15%,₱1500.00 (15.00% of ₱10000.00),OK
+Dawn Rufino Rey Teope,Tier 3,Bone Reduction,Bone Reduction,CASH,15%,₱1500.00 (15.00% of ₱10000.00),OK
+Dawn Rufino Rey Teope,Tier 3,Teeth Whitening,Teeth Whitening (3 cycles),CASH,15%,₱1500.00 (15.00% of ₱10000.00),OK
+Dawn Rufino Rey Teope,Tier 3,Gingivectomy,(not on the price list),CASH,15%,—,NOT ON PRICE LIST
+Dawn Rufino Rey Teope,Tier 3,Cosmetic Filling,Cosmetic Filling,CASH,20%,pays nothing,MISSING
+Dawn Rufino Rey Teope,Tier 3,Esthetics Filling,(not on the price list),CASH,20%,—,NOT ON PRICE LIST
+Dawn Rufino Rey Teope,Tier 3,Direct composite Veneers,Veneers (Direct composite) per tooth (warranty of 1 visit),CASH,20%,₱2500.00 (25.00% of ₱10000.00),DIFFERENT
+Dawn Rufino Rey Teope,Tier 3,Build Up,(not on the price list),CASH,20%,—,NOT ON PRICE LIST
+Dawn Rufino Rey Teope,Tier 3,Root Canal Treatment (Anterior/Posterior),Root Canal Treatment (Anterior),CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Dawn Rufino Rey Teope,Tier 3,Root Canal Treatment (Anterior/Posterior),Root Canal Treatment (Posterior),CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Dawn Rufino Rey Teope,Tier 3,Post & Core (per post,Post & Core (per post),CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Dawn Rufino Rey Teope,Tier 3,Post & Build Up (Per tooth),Post & Build Up (Per tooth),CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Dawn Rufino Rey Teope,Tier 3,Flexible Dentures,Flexible Denture - Partial (Per Arch) 1-8 pontics,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Dawn Rufino Rey Teope,Tier 3,Plastic Dentures,Plastic Denture - Partial (Per Arch) 1-3 pontics,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Dawn Rufino Rey Teope,Tier 3,Plastic Dentures,Plastic Denture - Partial 4 pontics up to full,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Dawn Rufino Rey Teope,Tier 3,Plastic Dentures,Plastic Denture - Complete,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Dawn Rufino Rey Teope,Tier 3,Plastic Dentures,Plastic Denture - Partial (Per Arch) 1-3 pontics,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Dawn Rufino Rey Teope,Tier 3,Plastic Dentures,Plastic Denture - Partial 4 pontics up to full,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Dawn Rufino Rey Teope,Tier 3,Plastic Dentures,Plastic Denture - Complete,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Dawn Rufino Rey Teope,Tier 3,Thermosens Dentures,(not on the price list),CASH,20%,—,NOT ON PRICE LIST
+Dawn Rufino Rey Teope,Tier 3,High Impact Plastic Dentures,(not on the price list),CASH,20%,—,NOT ON PRICE LIST
+Dawn Rufino Rey Teope,Tier 3,Ivocap Dentures,Denture (IVOCAP) - Per Arch,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Dawn Rufino Rey Teope,Tier 3,Jacket Crown (Plastic),Jacket Crown (Plastic),CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Dawn Rufino Rey Teope,Tier 3,Jacket Crown (PFM)-,Jacket Crown (PFM)- Samurai Europe made,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Dawn Rufino Rey Teope,Tier 3,Jacket Crown (PFM)-Tilite,Jacket Crown (PFM)-Tilite (Samurai) (Europe made),CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Dawn Rufino Rey Teope,Tier 3,Jacket Crown (PFM)-Tilite,Jacket Crown (PFM)-Tilite (Swiss or JR),CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Dawn Rufino Rey Teope,Tier 3,Jacket Crown (Emax),Jacket Crown (Emax)- Samurai (Europe made),CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Dawn Rufino Rey Teope,Tier 3,Jacket Crown (Zirconia),Jacket Crown (Zirconia)- Samurai,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Dawn Rufino Rey Teope,Tier 3,Veneers (EMAX),Veneers (Emax)-Samurai Europe made,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Dawn Rufino Rey Teope,Tier 3,Veneers (Zirconia),Veneers (Zirconia)-Samurai Europe made,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Dawn Rufino Rey Teope,Tier 3,Onlay Ceramage,Onlay Ceramage (Samurai),CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Dawn Rufino Rey Teope,Tier 3,Temporary Crown,Temporary Crown,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Dawn Rufino Rey Teope,Tier 3,Ceramage Removal,Ceramage Removal,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Dawn Rufino Rey Teope,Tier 3,Clasp for Maryland,Clasp for Maryland,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Dawn Rufino Rey Teope,Tier 3,Mouth Guard,Mouth Guard,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Dawn Rufino Rey Teope,Tier 3,Dentures Repair,Denture Repair,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Dawn Rufino Rey Teope,Tier 3,Surgery,Wisdom Tooth Removal,CASH,20%,₱2500.00 (25.00% of ₱10000.00),DIFFERENT
+Dawn Rufino Rey Teope,Tier 3,Coronectomy,(not on the price list),CASH,20%,—,NOT ON PRICE LIST
+Rearosa Ayapana,Tier 3,Consultation,Consultation,CASH,10%,₱1000.00 (10.00% of ₱10000.00),OK
+Rearosa Ayapana,Tier 3,OP,Oral Prophylaxis (MILD),HMO,10%,₱1000.00 (10.00% of ₱10000.00),OK
+Rearosa Ayapana,Tier 3,OP,Oral Prophylaxis (MODERATE),HMO,10%,₱1000.00 (10.00% of ₱10000.00),OK
+Rearosa Ayapana,Tier 3,OP,Oral Prophylaxis (SEVERE),HMO,10%,₱1000.00 (10.00% of ₱10000.00),OK
+Rearosa Ayapana,Tier 3,OP,Oral Prophylaxis (PEDIA),HMO,10%,₱1000.00 (10.00% of ₱10000.00),OK
+Rearosa Ayapana,Tier 3,OP,Oral Prophylaxis (MILD),CASH,10%,₱1000.00 (10.00% of ₱10000.00),OK
+Rearosa Ayapana,Tier 3,OP,Oral Prophylaxis (MODERATE),CASH,10%,₱1000.00 (10.00% of ₱10000.00),OK
+Rearosa Ayapana,Tier 3,OP,Oral Prophylaxis (SEVERE),CASH,10%,₱1000.00 (10.00% of ₱10000.00),OK
+Rearosa Ayapana,Tier 3,OP,Oral Prophylaxis (PEDIA),CASH,10%,₱1000.00 (10.00% of ₱10000.00),OK
+Rearosa Ayapana,Tier 3,PF,Permanent Filling (Posterior),HMO,10%,pays nothing,MISSING
+Rearosa Ayapana,Tier 3,PF,Permanent Filling (Anterior),HMO,10%,pays nothing,MISSING
+Rearosa Ayapana,Tier 3,PF,Permanent Filling - Per Surface (Voco),HMO,10%,pays nothing,MISSING
+Rearosa Ayapana,Tier 3,PF,Permanent Filling (Posterior),CASH,10%,₱1000.00 (10.00% of ₱10000.00),OK
+Rearosa Ayapana,Tier 3,PF,Permanent Filling (Anterior),CASH,10%,₱1000.00 (10.00% of ₱10000.00),OK
+Rearosa Ayapana,Tier 3,PF,Permanent Filling - Per Surface (Voco),CASH,10%,₱1000.00 (10.00% of ₱10000.00),OK
+Rearosa Ayapana,Tier 3,TF,Temporary Filling,HMO,10%,pays nothing,MISSING
+Rearosa Ayapana,Tier 3,TF,Temporary Filling,CASH,10%,₱1000.00 (10.00% of ₱10000.00),OK
+Rearosa Ayapana,Tier 3,Simple extraction,Simple Tooth Extraction,HMO,10%,pays nothing,MISSING
+Rearosa Ayapana,Tier 3,Simple extraction,Simple Tooth Extraction,CASH,10%,₱1000.00 (10.00% of ₱10000.00),OK
+Rearosa Ayapana,Tier 3,Flouride,Fluoride (Pedia Only),CASH,10%,₱1000.00 (10.00% of ₱10000.00),OK
+Rearosa Ayapana,Tier 3,Flouride,Flouride Varnish,CASH,10%,pays nothing,MISSING
+Rearosa Ayapana,Tier 3,Panoramic xray,Panoramic Xray w/ hard copy,HMO,₱50.00,₱70.00 (0.70% of ₱10000.00),DIFFERENT
+Rearosa Ayapana,Tier 3,Calcimol,Calcimol,CASH,10%,₱1000.00 (10.00% of ₱10000.00),OK
+Rearosa Ayapana,Tier 3,Periapical Xray,Periapical Xray,HMO,₱30.00,₱30.00 (0.30% of ₱10000.00),OK
+Rearosa Ayapana,Tier 3,Ortho Install,Ortho Package (Simple Case),CASH,20%,₱2800.00 (25.00% of ₱11200.00),DIFFERENT
+Rearosa Ayapana,Tier 3,Ortho Install,Ortho Package (Complex Case),CASH,20%,₱2800.00 (25.00% of ₱11200.00),DIFFERENT
+Rearosa Ayapana,Tier 3,Ortho Adj,Ortho Adj,CASH,20%,pays nothing,MISSING
+Rearosa Ayapana,Tier 3,RCM,RCM,CASH,20%,pays nothing,MISSING
+Rearosa Ayapana,Tier 3,Loss Bracket,Lost Bracket,CASH,20%,pays nothing,MISSING
+Rearosa Ayapana,Tier 3,Expander,(not on the price list),CASH,20%,—,NOT ON PRICE LIST
+Rearosa Ayapana,Tier 3,Bite plane,Bite Raiser per arch,CASH,20%,₱2500.00 (25.00% of ₱10000.00),DIFFERENT
+Rearosa Ayapana,Tier 3,Twin block,(not on the price list),CASH,20%,—,NOT ON PRICE LIST
+Rearosa Ayapana,Tier 3,Ortho Diagnostic Fee Simple case,Ortho Diagnostic Fee Simple case,CASH,20%,₱2800.00 (25.00% of ₱11200.00),DIFFERENT
+Rearosa Ayapana,Tier 3,Retainers,Retainers (Hawley)-per arch,CASH,20%,₱2500.00 (25.00% of ₱10000.00),DIFFERENT
+Rearosa Ayapana,Tier 3,Retainers,Retainers (Invisible)-per arch,CASH,20%,₱2500.00 (25.00% of ₱10000.00),DIFFERENT
+Rearosa Ayapana,Tier 3,Ortho Removal w/ OP,Ortho Removal w/ OP,CASH,20%,₱2800.00 (25.00% of ₱11200.00),DIFFERENT
+Rearosa Ayapana,Tier 3,Retainers (additional pontic),Retainers (additional pontic),CASH,20%,₱2500.00 (25.00% of ₱10000.00),DIFFERENT
+Rearosa Ayapana,Tier 3,Complicated extraction,Complicated Tooth Extraction w/ suture (silk),CASH,15%,₱1500.00 (15.00% of ₱10000.00),OK
+Rearosa Ayapana,Tier 3,Bone Reduction,Bone Reduction,CASH,15%,₱1500.00 (15.00% of ₱10000.00),OK
+Rearosa Ayapana,Tier 3,Teeth Whitening,Teeth Whitening (3 cycles),CASH,15%,₱1500.00 (15.00% of ₱10000.00),OK
+Rearosa Ayapana,Tier 3,Gingivectomy,(not on the price list),CASH,15%,—,NOT ON PRICE LIST
+Rearosa Ayapana,Tier 3,Surgery,Wisdom Tooth Removal,CASH,15%,₱2500.00 (25.00% of ₱10000.00),DIFFERENT
+Rearosa Ayapana,Tier 3,Coronectomy,(not on the price list),CASH,15%,—,NOT ON PRICE LIST
+Rearosa Ayapana,Tier 3,Cosmetic Filling,Cosmetic Filling,CASH,20%,pays nothing,MISSING
+Rearosa Ayapana,Tier 3,Esthetics Filling,(not on the price list),CASH,20%,—,NOT ON PRICE LIST
+Rearosa Ayapana,Tier 3,Direct composite Veneers,Veneers (Direct composite) per tooth (warranty of 1 visit),CASH,20%,₱2500.00 (25.00% of ₱10000.00),DIFFERENT
+Rearosa Ayapana,Tier 3,Build Up,(not on the price list),CASH,20%,—,NOT ON PRICE LIST
+Rearosa Ayapana,Tier 3,Root Canal Treatment (Anterior/Posterior),Root Canal Treatment (Anterior),CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Rearosa Ayapana,Tier 3,Root Canal Treatment (Anterior/Posterior),Root Canal Treatment (Posterior),CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Rearosa Ayapana,Tier 3,Post & Core (per post,Post & Core (per post),CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Rearosa Ayapana,Tier 3,Post & Build Up (Per tooth),Post & Build Up (Per tooth),CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Rearosa Ayapana,Tier 3,Flexible Dentures,Flexible Denture - Partial (Per Arch) 1-8 pontics,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Rearosa Ayapana,Tier 3,Plastic Dentures,Plastic Denture - Partial (Per Arch) 1-3 pontics,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Rearosa Ayapana,Tier 3,Plastic Dentures,Plastic Denture - Partial 4 pontics up to full,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Rearosa Ayapana,Tier 3,Plastic Dentures,Plastic Denture - Complete,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Rearosa Ayapana,Tier 3,Plastic Dentures,Plastic Denture - Partial (Per Arch) 1-3 pontics,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Rearosa Ayapana,Tier 3,Plastic Dentures,Plastic Denture - Partial 4 pontics up to full,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Rearosa Ayapana,Tier 3,Plastic Dentures,Plastic Denture - Complete,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Rearosa Ayapana,Tier 3,Thermosens Dentures,(not on the price list),CASH,20%,—,NOT ON PRICE LIST
+Rearosa Ayapana,Tier 3,High Impact Plastic Dentures,(not on the price list),CASH,20%,—,NOT ON PRICE LIST
+Rearosa Ayapana,Tier 3,Ivocap Dentures,Denture (IVOCAP) - Per Arch,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Rearosa Ayapana,Tier 3,Jacket Crown (Plastic),Jacket Crown (Plastic),CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Rearosa Ayapana,Tier 3,Jacket Crown (PFM),Jacket Crown (PFM)- Samurai Europe made,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Rearosa Ayapana,Tier 3,Jacket Crown (PFM)-Tilite,Jacket Crown (PFM)-Tilite (Samurai) (Europe made),CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Rearosa Ayapana,Tier 3,Jacket Crown (PFM)-Tilite,Jacket Crown (PFM)-Tilite (Swiss or JR),CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Rearosa Ayapana,Tier 3,Jacket Crown (Emax),Jacket Crown (Emax)- Samurai (Europe made),CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Rearosa Ayapana,Tier 3,Jacket Crown (Zirconia),Jacket Crown (Zirconia)- Samurai,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Rearosa Ayapana,Tier 3,Veneers (EMAX),Veneers (Emax)-Samurai Europe made,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Rearosa Ayapana,Tier 3,Veneers (Zirconia),Veneers (Zirconia)-Samurai Europe made,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Rearosa Ayapana,Tier 3,Onlay Ceramage,Onlay Ceramage (Samurai),CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Rearosa Ayapana,Tier 3,Temporary Crown,Temporary Crown,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Rearosa Ayapana,Tier 3,Ceramage Removal,Ceramage Removal,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Rearosa Ayapana,Tier 3,Clasp for Maryland,Clasp for Maryland,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Rearosa Ayapana,Tier 3,Mouth Guard,Mouth Guard,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Rearosa Ayapana,Tier 3,Dentures Repair,Denture Repair,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Beatrice Kiara Bandayrel,Tier 2,Consultation,Consultation,CASH,10%,₱1000.00 (10.00% of ₱10000.00),OK
+Beatrice Kiara Bandayrel,Tier 2,OP,Oral Prophylaxis (MILD),HMO,10%,₱1000.00 (10.00% of ₱10000.00),OK
+Beatrice Kiara Bandayrel,Tier 2,OP,Oral Prophylaxis (MODERATE),HMO,10%,₱1000.00 (10.00% of ₱10000.00),OK
+Beatrice Kiara Bandayrel,Tier 2,OP,Oral Prophylaxis (SEVERE),HMO,10%,₱1000.00 (10.00% of ₱10000.00),OK
+Beatrice Kiara Bandayrel,Tier 2,OP,Oral Prophylaxis (PEDIA),HMO,10%,₱1000.00 (10.00% of ₱10000.00),OK
+Beatrice Kiara Bandayrel,Tier 2,OP,Oral Prophylaxis (MILD),CASH,10%,₱1000.00 (10.00% of ₱10000.00),OK
+Beatrice Kiara Bandayrel,Tier 2,OP,Oral Prophylaxis (MODERATE),CASH,10%,₱1000.00 (10.00% of ₱10000.00),OK
+Beatrice Kiara Bandayrel,Tier 2,OP,Oral Prophylaxis (SEVERE),CASH,10%,₱1000.00 (10.00% of ₱10000.00),OK
+Beatrice Kiara Bandayrel,Tier 2,OP,Oral Prophylaxis (PEDIA),CASH,10%,₱1000.00 (10.00% of ₱10000.00),OK
+Beatrice Kiara Bandayrel,Tier 2,PF,Permanent Filling (Posterior),HMO,10%,pays nothing,MISSING
+Beatrice Kiara Bandayrel,Tier 2,PF,Permanent Filling (Anterior),HMO,10%,pays nothing,MISSING
+Beatrice Kiara Bandayrel,Tier 2,PF,Permanent Filling - Per Surface (Voco),HMO,10%,pays nothing,MISSING
+Beatrice Kiara Bandayrel,Tier 2,PF,Permanent Filling (Posterior),CASH,10%,₱1000.00 (10.00% of ₱10000.00),OK
+Beatrice Kiara Bandayrel,Tier 2,PF,Permanent Filling (Anterior),CASH,10%,₱1000.00 (10.00% of ₱10000.00),OK
+Beatrice Kiara Bandayrel,Tier 2,PF,Permanent Filling - Per Surface (Voco),CASH,10%,₱1000.00 (10.00% of ₱10000.00),OK
+Beatrice Kiara Bandayrel,Tier 2,TF,Temporary Filling,HMO,10%,pays nothing,MISSING
+Beatrice Kiara Bandayrel,Tier 2,TF,Temporary Filling,CASH,10%,₱1000.00 (10.00% of ₱10000.00),OK
+Beatrice Kiara Bandayrel,Tier 2,Simple extraction,Simple Tooth Extraction,HMO,10%,pays nothing,MISSING
+Beatrice Kiara Bandayrel,Tier 2,Simple extraction,Simple Tooth Extraction,CASH,10%,₱1000.00 (10.00% of ₱10000.00),OK
+Beatrice Kiara Bandayrel,Tier 2,Flouride,Fluoride (Pedia Only),CASH,10%,₱1000.00 (10.00% of ₱10000.00),OK
+Beatrice Kiara Bandayrel,Tier 2,Flouride,Flouride Varnish,CASH,10%,pays nothing,MISSING
+Beatrice Kiara Bandayrel,Tier 2,Panoramic xray,Panoramic Xray w/ hard copy,HMO,₱50.00,₱70.00 (0.70% of ₱10000.00),DIFFERENT
+Beatrice Kiara Bandayrel,Tier 2,Calcimol,Calcimol,CASH,10%,₱1000.00 (10.00% of ₱10000.00),OK
+Beatrice Kiara Bandayrel,Tier 2,Periapical Xray,Periapical Xray,HMO,₱30.00,₱30.00 (0.30% of ₱10000.00),OK
+Beatrice Kiara Bandayrel,Tier 2,Ortho Install,Ortho Package (Simple Case),CASH,20%,₱2240.00 (20.00% of ₱11200.00),OK
+Beatrice Kiara Bandayrel,Tier 2,Ortho Install,Ortho Package (Complex Case),CASH,20%,₱2240.00 (20.00% of ₱11200.00),OK
+Beatrice Kiara Bandayrel,Tier 2,Ortho Adj,Ortho Adj,CASH,20%,₱2240.00 (20.00% of ₱11200.00),OK
+Beatrice Kiara Bandayrel,Tier 2,RCM,RCM,CASH,20%,pays nothing,MISSING
+Beatrice Kiara Bandayrel,Tier 2,Loss Bracket,Lost Bracket,CASH,20%,pays nothing,MISSING
+Beatrice Kiara Bandayrel,Tier 2,Expander,(not on the price list),CASH,20%,—,NOT ON PRICE LIST
+Beatrice Kiara Bandayrel,Tier 2,Bite plane,Bite Raiser per arch,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Beatrice Kiara Bandayrel,Tier 2,Twin block,(not on the price list),CASH,20%,—,NOT ON PRICE LIST
+Beatrice Kiara Bandayrel,Tier 2,Ortho Diagnostic Fee Simple case,Ortho Diagnostic Fee Simple case,CASH,20%,₱2240.00 (20.00% of ₱11200.00),OK
+Beatrice Kiara Bandayrel,Tier 2,Retainers,Retainers (Hawley)-per arch,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Beatrice Kiara Bandayrel,Tier 2,Retainers,Retainers (Invisible)-per arch,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Beatrice Kiara Bandayrel,Tier 2,Ortho Removal w/ OP,Ortho Removal w/ OP,CASH,20%,₱2240.00 (20.00% of ₱11200.00),OK
+Beatrice Kiara Bandayrel,Tier 2,Retainers (additional pontic),Retainers (additional pontic),CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Beatrice Kiara Bandayrel,Tier 2,Complicated extraction,Complicated Tooth Extraction w/ suture (silk),CASH,15%,₱1500.00 (15.00% of ₱10000.00),OK
+Beatrice Kiara Bandayrel,Tier 2,Bone Reduction,Bone Reduction,CASH,15%,₱1500.00 (15.00% of ₱10000.00),OK
+Beatrice Kiara Bandayrel,Tier 2,Teeth Whitening,Teeth Whitening (3 cycles),CASH,15%,₱1500.00 (15.00% of ₱10000.00),OK
+Beatrice Kiara Bandayrel,Tier 2,Gingivectomy,(not on the price list),CASH,15%,—,NOT ON PRICE LIST
+Beatrice Kiara Bandayrel,Tier 2,Surgery,Wisdom Tooth Removal,CASH,15%,₱1500.00 (15.00% of ₱10000.00),OK
+Beatrice Kiara Bandayrel,Tier 2,Coronectomy,(not on the price list),CASH,15%,—,NOT ON PRICE LIST
+Beatrice Kiara Bandayrel,Tier 2,Cosmetic Filling,Cosmetic Filling,CASH,20%,pays nothing,MISSING
+Beatrice Kiara Bandayrel,Tier 2,Esthetics Filling,(not on the price list),CASH,20%,—,NOT ON PRICE LIST
+Beatrice Kiara Bandayrel,Tier 2,Direct composite Veneers,Veneers (Direct composite) per tooth (warranty of 1 visit),CASH,20%,₱1500.00 (15.00% of ₱10000.00),DIFFERENT
+Beatrice Kiara Bandayrel,Tier 2,Build Up,(not on the price list),CASH,20%,—,NOT ON PRICE LIST
+Beatrice Kiara Bandayrel,Tier 2,Root Canal Treatment (Anterior/Posterior),Root Canal Treatment (Anterior),CASH,20%,₱1500.00 (15.00% of ₱10000.00),DIFFERENT
+Beatrice Kiara Bandayrel,Tier 2,Root Canal Treatment (Anterior/Posterior),Root Canal Treatment (Posterior),CASH,20%,₱1500.00 (15.00% of ₱10000.00),DIFFERENT
+Beatrice Kiara Bandayrel,Tier 2,Post & Core (per post,Post & Core (per post),CASH,20%,₱1500.00 (15.00% of ₱10000.00),DIFFERENT
+Beatrice Kiara Bandayrel,Tier 2,Post & Build Up (Per tooth),Post & Build Up (Per tooth),CASH,20%,₱1500.00 (15.00% of ₱10000.00),DIFFERENT
+Beatrice Kiara Bandayrel,Tier 2,Flexible Dentures,Flexible Denture - Partial (Per Arch) 1-8 pontics,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Beatrice Kiara Bandayrel,Tier 2,Plastic Dentures,Plastic Denture - Partial (Per Arch) 1-3 pontics,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Beatrice Kiara Bandayrel,Tier 2,Plastic Dentures,Plastic Denture - Partial 4 pontics up to full,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Beatrice Kiara Bandayrel,Tier 2,Plastic Dentures,Plastic Denture - Complete,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Beatrice Kiara Bandayrel,Tier 2,Plastic Dentures,Plastic Denture - Partial (Per Arch) 1-3 pontics,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Beatrice Kiara Bandayrel,Tier 2,Plastic Dentures,Plastic Denture - Partial 4 pontics up to full,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Beatrice Kiara Bandayrel,Tier 2,Plastic Dentures,Plastic Denture - Complete,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Beatrice Kiara Bandayrel,Tier 2,Thermosens Dentures,(not on the price list),CASH,20%,—,NOT ON PRICE LIST
+Beatrice Kiara Bandayrel,Tier 2,High Impact Plastic Dentures,(not on the price list),CASH,20%,—,NOT ON PRICE LIST
+Beatrice Kiara Bandayrel,Tier 2,Ivocap Dentures,Denture (IVOCAP) - Per Arch,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Beatrice Kiara Bandayrel,Tier 2,Jacket Crown (Plastic),Jacket Crown (Plastic),CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Beatrice Kiara Bandayrel,Tier 2,Jacket Crown (PFM),Jacket Crown (PFM)- Samurai Europe made,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Beatrice Kiara Bandayrel,Tier 2,Jacket Crown (PFM)-Tilite,Jacket Crown (PFM)-Tilite (Samurai) (Europe made),CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Beatrice Kiara Bandayrel,Tier 2,Jacket Crown (PFM)-Tilite,Jacket Crown (PFM)-Tilite (Swiss or JR),CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Beatrice Kiara Bandayrel,Tier 2,Jacket Crown (Emax),Jacket Crown (Emax)- Samurai (Europe made),CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Beatrice Kiara Bandayrel,Tier 2,Jacket Crown (Zirconia),Jacket Crown (Zirconia)- Samurai,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Beatrice Kiara Bandayrel,Tier 2,Veneers (EMAX),Veneers (Emax)-Samurai Europe made,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Beatrice Kiara Bandayrel,Tier 2,Veneers (Zirconia),Veneers (Zirconia)-Samurai Europe made,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Beatrice Kiara Bandayrel,Tier 2,Onlay Ceramage,Onlay Ceramage (Samurai),CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Beatrice Kiara Bandayrel,Tier 2,Temporary Crown,Temporary Crown,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Beatrice Kiara Bandayrel,Tier 2,Ceramage Removal,Ceramage Removal,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Beatrice Kiara Bandayrel,Tier 2,Clasp for Maryland,Clasp for Maryland,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Beatrice Kiara Bandayrel,Tier 2,Mouth Guard,Mouth Guard,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Beatrice Kiara Bandayrel,Tier 2,Dentures Repair,Denture Repair,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Kyla Denise Ahmad,Tier 2,Consultation,Consultation,CASH,10%,₱1000.00 (10.00% of ₱10000.00),OK
+Kyla Denise Ahmad,Tier 2,OP,Oral Prophylaxis (MILD),HMO,10%,₱1000.00 (10.00% of ₱10000.00),OK
+Kyla Denise Ahmad,Tier 2,OP,Oral Prophylaxis (MODERATE),HMO,10%,₱1000.00 (10.00% of ₱10000.00),OK
+Kyla Denise Ahmad,Tier 2,OP,Oral Prophylaxis (SEVERE),HMO,10%,₱1000.00 (10.00% of ₱10000.00),OK
+Kyla Denise Ahmad,Tier 2,OP,Oral Prophylaxis (PEDIA),HMO,10%,₱1000.00 (10.00% of ₱10000.00),OK
+Kyla Denise Ahmad,Tier 2,OP,Oral Prophylaxis (MILD),CASH,10%,₱1000.00 (10.00% of ₱10000.00),OK
+Kyla Denise Ahmad,Tier 2,OP,Oral Prophylaxis (MODERATE),CASH,10%,₱1000.00 (10.00% of ₱10000.00),OK
+Kyla Denise Ahmad,Tier 2,OP,Oral Prophylaxis (SEVERE),CASH,10%,₱1000.00 (10.00% of ₱10000.00),OK
+Kyla Denise Ahmad,Tier 2,OP,Oral Prophylaxis (PEDIA),CASH,10%,₱1000.00 (10.00% of ₱10000.00),OK
+Kyla Denise Ahmad,Tier 2,PF,Permanent Filling (Posterior),HMO,10%,pays nothing,MISSING
+Kyla Denise Ahmad,Tier 2,PF,Permanent Filling (Anterior),HMO,10%,pays nothing,MISSING
+Kyla Denise Ahmad,Tier 2,PF,Permanent Filling - Per Surface (Voco),HMO,10%,pays nothing,MISSING
+Kyla Denise Ahmad,Tier 2,PF,Permanent Filling (Posterior),CASH,10%,₱1000.00 (10.00% of ₱10000.00),OK
+Kyla Denise Ahmad,Tier 2,PF,Permanent Filling (Anterior),CASH,10%,₱1000.00 (10.00% of ₱10000.00),OK
+Kyla Denise Ahmad,Tier 2,PF,Permanent Filling - Per Surface (Voco),CASH,10%,₱1000.00 (10.00% of ₱10000.00),OK
+Kyla Denise Ahmad,Tier 2,TF,Temporary Filling,HMO,10%,pays nothing,MISSING
+Kyla Denise Ahmad,Tier 2,TF,Temporary Filling,CASH,10%,₱1000.00 (10.00% of ₱10000.00),OK
+Kyla Denise Ahmad,Tier 2,Simple extraction,Simple Tooth Extraction,HMO,10%,pays nothing,MISSING
+Kyla Denise Ahmad,Tier 2,Simple extraction,Simple Tooth Extraction,CASH,10%,₱1000.00 (10.00% of ₱10000.00),OK
+Kyla Denise Ahmad,Tier 2,Flouride,Fluoride (Pedia Only),CASH,10%,₱1000.00 (10.00% of ₱10000.00),OK
+Kyla Denise Ahmad,Tier 2,Flouride,Flouride Varnish,CASH,10%,pays nothing,MISSING
+Kyla Denise Ahmad,Tier 2,Panoramic xray,Panoramic Xray w/ hard copy,HMO,₱50.00,₱70.00 (0.70% of ₱10000.00),DIFFERENT
+Kyla Denise Ahmad,Tier 2,Calcimol,Calcimol,CASH,10%,₱1000.00 (10.00% of ₱10000.00),OK
+Kyla Denise Ahmad,Tier 2,Periapical Xray,Periapical Xray,HMO,₱30.00,₱30.00 (0.30% of ₱10000.00),OK
+Kyla Denise Ahmad,Tier 2,Ortho Install,Ortho Package (Simple Case),CASH,20%,₱2240.00 (20.00% of ₱11200.00),OK
+Kyla Denise Ahmad,Tier 2,Ortho Install,Ortho Package (Complex Case),CASH,20%,₱2240.00 (20.00% of ₱11200.00),OK
+Kyla Denise Ahmad,Tier 2,Ortho Adj,Ortho Adj,CASH,20%,pays nothing,MISSING
+Kyla Denise Ahmad,Tier 2,RCM,RCM,CASH,20%,pays nothing,MISSING
+Kyla Denise Ahmad,Tier 2,Loss Bracket,Lost Bracket,CASH,20%,pays nothing,MISSING
+Kyla Denise Ahmad,Tier 2,Expander,(not on the price list),CASH,20%,—,NOT ON PRICE LIST
+Kyla Denise Ahmad,Tier 2,Bite plane,Bite Raiser per arch,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Kyla Denise Ahmad,Tier 2,Twin block,(not on the price list),CASH,20%,—,NOT ON PRICE LIST
+Kyla Denise Ahmad,Tier 2,Ortho Diagnostic Fee Simple case,Ortho Diagnostic Fee Simple case,CASH,20%,₱2240.00 (20.00% of ₱11200.00),OK
+Kyla Denise Ahmad,Tier 2,Retainers,Retainers (Hawley)-per arch,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Kyla Denise Ahmad,Tier 2,Retainers,Retainers (Invisible)-per arch,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Kyla Denise Ahmad,Tier 2,Ortho Removal w/ OP,Ortho Removal w/ OP,CASH,20%,₱2240.00 (20.00% of ₱11200.00),OK
+Kyla Denise Ahmad,Tier 2,Retainers (additional pontic),Retainers (additional pontic),CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Kyla Denise Ahmad,Tier 2,Complicated extraction,Complicated Tooth Extraction w/ suture (silk),CASH,15%,₱1500.00 (15.00% of ₱10000.00),OK
+Kyla Denise Ahmad,Tier 2,Bone Reduction,Bone Reduction,CASH,15%,₱1500.00 (15.00% of ₱10000.00),OK
+Kyla Denise Ahmad,Tier 2,Teeth Whitening,Teeth Whitening (3 cycles),CASH,15%,₱1500.00 (15.00% of ₱10000.00),OK
+Kyla Denise Ahmad,Tier 2,Gingivectomy,(not on the price list),CASH,15%,—,NOT ON PRICE LIST
+Kyla Denise Ahmad,Tier 2,Cosmetic Filling,Cosmetic Filling,CASH,15%,pays nothing,MISSING
+Kyla Denise Ahmad,Tier 2,Esthetics Filling,(not on the price list),CASH,15%,—,NOT ON PRICE LIST
+Kyla Denise Ahmad,Tier 2,Direct composite Veneers,Veneers (Direct composite) per tooth (warranty of 1 visit),CASH,15%,₱1500.00 (15.00% of ₱10000.00),OK
+Kyla Denise Ahmad,Tier 2,Build Up,(not on the price list),CASH,15%,—,NOT ON PRICE LIST
+Kyla Denise Ahmad,Tier 2,Root Canal Treatment (Anterior/Posterior),Root Canal Treatment (Anterior),CASH,20%,₱1500.00 (15.00% of ₱10000.00),DIFFERENT
+Kyla Denise Ahmad,Tier 2,Root Canal Treatment (Anterior/Posterior),Root Canal Treatment (Posterior),CASH,20%,₱1500.00 (15.00% of ₱10000.00),DIFFERENT
+Kyla Denise Ahmad,Tier 2,Post & Core (per post,Post & Core (per post),CASH,20%,₱1500.00 (15.00% of ₱10000.00),DIFFERENT
+Kyla Denise Ahmad,Tier 2,Post & Build Up (Per tooth),Post & Build Up (Per tooth),CASH,20%,₱1500.00 (15.00% of ₱10000.00),DIFFERENT
+Kyla Denise Ahmad,Tier 2,Flexible Dentures,Flexible Denture - Partial (Per Arch) 1-8 pontics,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Kyla Denise Ahmad,Tier 2,Plastic Dentures,Plastic Denture - Partial (Per Arch) 1-3 pontics,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Kyla Denise Ahmad,Tier 2,Plastic Dentures,Plastic Denture - Partial 4 pontics up to full,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Kyla Denise Ahmad,Tier 2,Plastic Dentures,Plastic Denture - Complete,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Kyla Denise Ahmad,Tier 2,Plastic Dentures,Plastic Denture - Partial (Per Arch) 1-3 pontics,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Kyla Denise Ahmad,Tier 2,Plastic Dentures,Plastic Denture - Partial 4 pontics up to full,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Kyla Denise Ahmad,Tier 2,Plastic Dentures,Plastic Denture - Complete,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Kyla Denise Ahmad,Tier 2,Thermosens Dentures,(not on the price list),CASH,20%,—,NOT ON PRICE LIST
+Kyla Denise Ahmad,Tier 2,High Impact Plastic Dentures,(not on the price list),CASH,20%,—,NOT ON PRICE LIST
+Kyla Denise Ahmad,Tier 2,Ivocap Dentures,Denture (IVOCAP) - Per Arch,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Kyla Denise Ahmad,Tier 2,Jacket Crown (Plastic),Jacket Crown (Plastic),CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Kyla Denise Ahmad,Tier 2,Jacket Crown (PFM),Jacket Crown (PFM)- Samurai Europe made,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Kyla Denise Ahmad,Tier 2,Jacket Crown (PFM)-Tilite,Jacket Crown (PFM)-Tilite (Samurai) (Europe made),CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Kyla Denise Ahmad,Tier 2,Jacket Crown (PFM)-Tilite,Jacket Crown (PFM)-Tilite (Swiss or JR),CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Kyla Denise Ahmad,Tier 2,Jacket Crown (Emax),Jacket Crown (Emax)- Samurai (Europe made),CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Kyla Denise Ahmad,Tier 2,Jacket Crown (Zirconia),Jacket Crown (Zirconia)- Samurai,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Kyla Denise Ahmad,Tier 2,Veneers (EMAX),Veneers (Emax)-Samurai Europe made,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Kyla Denise Ahmad,Tier 2,Veneers (Zirconia),Veneers (Zirconia)-Samurai Europe made,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Kyla Denise Ahmad,Tier 2,Onlay Ceramage,Onlay Ceramage (Samurai),CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Kyla Denise Ahmad,Tier 2,Temporary Crown,Temporary Crown,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Kyla Denise Ahmad,Tier 2,Ceramage Removal,Ceramage Removal,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Kyla Denise Ahmad,Tier 2,Clasp for Maryland,Clasp for Maryland,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Kyla Denise Ahmad,Tier 2,Mouth Guard,Mouth Guard,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Kyla Denise Ahmad,Tier 2,Dentures Repair,Denture Repair,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Kyla Denise Ahmad,Tier 2,Surgery,Wisdom Tooth Removal,CASH,20%,₱1500.00 (15.00% of ₱10000.00),DIFFERENT
+Kyla Denise Ahmad,Tier 2,Coronectomy,(not on the price list),CASH,20%,—,NOT ON PRICE LIST
+Katherine Roldan,Tier 1,Consultation,Consultation,CASH,10%,₱1000.00 (10.00% of ₱10000.00),OK
+Katherine Roldan,Tier 1,OP,Oral Prophylaxis (MILD),HMO,10%,₱1000.00 (10.00% of ₱10000.00),OK
+Katherine Roldan,Tier 1,OP,Oral Prophylaxis (MODERATE),HMO,10%,₱1000.00 (10.00% of ₱10000.00),OK
+Katherine Roldan,Tier 1,OP,Oral Prophylaxis (SEVERE),HMO,10%,₱1000.00 (10.00% of ₱10000.00),OK
+Katherine Roldan,Tier 1,OP,Oral Prophylaxis (PEDIA),HMO,10%,₱1000.00 (10.00% of ₱10000.00),OK
+Katherine Roldan,Tier 1,OP,Oral Prophylaxis (MILD),CASH,10%,₱1000.00 (10.00% of ₱10000.00),OK
+Katherine Roldan,Tier 1,OP,Oral Prophylaxis (MODERATE),CASH,10%,₱1000.00 (10.00% of ₱10000.00),OK
+Katherine Roldan,Tier 1,OP,Oral Prophylaxis (SEVERE),CASH,10%,₱1000.00 (10.00% of ₱10000.00),OK
+Katherine Roldan,Tier 1,OP,Oral Prophylaxis (PEDIA),CASH,10%,₱1000.00 (10.00% of ₱10000.00),OK
+Katherine Roldan,Tier 1,PF,Permanent Filling (Posterior),HMO,10%,pays nothing,MISSING
+Katherine Roldan,Tier 1,PF,Permanent Filling (Anterior),HMO,10%,pays nothing,MISSING
+Katherine Roldan,Tier 1,PF,Permanent Filling - Per Surface (Voco),HMO,10%,pays nothing,MISSING
+Katherine Roldan,Tier 1,PF,Permanent Filling (Posterior),CASH,10%,₱1000.00 (10.00% of ₱10000.00),OK
+Katherine Roldan,Tier 1,PF,Permanent Filling (Anterior),CASH,10%,₱1000.00 (10.00% of ₱10000.00),OK
+Katherine Roldan,Tier 1,PF,Permanent Filling - Per Surface (Voco),CASH,10%,₱1000.00 (10.00% of ₱10000.00),OK
+Katherine Roldan,Tier 1,TF,Temporary Filling,HMO,10%,pays nothing,MISSING
+Katherine Roldan,Tier 1,TF,Temporary Filling,CASH,10%,₱1000.00 (10.00% of ₱10000.00),OK
+Katherine Roldan,Tier 1,Simple extraction,Simple Tooth Extraction,HMO,10%,pays nothing,MISSING
+Katherine Roldan,Tier 1,Simple extraction,Simple Tooth Extraction,CASH,10%,₱1000.00 (10.00% of ₱10000.00),OK
+Katherine Roldan,Tier 1,Flouride,Fluoride (Pedia Only),CASH,10%,₱1000.00 (10.00% of ₱10000.00),OK
+Katherine Roldan,Tier 1,Flouride,Flouride Varnish,CASH,10%,pays nothing,MISSING
+Katherine Roldan,Tier 1,Panoramic xray,Panoramic Xray w/ hard copy,HMO,₱50.00,₱70.00 (0.70% of ₱10000.00),DIFFERENT
+Katherine Roldan,Tier 1,Calcimol,Calcimol,CASH,10%,₱1000.00 (10.00% of ₱10000.00),OK
+Katherine Roldan,Tier 1,Periapical Xray,Periapical Xray,HMO,₱30.00,₱30.00 (0.30% of ₱10000.00),OK
+Katherine Roldan,Tier 1,Ortho Install,Ortho Package (Simple Case),CASH,20%,₱2240.00 (20.00% of ₱11200.00),OK
+Katherine Roldan,Tier 1,Ortho Install,Ortho Package (Complex Case),CASH,20%,₱2240.00 (20.00% of ₱11200.00),OK
+Katherine Roldan,Tier 1,Ortho Adj,Ortho Adj,CASH,20%,pays nothing,MISSING
+Katherine Roldan,Tier 1,RCM,RCM,CASH,20%,pays nothing,MISSING
+Katherine Roldan,Tier 1,Loss Bracket,Lost Bracket,CASH,20%,pays nothing,MISSING
+Katherine Roldan,Tier 1,Expander,(not on the price list),CASH,20%,—,NOT ON PRICE LIST
+Katherine Roldan,Tier 1,Bite plane,Bite Raiser per arch,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Katherine Roldan,Tier 1,Twin block,(not on the price list),CASH,20%,—,NOT ON PRICE LIST
+Katherine Roldan,Tier 1,Ortho Diagnostic Fee Simple case,Ortho Diagnostic Fee Simple case,CASH,20%,₱2240.00 (20.00% of ₱11200.00),OK
+Katherine Roldan,Tier 1,Retainers,Retainers (Hawley)-per arch,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Katherine Roldan,Tier 1,Retainers,Retainers (Invisible)-per arch,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Katherine Roldan,Tier 1,Ortho Removal w/ OP,Ortho Removal w/ OP,CASH,20%,₱2240.00 (20.00% of ₱11200.00),OK
+Katherine Roldan,Tier 1,Retainers (additional pontic),Retainers (additional pontic),CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Katherine Roldan,Tier 1,Complicated extraction,Complicated Tooth Extraction w/ suture (silk),CASH,15%,₱1500.00 (15.00% of ₱10000.00),OK
+Katherine Roldan,Tier 1,Bone Reduction,Bone Reduction,CASH,15%,₱1500.00 (15.00% of ₱10000.00),OK
+Katherine Roldan,Tier 1,Teeth Whitening,Teeth Whitening (3 cycles),CASH,15%,₱1500.00 (15.00% of ₱10000.00),OK
+Katherine Roldan,Tier 1,Gingivectomy,(not on the price list),CASH,15%,—,NOT ON PRICE LIST
+Katherine Roldan,Tier 1,Cosmetic Filling,Cosmetic Filling,CASH,15%,pays nothing,MISSING
+Katherine Roldan,Tier 1,Esthetics Filling,(not on the price list),CASH,15%,—,NOT ON PRICE LIST
+Katherine Roldan,Tier 1,Direct composite Veneers,Veneers (Direct composite) per tooth (warranty of 1 visit),CASH,15%,₱1500.00 (15.00% of ₱10000.00),OK
+Katherine Roldan,Tier 1,Build Up,(not on the price list),CASH,15%,—,NOT ON PRICE LIST
+Katherine Roldan,Tier 1,Surgery,Wisdom Tooth Removal,CASH,15%,₱1500.00 (15.00% of ₱10000.00),OK
+Katherine Roldan,Tier 1,Coronectomy,(not on the price list),CASH,15%,—,NOT ON PRICE LIST
+Katherine Roldan,Tier 1,Root Canal Treatment (Anterior/Posterior),Root Canal Treatment (Anterior),CASH,20%,₱1500.00 (15.00% of ₱10000.00),DIFFERENT
+Katherine Roldan,Tier 1,Root Canal Treatment (Anterior/Posterior),Root Canal Treatment (Posterior),CASH,20%,₱1500.00 (15.00% of ₱10000.00),DIFFERENT
+Katherine Roldan,Tier 1,Post & Core (per post,Post & Core (per post),CASH,20%,₱1500.00 (15.00% of ₱10000.00),DIFFERENT
+Katherine Roldan,Tier 1,Post & Build Up (Per tooth),Post & Build Up (Per tooth),CASH,20%,₱1500.00 (15.00% of ₱10000.00),DIFFERENT
+Katherine Roldan,Tier 1,Flexible Dentures,Flexible Denture - Partial (Per Arch) 1-8 pontics,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Katherine Roldan,Tier 1,Plastic Dentures,Plastic Denture - Partial (Per Arch) 1-3 pontics,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Katherine Roldan,Tier 1,Plastic Dentures,Plastic Denture - Partial 4 pontics up to full,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Katherine Roldan,Tier 1,Plastic Dentures,Plastic Denture - Complete,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Katherine Roldan,Tier 1,Plastic Dentures,Plastic Denture - Partial (Per Arch) 1-3 pontics,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Katherine Roldan,Tier 1,Plastic Dentures,Plastic Denture - Partial 4 pontics up to full,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Katherine Roldan,Tier 1,Plastic Dentures,Plastic Denture - Complete,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Katherine Roldan,Tier 1,Thermosens Dentures,(not on the price list),CASH,20%,—,NOT ON PRICE LIST
+Katherine Roldan,Tier 1,High Impact Plastic Dentures,(not on the price list),CASH,20%,—,NOT ON PRICE LIST
+Katherine Roldan,Tier 1,Ivocap Dentures,Denture (IVOCAP) - Per Arch,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Katherine Roldan,Tier 1,Jacket Crown (Plastic),Jacket Crown (Plastic),CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Katherine Roldan,Tier 1,Jacket Crown (PFM),Jacket Crown (PFM)- Samurai Europe made,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Katherine Roldan,Tier 1,Jacket Crown (PFM)-Tilite,Jacket Crown (PFM)-Tilite (Samurai) (Europe made),CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Katherine Roldan,Tier 1,Jacket Crown (PFM)-Tilite,Jacket Crown (PFM)-Tilite (Swiss or JR),CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Katherine Roldan,Tier 1,Jacket Crown (Emax),Jacket Crown (Emax)- Samurai (Europe made),CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Katherine Roldan,Tier 1,Jacket Crown (Zirconia),Jacket Crown (Zirconia)- Samurai,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Katherine Roldan,Tier 1,Veneers (EMAX),Veneers (Emax)-Samurai Europe made,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Katherine Roldan,Tier 1,Veneers (Zirconia),Veneers (Zirconia)-Samurai Europe made,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Katherine Roldan,Tier 1,Onlay Ceramage,Onlay Ceramage (Samurai),CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Katherine Roldan,Tier 1,Temporary Crown,Temporary Crown,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Katherine Roldan,Tier 1,Ceramage Removal,Ceramage Removal,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Katherine Roldan,Tier 1,Clasp for Maryland,Clasp for Maryland,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Katherine Roldan,Tier 1,Mouth Guard,Mouth Guard,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Katherine Roldan,Tier 1,Dentures Repair,Denture Repair,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+James Russel Banawa,Tier 1,Consultation,Consultation,CASH,10%,₱1000.00 (10.00% of ₱10000.00),OK
+James Russel Banawa,Tier 1,OP,Oral Prophylaxis (MILD),HMO,10%,₱1000.00 (10.00% of ₱10000.00),OK
+James Russel Banawa,Tier 1,OP,Oral Prophylaxis (MODERATE),HMO,10%,₱1000.00 (10.00% of ₱10000.00),OK
+James Russel Banawa,Tier 1,OP,Oral Prophylaxis (SEVERE),HMO,10%,₱1000.00 (10.00% of ₱10000.00),OK
+James Russel Banawa,Tier 1,OP,Oral Prophylaxis (PEDIA),HMO,10%,₱1000.00 (10.00% of ₱10000.00),OK
+James Russel Banawa,Tier 1,OP,Oral Prophylaxis (MILD),CASH,10%,₱1000.00 (10.00% of ₱10000.00),OK
+James Russel Banawa,Tier 1,OP,Oral Prophylaxis (MODERATE),CASH,10%,₱1000.00 (10.00% of ₱10000.00),OK
+James Russel Banawa,Tier 1,OP,Oral Prophylaxis (SEVERE),CASH,10%,₱1000.00 (10.00% of ₱10000.00),OK
+James Russel Banawa,Tier 1,OP,Oral Prophylaxis (PEDIA),CASH,10%,₱1000.00 (10.00% of ₱10000.00),OK
+James Russel Banawa,Tier 1,PF,Permanent Filling (Posterior),HMO,10%,pays nothing,MISSING
+James Russel Banawa,Tier 1,PF,Permanent Filling (Anterior),HMO,10%,pays nothing,MISSING
+James Russel Banawa,Tier 1,PF,Permanent Filling - Per Surface (Voco),HMO,10%,pays nothing,MISSING
+James Russel Banawa,Tier 1,PF,Permanent Filling (Posterior),CASH,10%,₱1000.00 (10.00% of ₱10000.00),OK
+James Russel Banawa,Tier 1,PF,Permanent Filling (Anterior),CASH,10%,₱1000.00 (10.00% of ₱10000.00),OK
+James Russel Banawa,Tier 1,PF,Permanent Filling - Per Surface (Voco),CASH,10%,₱1000.00 (10.00% of ₱10000.00),OK
+James Russel Banawa,Tier 1,TF,Temporary Filling,HMO,10%,pays nothing,MISSING
+James Russel Banawa,Tier 1,TF,Temporary Filling,CASH,10%,₱1000.00 (10.00% of ₱10000.00),OK
+James Russel Banawa,Tier 1,Simple extraction,Simple Tooth Extraction,HMO,10%,pays nothing,MISSING
+James Russel Banawa,Tier 1,Simple extraction,Simple Tooth Extraction,CASH,10%,₱1000.00 (10.00% of ₱10000.00),OK
+James Russel Banawa,Tier 1,Flouride,Fluoride (Pedia Only),CASH,10%,₱1000.00 (10.00% of ₱10000.00),OK
+James Russel Banawa,Tier 1,Flouride,Flouride Varnish,CASH,10%,pays nothing,MISSING
+James Russel Banawa,Tier 1,Panoramic xray,Panoramic Xray w/ hard copy,HMO,₱50.00,₱70.00 (0.70% of ₱10000.00),DIFFERENT
+James Russel Banawa,Tier 1,Calcimol,Calcimol,CASH,10%,₱1000.00 (10.00% of ₱10000.00),OK
+James Russel Banawa,Tier 1,Periapical Xray,Periapical Xray,HMO,₱30.00,₱30.00 (0.30% of ₱10000.00),OK
+James Russel Banawa,Tier 1,Ortho Install,Ortho Package (Simple Case),CASH,15%,₱2240.00 (20.00% of ₱11200.00),DIFFERENT
+James Russel Banawa,Tier 1,Ortho Install,Ortho Package (Complex Case),CASH,15%,₱2240.00 (20.00% of ₱11200.00),DIFFERENT
+James Russel Banawa,Tier 1,Ortho Adj,Ortho Adj,CASH,15%,pays nothing,MISSING
+James Russel Banawa,Tier 1,RCM,RCM,CASH,15%,pays nothing,MISSING
+James Russel Banawa,Tier 1,Loss Bracket,Lost Bracket,CASH,15%,pays nothing,MISSING
+James Russel Banawa,Tier 1,Expander,(not on the price list),CASH,15%,—,NOT ON PRICE LIST
+James Russel Banawa,Tier 1,Bite plane,Bite Raiser per arch,CASH,15%,₱2000.00 (20.00% of ₱10000.00),DIFFERENT
+James Russel Banawa,Tier 1,Twin block,(not on the price list),CASH,15%,—,NOT ON PRICE LIST
+James Russel Banawa,Tier 1,Ortho Diagnostic Fee Simple case,Ortho Diagnostic Fee Simple case,CASH,15%,₱2240.00 (20.00% of ₱11200.00),DIFFERENT
+James Russel Banawa,Tier 1,Retainers,Retainers (Hawley)-per arch,CASH,15%,₱2000.00 (20.00% of ₱10000.00),DIFFERENT
+James Russel Banawa,Tier 1,Retainers,Retainers (Invisible)-per arch,CASH,15%,₱2000.00 (20.00% of ₱10000.00),DIFFERENT
+James Russel Banawa,Tier 1,Ortho Removal w/ OP,Ortho Removal w/ OP,CASH,15%,₱2240.00 (20.00% of ₱11200.00),DIFFERENT
+James Russel Banawa,Tier 1,Retainers (additional pontic),Retainers (additional pontic),CASH,15%,₱2000.00 (20.00% of ₱10000.00),DIFFERENT
+James Russel Banawa,Tier 1,Complicated extraction,Complicated Tooth Extraction w/ suture (silk),CASH,15%,₱1500.00 (15.00% of ₱10000.00),OK
+James Russel Banawa,Tier 1,Bone Reduction,Bone Reduction,CASH,15%,₱1500.00 (15.00% of ₱10000.00),OK
+James Russel Banawa,Tier 1,Teeth Whitening,Teeth Whitening (3 cycles),CASH,15%,₱1500.00 (15.00% of ₱10000.00),OK
+James Russel Banawa,Tier 1,Gingivectomy,(not on the price list),CASH,15%,—,NOT ON PRICE LIST
+James Russel Banawa,Tier 1,Cosmetic Filling,Cosmetic Filling,CASH,15%,pays nothing,MISSING
+James Russel Banawa,Tier 1,Esthetics Filling,(not on the price list),CASH,15%,—,NOT ON PRICE LIST
+James Russel Banawa,Tier 1,Direct composite Veneers,Veneers (Direct composite) per tooth (warranty of 1 visit),CASH,15%,₱1500.00 (15.00% of ₱10000.00),OK
+James Russel Banawa,Tier 1,Build Up,(not on the price list),CASH,15%,—,NOT ON PRICE LIST
+James Russel Banawa,Tier 1,Surgery,Wisdom Tooth Removal,CASH,15%,₱1500.00 (15.00% of ₱10000.00),OK
+James Russel Banawa,Tier 1,Coronectomy,(not on the price list),CASH,15%,—,NOT ON PRICE LIST
+James Russel Banawa,Tier 1,Root Canal Treatment (Anterior/Posterior),Root Canal Treatment (Anterior),CASH,20%,₱1500.00 (15.00% of ₱10000.00),DIFFERENT
+James Russel Banawa,Tier 1,Root Canal Treatment (Anterior/Posterior),Root Canal Treatment (Posterior),CASH,20%,₱1500.00 (15.00% of ₱10000.00),DIFFERENT
+James Russel Banawa,Tier 1,Post & Core (per post,Post & Core (per post),CASH,20%,₱1500.00 (15.00% of ₱10000.00),DIFFERENT
+James Russel Banawa,Tier 1,Post & Build Up (Per tooth),Post & Build Up (Per tooth),CASH,20%,₱1500.00 (15.00% of ₱10000.00),DIFFERENT
+James Russel Banawa,Tier 1,Flexible Dentures,Flexible Denture - Partial (Per Arch) 1-8 pontics,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+James Russel Banawa,Tier 1,Plastic Dentures,Plastic Denture - Partial (Per Arch) 1-3 pontics,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+James Russel Banawa,Tier 1,Plastic Dentures,Plastic Denture - Partial 4 pontics up to full,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+James Russel Banawa,Tier 1,Plastic Dentures,Plastic Denture - Complete,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+James Russel Banawa,Tier 1,Plastic Dentures,Plastic Denture - Partial (Per Arch) 1-3 pontics,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+James Russel Banawa,Tier 1,Plastic Dentures,Plastic Denture - Partial 4 pontics up to full,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+James Russel Banawa,Tier 1,Plastic Dentures,Plastic Denture - Complete,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+James Russel Banawa,Tier 1,Thermosens Dentures,(not on the price list),CASH,20%,—,NOT ON PRICE LIST
+James Russel Banawa,Tier 1,High Impact Plastic Dentures,(not on the price list),CASH,20%,—,NOT ON PRICE LIST
+James Russel Banawa,Tier 1,Ivocap Dentures,Denture (IVOCAP) - Per Arch,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+James Russel Banawa,Tier 1,Jacket Crown (Plastic),Jacket Crown (Plastic),CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+James Russel Banawa,Tier 1,Jacket Crown (PFM),Jacket Crown (PFM)- Samurai Europe made,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+James Russel Banawa,Tier 1,Jacket Crown (PFM)-Tilite,Jacket Crown (PFM)-Tilite (Samurai) (Europe made),CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+James Russel Banawa,Tier 1,Jacket Crown (PFM)-Tilite,Jacket Crown (PFM)-Tilite (Swiss or JR),CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+James Russel Banawa,Tier 1,Jacket Crown (Emax),Jacket Crown (Emax)- Samurai (Europe made),CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+James Russel Banawa,Tier 1,Jacket Crown (Zirconia),Jacket Crown (Zirconia)- Samurai,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+James Russel Banawa,Tier 1,Veneers (EMAX),Veneers (Emax)-Samurai Europe made,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+James Russel Banawa,Tier 1,Veneers (Zirconia),Veneers (Zirconia)-Samurai Europe made,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+James Russel Banawa,Tier 1,Onlay Ceramage,Onlay Ceramage (Samurai),CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+James Russel Banawa,Tier 1,Temporary Crown,Temporary Crown,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+James Russel Banawa,Tier 1,Ceramage Removal,Ceramage Removal,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+James Russel Banawa,Tier 1,Clasp for Maryland,Clasp for Maryland,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+James Russel Banawa,Tier 1,Mouth Guard,Mouth Guard,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+James Russel Banawa,Tier 1,Dentures Repair,Denture Repair,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Anna Beatrice Perez,Tier 1,Consultation,Consultation,CASH,10%,₱1000.00 (10.00% of ₱10000.00),OK
+Anna Beatrice Perez,Tier 1,OP,Oral Prophylaxis (MILD),HMO,10%,₱1000.00 (10.00% of ₱10000.00),OK
+Anna Beatrice Perez,Tier 1,OP,Oral Prophylaxis (MODERATE),HMO,10%,₱1000.00 (10.00% of ₱10000.00),OK
+Anna Beatrice Perez,Tier 1,OP,Oral Prophylaxis (SEVERE),HMO,10%,₱1000.00 (10.00% of ₱10000.00),OK
+Anna Beatrice Perez,Tier 1,OP,Oral Prophylaxis (PEDIA),HMO,10%,₱1000.00 (10.00% of ₱10000.00),OK
+Anna Beatrice Perez,Tier 1,OP,Oral Prophylaxis (MILD),CASH,10%,₱1000.00 (10.00% of ₱10000.00),OK
+Anna Beatrice Perez,Tier 1,OP,Oral Prophylaxis (MODERATE),CASH,10%,₱1000.00 (10.00% of ₱10000.00),OK
+Anna Beatrice Perez,Tier 1,OP,Oral Prophylaxis (SEVERE),CASH,10%,₱1000.00 (10.00% of ₱10000.00),OK
+Anna Beatrice Perez,Tier 1,OP,Oral Prophylaxis (PEDIA),CASH,10%,₱1000.00 (10.00% of ₱10000.00),OK
+Anna Beatrice Perez,Tier 1,PF,Permanent Filling (Posterior),HMO,10%,pays nothing,MISSING
+Anna Beatrice Perez,Tier 1,PF,Permanent Filling (Anterior),HMO,10%,pays nothing,MISSING
+Anna Beatrice Perez,Tier 1,PF,Permanent Filling - Per Surface (Voco),HMO,10%,pays nothing,MISSING
+Anna Beatrice Perez,Tier 1,PF,Permanent Filling (Posterior),CASH,10%,₱1000.00 (10.00% of ₱10000.00),OK
+Anna Beatrice Perez,Tier 1,PF,Permanent Filling (Anterior),CASH,10%,₱1000.00 (10.00% of ₱10000.00),OK
+Anna Beatrice Perez,Tier 1,PF,Permanent Filling - Per Surface (Voco),CASH,10%,₱1000.00 (10.00% of ₱10000.00),OK
+Anna Beatrice Perez,Tier 1,TF,Temporary Filling,HMO,10%,₱250.00 (2.50% of ₱10000.00),DIFFERENT
+Anna Beatrice Perez,Tier 1,TF,Temporary Filling,CASH,10%,pays nothing,MISSING
+Anna Beatrice Perez,Tier 1,Simple extraction,Simple Tooth Extraction,HMO,10%,pays nothing,MISSING
+Anna Beatrice Perez,Tier 1,Simple extraction,Simple Tooth Extraction,CASH,10%,₱1000.00 (10.00% of ₱10000.00),OK
+Anna Beatrice Perez,Tier 1,Flouride,Fluoride (Pedia Only),CASH,10%,₱1000.00 (10.00% of ₱10000.00),OK
+Anna Beatrice Perez,Tier 1,Flouride,Flouride Varnish,CASH,10%,pays nothing,MISSING
+Anna Beatrice Perez,Tier 1,Panoramic xray,Panoramic Xray w/ hard copy,HMO,₱50.00,₱70.00 (0.70% of ₱10000.00),DIFFERENT
+Anna Beatrice Perez,Tier 1,Calcimol,Calcimol,CASH,10%,₱1000.00 (10.00% of ₱10000.00),OK
+Anna Beatrice Perez,Tier 1,Periapical Xray,Periapical Xray,HMO,₱30.00,₱30.00 (0.30% of ₱10000.00),OK
+Anna Beatrice Perez,Tier 1,Ortho Install,Ortho Package (Simple Case),CASH,15%,₱2240.00 (20.00% of ₱11200.00),DIFFERENT
+Anna Beatrice Perez,Tier 1,Ortho Install,Ortho Package (Complex Case),CASH,15%,₱2240.00 (20.00% of ₱11200.00),DIFFERENT
+Anna Beatrice Perez,Tier 1,Ortho Adj,Ortho Adj,CASH,15%,pays nothing,MISSING
+Anna Beatrice Perez,Tier 1,RCM,RCM,CASH,15%,pays nothing,MISSING
+Anna Beatrice Perez,Tier 1,Loss Bracket,Lost Bracket,CASH,15%,pays nothing,MISSING
+Anna Beatrice Perez,Tier 1,Expander,(not on the price list),CASH,15%,—,NOT ON PRICE LIST
+Anna Beatrice Perez,Tier 1,Bite plane,Bite Raiser per arch,CASH,15%,₱2000.00 (20.00% of ₱10000.00),DIFFERENT
+Anna Beatrice Perez,Tier 1,Twin block,(not on the price list),CASH,15%,—,NOT ON PRICE LIST
+Anna Beatrice Perez,Tier 1,Ortho Diagnostic Fee Simple case,Ortho Diagnostic Fee Simple case,CASH,15%,₱2240.00 (20.00% of ₱11200.00),DIFFERENT
+Anna Beatrice Perez,Tier 1,Retainers,Retainers (Hawley)-per arch,CASH,15%,₱2000.00 (20.00% of ₱10000.00),DIFFERENT
+Anna Beatrice Perez,Tier 1,Retainers,Retainers (Invisible)-per arch,CASH,15%,₱2000.00 (20.00% of ₱10000.00),DIFFERENT
+Anna Beatrice Perez,Tier 1,Ortho Removal w/ OP,Ortho Removal w/ OP,CASH,15%,₱2240.00 (20.00% of ₱11200.00),DIFFERENT
+Anna Beatrice Perez,Tier 1,Retainers (additional pontic),Retainers (additional pontic),CASH,15%,₱2000.00 (20.00% of ₱10000.00),DIFFERENT
+Anna Beatrice Perez,Tier 1,Complicated extraction,Complicated Tooth Extraction w/ suture (silk),CASH,15%,₱1500.00 (15.00% of ₱10000.00),OK
+Anna Beatrice Perez,Tier 1,Bone Reduction,Bone Reduction,CASH,15%,₱1500.00 (15.00% of ₱10000.00),OK
+Anna Beatrice Perez,Tier 1,Teeth Whitening,Teeth Whitening (3 cycles),CASH,15%,₱1500.00 (15.00% of ₱10000.00),OK
+Anna Beatrice Perez,Tier 1,Gingivectomy,(not on the price list),CASH,15%,—,NOT ON PRICE LIST
+Anna Beatrice Perez,Tier 1,Cosmetic Filling,Cosmetic Filling,CASH,15%,pays nothing,MISSING
+Anna Beatrice Perez,Tier 1,Esthetics Filling,(not on the price list),CASH,15%,—,NOT ON PRICE LIST
+Anna Beatrice Perez,Tier 1,Direct composite Veneers,Veneers (Direct composite) per tooth (warranty of 1 visit),CASH,15%,₱1500.00 (15.00% of ₱10000.00),OK
+Anna Beatrice Perez,Tier 1,Build Up,(not on the price list),CASH,15%,—,NOT ON PRICE LIST
+Anna Beatrice Perez,Tier 1,Surgery,Wisdom Tooth Removal,CASH,15%,₱1500.00 (15.00% of ₱10000.00),OK
+Anna Beatrice Perez,Tier 1,Coronectomy,(not on the price list),CASH,15%,—,NOT ON PRICE LIST
+Anna Beatrice Perez,Tier 1,Root Canal Treatment (Anterior/Posterior),Root Canal Treatment (Anterior),CASH,20%,₱1500.00 (15.00% of ₱10000.00),DIFFERENT
+Anna Beatrice Perez,Tier 1,Root Canal Treatment (Anterior/Posterior),Root Canal Treatment (Posterior),CASH,20%,₱1500.00 (15.00% of ₱10000.00),DIFFERENT
+Anna Beatrice Perez,Tier 1,Post & Core (per post,Post & Core (per post),CASH,20%,₱1500.00 (15.00% of ₱10000.00),DIFFERENT
+Anna Beatrice Perez,Tier 1,Post & Build Up (Per tooth),Post & Build Up (Per tooth),CASH,20%,₱1500.00 (15.00% of ₱10000.00),DIFFERENT
+Anna Beatrice Perez,Tier 1,Flexible Dentures,Flexible Denture - Partial (Per Arch) 1-8 pontics,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Anna Beatrice Perez,Tier 1,Plastic Dentures,Plastic Denture - Partial (Per Arch) 1-3 pontics,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Anna Beatrice Perez,Tier 1,Plastic Dentures,Plastic Denture - Partial 4 pontics up to full,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Anna Beatrice Perez,Tier 1,Plastic Dentures,Plastic Denture - Complete,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Anna Beatrice Perez,Tier 1,Plastic Dentures,Plastic Denture - Partial (Per Arch) 1-3 pontics,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Anna Beatrice Perez,Tier 1,Plastic Dentures,Plastic Denture - Partial 4 pontics up to full,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Anna Beatrice Perez,Tier 1,Plastic Dentures,Plastic Denture - Complete,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Anna Beatrice Perez,Tier 1,Thermosens Dentures,(not on the price list),CASH,20%,—,NOT ON PRICE LIST
+Anna Beatrice Perez,Tier 1,High Impact Plastic Dentures,(not on the price list),CASH,20%,—,NOT ON PRICE LIST
+Anna Beatrice Perez,Tier 1,Ivocap Dentures,Denture (IVOCAP) - Per Arch,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Anna Beatrice Perez,Tier 1,Jacket Crown (Plastic),Jacket Crown (Plastic),CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Anna Beatrice Perez,Tier 1,Jacket Crown (PFM),Jacket Crown (PFM)- Samurai Europe made,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Anna Beatrice Perez,Tier 1,Jacket Crown (PFM)-Tilite,Jacket Crown (PFM)-Tilite (Samurai) (Europe made),CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Anna Beatrice Perez,Tier 1,Jacket Crown (PFM)-Tilite,Jacket Crown (PFM)-Tilite (Swiss or JR),CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Anna Beatrice Perez,Tier 1,Jacket Crown (Emax),Jacket Crown (Emax)- Samurai (Europe made),CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Anna Beatrice Perez,Tier 1,Jacket Crown (Zirconia),Jacket Crown (Zirconia)- Samurai,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Anna Beatrice Perez,Tier 1,Veneers (EMAX),Veneers (Emax)-Samurai Europe made,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Anna Beatrice Perez,Tier 1,Veneers (Zirconia),Veneers (Zirconia)-Samurai Europe made,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Anna Beatrice Perez,Tier 1,Onlay Ceramage,Onlay Ceramage (Samurai),CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Anna Beatrice Perez,Tier 1,Temporary Crown,Temporary Crown,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Anna Beatrice Perez,Tier 1,Ceramage Removal,Ceramage Removal,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Anna Beatrice Perez,Tier 1,Clasp for Maryland,Clasp for Maryland,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Anna Beatrice Perez,Tier 1,Mouth Guard,Mouth Guard,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK
+Anna Beatrice Perez,Tier 1,Dentures Repair,Denture Repair,CASH,20%,₱2000.00 (20.00% of ₱10000.00),OK

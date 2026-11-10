@@ -15,6 +15,8 @@ export type AuditAction =
   | "patient.merged"
   | "expense.updated"
   | "expense.deleted"
+  | "hmo_billing.created"
+  | "hmo_billing.voided"
   | "user.created"
   | "user.password_reset"
   | "user.reset_dismissed"
@@ -46,6 +48,8 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   "patient.merged": "Patients merged",
   "expense.updated": "Expense edited",
   "expense.deleted": "Expense deleted",
+  "hmo_billing.created": "HMO billing generated",
+  "hmo_billing.voided": "HMO billing voided",
   "user.created": "User created",
   "user.password_reset": "Password reset",
   "user.reset_dismissed": "Reset request dismissed",

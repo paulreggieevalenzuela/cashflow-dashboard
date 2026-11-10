@@ -28,6 +28,11 @@ const TABS = [
     href: "/cashflow/day-end",
   },
   {
+    key: "hmo",
+    label: "HMO billing",
+    href: "/cashflow/hmo",
+  },
+  {
     key: "audit",
     label: "Audit",
     href: "/cashflow/transactions?tab=audit",

@@ -8,6 +8,7 @@
  * own. The database side is `src/lib/db/day-end.ts`.
  */
 
+import type { HmoBillingLine } from "@/lib/cashflow/hmo-billing";
 import { HMO_PAYMENT_TYPES, isHmoPayment, round2 } from "@/lib/cashflow/pricing";
 import type { Cell, SheetInput } from "@/lib/cashflow/xlsx";
 
@@ -33,13 +34,6 @@ export type DayEndRow = {
   isReservation: boolean;
 };
 
-export type DayEndExpense = {
-  category: string;
-  description: string;
-  paymentMethod: string;
-  amount: number;
-};
-
 /** A visit of the day that is billed to an HMO (whether or not it is paid yet). */
 export type DayEndHmoVisit = {
   /** The HMO's name as used for the payment method, e.g. "Maxicare". */
@@ -63,7 +57,9 @@ export type DayEndReport = {
   rows: DayEndRow[];
   /** The day's visits that are billed to an HMO. */
   hmoVisits: DayEndHmoVisit[];
-  expenses: DayEndExpense[];
+  /** The same day's HMO work, one row per procedure line (company, patient,
+   * account #, LOA, LOE, procedure, tooth #, amount). */
+  hmoLines: HmoBillingLine[];
 };
 
 /** The breakdown columns, in the order of the clinic's sheet. */
@@ -123,7 +119,6 @@ export type DayEndTotals = {
   reservationFees: number;
   /** `collected` less the HMO part. */
   collectedWithoutHmo: number;
-  expenses: number;
   visitsWithoutPayment: number;
   paymentCount: number;
 };
@@ -267,9 +262,6 @@ export function summarizeDayEnd(report: DayEndReport): {
       hmo: round2(hmo),
       reservationFees: round2(reservationFees),
       collectedWithoutHmo: round2(collected - hmo),
-      expenses: round2(
-        report.expenses.reduce((sum, expense) => sum + expense.amount, 0),
-      ),
       visitsWithoutPayment,
       paymentCount,
     },
@@ -327,7 +319,8 @@ export const DAY_END_HEADERS = [
 
 /** The report as a grid of cells, in the layout of the clinic's own sheet:
  * title and date, the payment rows, the breakdown by method, the totals and
- * (when there are any) the day's expenses. Used for both CSV and Excel. */
+ * (when there are any) the HMO summary and the HMO rows. Expenses are not
+ * part of the report. Used for both CSV and Excel. */
 export function buildDayEndSheet(report: DayEndReport): SheetInput {
   const { breakdown, totals } = summarizeDayEnd(report);
   const rows: Cell[][] = [];
@@ -404,44 +397,39 @@ export function buildDayEndSheet(report: DayEndReport): SheetInput {
       ],
       true,
     );
+  }
+
+  if (report.hmoLines.length > 0) {
     push([]);
     push(
       [
         "HMO",
         "Patient",
-        "Account No.",
-        "LOA No.",
+        "HMO account #",
+        "LOA #",
+        "LOE #",
         "Procedure",
-        "Billed",
-        "Received",
+        "Tooth #",
+        "Amount",
       ],
       true,
     );
-    for (const visit of hmoSummary.lines) {
+    let hmoTotal = 0;
+    for (const line of report.hmoLines) {
+      hmoTotal = round2(hmoTotal + line.amount);
       push([
-        visit.hmo,
-        visit.patientName,
-        visit.hmoAccountNumber,
-        visit.loaNumber,
-        visit.procedure,
-        visit.billed,
-        visit.received,
+        line.hmo,
+        line.patientName,
+        line.hmoAccountNumber,
+        // Same wording as the HMO billing (LOA_PENDING_TEXT).
+        line.loaNumber.trim() || "LOA pending",
+        line.loeNumber,
+        line.procedure,
+        line.teeth,
+        line.amount,
       ]);
     }
-  }
-
-  if (report.expenses.length > 0) {
-    push([]);
-    push(["Expenses", "Description", "Paid by", "Amount"], true);
-    for (const expense of report.expenses) {
-      push([
-        expense.category,
-        expense.description,
-        expense.paymentMethod,
-        expense.amount,
-      ]);
-    }
-    push(["Total expenses", "", "", totals.expenses], true);
+    push(["Total HMO amount", "", "", "", "", "", "", hmoTotal], true);
   }
 
   return {

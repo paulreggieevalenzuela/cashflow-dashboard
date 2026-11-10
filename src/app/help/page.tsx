@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { LegalShell } from "@/components/legal/legal-shell";
+import { APP_RELEASE_DATE, APP_VERSION } from "@/lib/cashflow/version";
 
 export const metadata: Metadata = {
   title: "Help & FAQ | ADT Dental Clinic",
@@ -91,11 +92,32 @@ const GROUPS: Group[] = [
     items: [
       {
         q: "What is on the Day end page?",
-        a: "The day's visits, payments by method, expenses, the HMO summary and totals for the branch. Staff see their own branch; admins can pick a branch.",
+        a: "The day's visits, payments by method, the HMO summary, every HMO procedure (company, patient, account #, LOA, LOE, tooth # and amount) and the totals for the branch. Expenses are not part of the report. Staff see their own branch; admins can pick a branch.",
       },
       {
         q: "Can I download a report?",
         a: "Yes. Use the download buttons on Day end and the Transactions list for CSV or Excel files. Treat downloads as confidential and delete them when you no longer need them.",
+      },
+    ],
+  },
+  {
+    title: "HMO billing",
+    items: [
+      {
+        q: "How do I bill an HMO?",
+        a: "Open Transactions, then the HMO billing tab. Pick the HMO, the branch and the cut-off dates (From and To, both days included), check the rows and the total, then press Generate billing. The billing gets its own number and can be printed or saved as PDF, or downloaded as Excel or CSV.",
+      },
+      {
+        q: "What does the billing number look like?",
+        a: "HMO, the branch code, the year and a running number, for example HMO-MAR-26-0001. The running number counts per branch per year.",
+      },
+      {
+        q: "What is on each row?",
+        a: "Visit date, patient, HMO account #, LOA #, LOE #, procedure, tooth # and the amount billed to the HMO. A line with no LOA shows \"LOA pending\" and is still counted in the total.",
+      },
+      {
+        q: "Can the same line be billed twice?",
+        a: "No. A line already on a billing is left out of the next one. If a billing was made by mistake, an admin can void it and its lines can be billed again.",
       },
     ],
   },
@@ -157,6 +179,9 @@ export default function HelpPage() {
           </div>
         </section>
       ))}
+      <p className="text-xs text-zinc-400">
+        Cashflow version {APP_VERSION} ({APP_RELEASE_DATE}). The list of changes is in CHANGELOG.md.
+      </p>
       <p className="text-sm text-zinc-500">
         Read our <Link href="/privacy" className="text-amber-700 underline underline-offset-2">Privacy Policy</Link>{" "}
         and <Link href="/terms" className="text-amber-700 underline underline-offset-2">Terms of Use</Link>.

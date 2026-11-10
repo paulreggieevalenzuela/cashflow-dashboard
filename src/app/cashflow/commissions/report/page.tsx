@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth/access";
+import { DownloadButton } from "@/components/ui/download-button";
 import {
   COMMISSION_HEADERS,
   COMMISSION_SORT_KEYS,
@@ -95,20 +96,8 @@ export default async function CommissionReportPage({
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <a
-            href={`/api/cashflow/commissions/report?${query.toString()}&format=xlsx`}
-            download={`${fileName}.xlsx`}
-            className="rounded-lg bg-amber-600 px-3.5 py-2 text-sm font-medium text-white hover:bg-amber-700"
-          >
-            Download Excel
-          </a>
-          <a
-            href={`/api/cashflow/commissions/report?${query.toString()}&format=csv`}
-            download={`${fileName}.csv`}
-            className="rounded-lg border border-zinc-300 px-3.5 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
-          >
-            Download CSV
-          </a>
+          <DownloadButton href={`/api/cashflow/commissions/report?${query.toString()}&format=xlsx`} fileName={`${fileName}.xlsx`} variant="primary">Download Excel</DownloadButton>
+          <DownloadButton href={`/api/cashflow/commissions/report?${query.toString()}&format=csv`} fileName={`${fileName}.csv`}>Download CSV</DownloadButton>
         </div>
       </div>
 

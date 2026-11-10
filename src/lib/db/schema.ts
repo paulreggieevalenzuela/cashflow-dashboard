@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { boolean, index, integer, jsonb, numeric, pgEnum, pgTable, smallint, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
+import { boolean, index, integer, jsonb, numeric, pgEnum, pgTable, primaryKey, smallint, text, timestamp, unique, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 
 /**
  * A physical clinic location. Dentist/staff accounts and transactions can
@@ -703,3 +703,73 @@ export type InvoiceStatusHistoryRow = typeof invoiceStatusHistory.$inferSelect;
 
 export type InvoiceRow = typeof invoices.$inferSelect;
 export type NewInvoiceRow = typeof invoices.$inferInsert;
+
+/**
+ * An HMO billing: one HMO + one branch + one cut-off date range, saved with
+ * an automatic number (HMO-MAR-26-0001). The saved rows live in
+ * `hmoBillingLines`; a billing keeps its own copy of each row so the file
+ * sent to the HMO can always be produced again as it was. Created by
+ * `scripts/sql/2026-11-hmo-billings.sql`.
+ */
+export const hmoBillings = pgTable("hmo_billings", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  billingNumber: text("billing_number").notNull().unique(),
+  hmo: text("hmo").notNull(),
+  branchId: uuid("branch_id").references(() => branches.id, { onDelete: "set null" }),
+  // The branch name as it was when the billing was made.
+  branchName: text("branch_name").notNull().default(""),
+  // Cut-off range, clinic dates (YYYY-MM-DD), both days included.
+  periodFrom: text("period_from").notNull(),
+  periodTo: text("period_to").notNull(),
+  totalAmount: numeric("total_amount", { precision: 12, scale: 2 }).notNull().default("0"),
+  lineCount: integer("line_count").notNull().default(0),
+  patientCount: integer("patient_count").notNull().default(0),
+  // Lines with no LOA yet when the billing was made.
+  pendingLoaCount: integer("pending_loa_count").notNull().default(0),
+  // "Active" | "Void". A voided billing releases its lines.
+  status: text("status").notNull().default("Active"),
+  createdByUserId: uuid("created_by_user_id").references(() => users.id, { onDelete: "set null" }),
+  createdByName: text("created_by_name").notNull().default(""),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  voidedAt: timestamp("voided_at", { withTimezone: true }),
+  voidedByName: text("voided_by_name").notNull().default(""),
+}, (table) => [
+  index("hmo_billings_branch_created_idx").on(table.branchId, table.createdAt),
+  index("hmo_billings_hmo_idx").on(table.hmo),
+]);
+
+export const hmoBillingLines = pgTable("hmo_billing_lines", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  billingId: uuid("billing_id").notNull().references(() => hmoBillings.id, { onDelete: "cascade" }),
+  // The procedure line (transactions.id) the row was made from. Plain text,
+  // not a link: removing a visit never changes a saved billing.
+  transactionId: text("transaction_id").notNull(),
+  lineNumber: integer("line_number").notNull().default(0),
+  visitId: text("visit_id").notNull().default(""),
+  visitDate: text("visit_date").notNull(),
+  patientName: text("patient_name").notNull().default(""),
+  hmoAccountNumber: text("hmo_account_number").notNull().default(""),
+  loaNumber: text("loa_number").notNull().default(""),
+  loeNumber: text("loe_number").notNull().default(""),
+  procedure: text("procedure").notNull().default(""),
+  teeth: text("teeth").notNull().default(""),
+  amount: numeric("amount", { precision: 12, scale: 2 }).notNull().default("0"),
+  // True while the billing is Active. The unique index lets a procedure line
+  // be on ONE active billing only, even if two people generate at once.
+  active: boolean("active").notNull().default(true),
+}, (table) => [
+  index("hmo_billing_lines_billing_idx").on(table.billingId, table.lineNumber),
+  uniqueIndex("hmo_billing_lines_active_transaction_idx").on(table.transactionId).where(sql`${table.active}`),
+]);
+
+/** The running billing number per branch code and year. */
+export const hmoBillingCounters = pgTable("hmo_billing_counters", {
+  prefix: text("prefix").notNull(),
+  year: smallint("year").notNull(),
+  lastNumber: integer("last_number").notNull().default(0),
+}, (table) => [
+  primaryKey({ columns: [table.prefix, table.year] }),
+]);
+
+export type HmoBillingRow = typeof hmoBillings.$inferSelect;
+export type HmoBillingLineRow = typeof hmoBillingLines.$inferSelect;

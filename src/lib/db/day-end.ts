@@ -3,7 +3,6 @@ import { db } from "@/lib/db/client";
 import { getUserById } from "@/lib/db/users";
 import {
   branches,
-  expenses,
   invoices,
   patients,
   payments,
@@ -11,12 +10,12 @@ import {
 } from "@/lib/db/schema";
 import {
   hmoNameFor,
-  type DayEndExpense,
   type DayEndHmoVisit,
   type DayEndReport,
   type DayEndRow,
 } from "@/lib/cashflow/day-end";
 import { getInvoiceSummaries } from "@/lib/db/invoices";
+import { getHmoBillingLines } from "@/lib/db/hmo-billing";
 import {
   allocateProportionally,
   computeMerchantFee,
@@ -151,7 +150,7 @@ async function getHmoVisits(input: {
 /**
  * Everything received on `date` for one branch (or every branch when
  * `branchId` is null): one row per payment, then one row for each visit of
- * that day that took no payment, plus the branch's expenses for the day.
+ * that day that took no payment, plus the day's HMO lines (no expenses).
  *
  * VAT and withholding tax are kept on the procedure lines of a visit, so a
  * payment carries the share of them that matches its share of the bill. The
@@ -357,30 +356,16 @@ export async function getDayEndReport(input: {
     branchFilter,
   });
 
-  const dayExpenses: DayEndExpense[] = (
-    await db
-      .select({
-        category: expenses.category,
-        description: expenses.description,
-        paymentMethod: expenses.paymentMethod,
-        amount: expenses.amount,
-      })
-      .from(expenses)
-      .where(
-        and(
-          eq(expenses.date, input.date),
-          input.branchId ? eq(expenses.branchId, input.branchId) : undefined,
-        ),
-      )
-      .orderBy(asc(expenses.createdAt))
-  ).map((expense) => ({
-    category: expense.category,
-    description: expense.description,
-    paymentMethod: expense.paymentMethod,
-    amount: round2(Number(expense.amount)),
-  }));
+  // The same rows the HMO billing uses, so the two cannot disagree. Lines
+  // already on a saved billing are still shown: Day end reports the day.
+  const hmoLines = await getHmoBillingLines({
+    from: input.date,
+    to: input.date,
+    branchId: input.branchId,
+    hmo: null,
+  });
 
-  return { branchName, date: input.date, rows, hmoVisits, expenses: dayExpenses };
+  return { branchName, date: input.date, rows, hmoVisits, hmoLines };
 }
 
 /**

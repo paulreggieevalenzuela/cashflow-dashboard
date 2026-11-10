@@ -1,7 +1,11 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth/access";
+import { DownloadButton } from "@/components/ui/download-button";
+import { HmoBillingTable } from "@/components/cashflow/hmo-billing-table";
 import { TransactionsTabs } from "@/components/cashflow/transactions-tabs";
+import { summarizeHmoLines } from "@/lib/cashflow/hmo-billing";
 import {
   DAY_END_HEADERS,
   dayEndFileName,
@@ -48,6 +52,7 @@ export default async function DayEndPage({
   const report = await getDayEndReport({ branchId: scope.branchId, date });
   const { breakdown, totals } = summarizeDayEnd(report);
   const hmoSummary = summarizeHmo(report.hmoVisits);
+  const hmoLineTotals = summarizeHmoLines(report.hmoLines);
   const isAdmin = session.user.role === "admin";
 
   const query = new URLSearchParams({
@@ -71,20 +76,8 @@ export default async function DayEndPage({
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <a
-            href={`/api/cashflow/day-end?${query.toString()}&format=xlsx`}
-            download={`${fileName}.xlsx`}
-            className="rounded-lg bg-amber-600 px-3.5 py-2 text-sm font-medium text-white hover:bg-amber-700"
-          >
-            Download Excel
-          </a>
-          <a
-            href={`/api/cashflow/day-end?${query.toString()}&format=csv`}
-            download={`${fileName}.csv`}
-            className="rounded-lg border border-zinc-300 px-3.5 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
-          >
-            Download CSV
-          </a>
+          <DownloadButton href={`/api/cashflow/day-end?${query.toString()}&format=xlsx`} fileName={`${fileName}.xlsx`} variant="primary">Download Excel</DownloadButton>
+          <DownloadButton href={`/api/cashflow/day-end?${query.toString()}&format=csv`} fileName={`${fileName}.csv`}>Download CSV</DownloadButton>
         </div>
       </div>
 
@@ -228,52 +221,26 @@ export default async function DayEndPage({
             </div>
 
             <h4 className="mt-5 text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-              Patients billed to HMOs
+              HMO work by procedure
             </h4>
-            <div className="mt-2 overflow-x-auto">
-              <table className="w-full min-w-[720px] text-left text-sm">
-                <thead className="text-xs uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-                  <tr>
-                    <th className="py-2 pr-3 font-medium">HMO</th>
-                    <th className="px-3 py-2 font-medium">Patient</th>
-                    <th className="px-3 py-2 font-medium">Account no.</th>
-                    <th className="px-3 py-2 font-medium">LOA no.</th>
-                    <th className="px-3 py-2 font-medium">Procedure</th>
-                    <th className="px-3 py-2 text-right font-medium">Billed</th>
-                    <th className="py-2 pl-3 text-right font-medium">
-                      Received
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
-                  {hmoSummary.lines.map((visit, index) => (
-                    <tr key={`${visit.hmo}-${visit.patientName}-${index}`}>
-                      <td className="whitespace-nowrap py-2 pr-3">
-                        {visit.hmo}
-                      </td>
-                      <td className="px-3 py-2">{visit.patientName}</td>
-                      <td className="px-3 py-2 font-mono text-xs">
-                        {visit.hmoAccountNumber || (
-                          <span className="font-sans text-zinc-400">
-                            Not on file
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-3 py-2 font-mono text-xs">
-                        {visit.loaNumber || (
-                          <span className="font-sans text-orange-600 dark:text-orange-400">
-                            LOA pending
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-3 py-2">{visit.procedure}</td>
-                      <HmoMoney value={visit.billed} />
-                      <HmoMoney value={visit.received} last />
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="mt-2">
+              <HmoBillingTable
+                lines={report.hmoLines}
+                total={hmoLineTotals.total}
+                showHmo
+                emptyText="No HMO procedure lines on this day."
+              />
             </div>
+            <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
+              To bill an HMO for a range of dates, use the{" "}
+              <Link
+                href="/cashflow/hmo"
+                className="text-amber-700 hover:underline dark:text-amber-400"
+              >
+                HMO billing
+              </Link>{" "}
+              tab.
+            </p>
           </>
         )}
       </section>
@@ -373,32 +340,6 @@ export default async function DayEndPage({
           <span className="tabular-nums">{money.format(totals.collected)}</span>
         </p>
       </section>
-
-      {report.expenses.length > 0 && (
-        <section className="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-950">
-          <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">
-            Expenses recorded this day
-          </h3>
-          <ul className="mt-3 divide-y divide-zinc-200 text-sm dark:divide-zinc-800">
-            {report.expenses.map((expense, index) => (
-              <li key={index} className="flex justify-between gap-4 py-2">
-                <span>
-                  {expense.category}
-                  {expense.description ? ` — ${expense.description}` : ""}
-                  {expense.paymentMethod ? ` (${expense.paymentMethod})` : ""}
-                </span>
-                <span className="tabular-nums">
-                  {money.format(expense.amount)}
-                </span>
-              </li>
-            ))}
-          </ul>
-          <p className="mt-3 text-sm font-semibold text-zinc-900 dark:text-zinc-50">
-            Total expenses{" "}
-            <span className="tabular-nums">{money.format(totals.expenses)}</span>
-          </p>
-        </section>
-      )}
     </div>
   );
 }
