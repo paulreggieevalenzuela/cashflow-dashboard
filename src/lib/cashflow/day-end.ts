@@ -8,7 +8,6 @@
  * own. The database side is `src/lib/db/day-end.ts`.
  */
 
-import type { HmoBillingLine } from "@/lib/cashflow/hmo-billing";
 import { HMO_PAYMENT_TYPES, isHmoPayment, round2 } from "@/lib/cashflow/pricing";
 import type { Cell, SheetInput } from "@/lib/cashflow/xlsx";
 
@@ -32,21 +31,17 @@ export type DayEndRow = {
   withholdingTax: number;
   netCollection: number;
   isReservation: boolean;
-};
-
-/** A visit of the day that is billed to an HMO (whether or not it is paid yet). */
-export type DayEndHmoVisit = {
-  /** The HMO's name as used for the payment method, e.g. "Maxicare". */
+  /** HMO details of the visit, on the same row (blank when it is not an HMO
+   * visit). Several procedures' LOA / tooth numbers are joined with ", ". */
   hmo: string;
-  patientName: string;
-  /** The patient's account (member) number with the HMO, from their profile. */
+  /** The patient's account (member) number with the HMO. */
   hmoAccountNumber: string;
   loaNumber: string;
-  procedure: string;
-  /** What the visit comes to (the amount billed to the HMO). */
-  billed: number;
-  /** What has been recorded as received for the visit so far. */
-  received: number;
+  loeNumber: string;
+  teeth: string;
+  /** What the visit is billed to the HMO. Shown on the visit's first row of
+   * the day only, so it is never counted twice. */
+  hmoBilled: number;
 };
 
 export type DayEndReport = {
@@ -55,11 +50,6 @@ export type DayEndReport = {
   /** YYYY-MM-DD */
   date: string;
   rows: DayEndRow[];
-  /** The day's visits that are billed to an HMO. */
-  hmoVisits: DayEndHmoVisit[];
-  /** The same day's HMO work, one row per procedure line (company, patient,
-   * account #, LOA, LOE, procedure, tooth #, amount). */
-  hmoLines: HmoBillingLine[];
 };
 
 /** The breakdown columns, in the order of the clinic's sheet. */
@@ -115,6 +105,8 @@ export type DayEndTotals = {
   netCollection: number;
   /** Part of `collected` paid through an HMO (billed to the HMO, not cash in hand). */
   hmo: number;
+  /** Billed to HMOs for the visits on the report (each visit once). */
+  hmoBilled: number;
   /** Part of `collected` that is reservation fees. */
   reservationFees: number;
   /** `collected` less the HMO part. */
@@ -123,26 +115,8 @@ export type DayEndTotals = {
   paymentCount: number;
 };
 
-/** One HMO company's share of the day's visits. */
-export type HmoSummaryRow = {
-  hmo: string;
-  /** Different patients billed to this HMO that day. */
-  patients: number;
-  visits: number;
-  /** Billed to the HMO. */
-  billed: number;
-  /** Already recorded as received. */
-  received: number;
-  /** Billed less received (never below 0). */
-  toCollect: number;
-};
-
-export type HmoSummary = {
-  rows: HmoSummaryRow[];
-  /** One line per HMO visit, grouped by HMO. */
-  lines: DayEndHmoVisit[];
-  total: Omit<HmoSummaryRow, "hmo">;
-};
+/** What a row shows when an HMO visit has no LOA number yet. */
+export const LOA_PENDING = "LOA pending";
 
 /** The HMO's proper name for a payment type ("avega" → "Avega"). */
 export function hmoNameFor(paymentType: string): string {
@@ -151,70 +125,6 @@ export function hmoNameFor(paymentType: string): string {
     HMO_PAYMENT_TYPES.find((name) => name.toLowerCase() === wanted) ??
     paymentType.trim()
   );
-}
-
-/**
- * The day's HMO amounts, per HMO company: how many patients and visits, how
- * much is billed to the HMO, how much has been received and how much is
- * still to collect. Built from the day's visits (an HMO visit is billed on
- * the day even though the HMO pays later). Lines are grouped by HMO in the
- * order of the HMO list, then by patient.
- */
-export function summarizeHmo(visits: DayEndHmoVisit[]): HmoSummary {
-  const order = (name: string) => {
-    const index = HMO_PAYMENT_TYPES.findIndex((hmo) => hmo === name);
-    return index === -1 ? HMO_PAYMENT_TYPES.length : index;
-  };
-  const lines = [...visits].sort(
-    (a, b) =>
-      order(a.hmo) - order(b.hmo) ||
-      a.hmo.localeCompare(b.hmo) ||
-      a.patientName.localeCompare(b.patientName),
-  );
-
-  const byHmo = new Map<
-    string,
-    { names: Set<string>; visits: number; billed: number; received: number }
-  >();
-  const everyone = new Set<string>();
-  let billed = 0;
-  let received = 0;
-  for (const visit of lines) {
-    const key = visit.patientName.trim().toLowerCase();
-    const entry = byHmo.get(visit.hmo) ?? {
-      names: new Set<string>(),
-      visits: 0,
-      billed: 0,
-      received: 0,
-    };
-    entry.names.add(key);
-    entry.visits += 1;
-    entry.billed = round2(entry.billed + visit.billed);
-    entry.received = round2(entry.received + visit.received);
-    byHmo.set(visit.hmo, entry);
-    everyone.add(key);
-    billed = round2(billed + visit.billed);
-    received = round2(received + visit.received);
-  }
-
-  return {
-    rows: [...byHmo.entries()].map(([hmo, entry]) => ({
-      hmo,
-      patients: entry.names.size,
-      visits: entry.visits,
-      billed: entry.billed,
-      received: entry.received,
-      toCollect: Math.max(0, round2(entry.billed - entry.received)),
-    })),
-    lines,
-    total: {
-      patients: everyone.size,
-      visits: lines.length,
-      billed,
-      received,
-      toCollect: Math.max(0, round2(billed - received)),
-    },
-  };
 }
 
 export function summarizeDayEnd(report: DayEndReport): {
@@ -227,11 +137,13 @@ export function summarizeDayEnd(report: DayEndReport): {
   let withholdingTax = 0;
   let netCollection = 0;
   let hmo = 0;
+  let hmoBilled = 0;
   let reservationFees = 0;
   let visitsWithoutPayment = 0;
   let paymentCount = 0;
 
   for (const row of report.rows) {
+    hmoBilled += row.hmoBilled;
     if (row.kind === "unpaid") {
       visitsWithoutPayment += 1;
       continue;
@@ -260,6 +172,7 @@ export function summarizeDayEnd(report: DayEndReport): {
       withholdingTax: round2(withholdingTax),
       netCollection: round2(netCollection),
       hmo: round2(hmo),
+      hmoBilled: round2(hmoBilled),
       reservationFees: round2(reservationFees),
       collectedWithoutHmo: round2(collected - hmo),
       visitsWithoutPayment,
@@ -315,12 +228,19 @@ export const DAY_END_HEADERS = [
   "Merchant Fee",
   "Withholding Tax",
   "Net Collection",
+  // HMO details, on the same row as the payment.
+  "HMO",
+  "HMO Account #",
+  "LOA #",
+  "LOE #",
+  "Tooth #",
+  "HMO Billed",
 ] as const;
 
 /** The report as a grid of cells, in the layout of the clinic's own sheet:
- * title and date, the payment rows, the breakdown by method, the totals and
- * (when there are any) the HMO summary and the HMO rows. Expenses are not
- * part of the report. Used for both CSV and Excel. */
+ * title and date, one row per payment (or visit with no payment) with its HMO
+ * details on the same row, the breakdown by method and the totals. There is
+ * no separate HMO section and no expenses. Used for both CSV and Excel. */
 export function buildDayEndSheet(report: DayEndReport): SheetInput {
   const { breakdown, totals } = summarizeDayEnd(report);
   const rows: Cell[][] = [];
@@ -352,6 +272,12 @@ export function buildDayEndSheet(report: DayEndReport): SheetInput {
       row.merchantFee,
       row.withholdingTax,
       row.netCollection,
+      row.hmo,
+      row.hmoAccountNumber,
+      row.hmo ? row.loaNumber.trim() || LOA_PENDING : "",
+      row.loeNumber,
+      row.teeth,
+      row.hmo ? row.hmoBilled : "",
     ]);
   }
   if (report.rows.length === 0) {
@@ -364,73 +290,11 @@ export function buildDayEndSheet(report: DayEndReport): SheetInput {
   push([]);
   push(["Total collected", totals.collected], true);
   push(["  of which HMO (billed to the HMO)", totals.hmo]);
+  push(["  HMO billed on the visits above", totals.hmoBilled]);
   push(["  of which reservation fees", totals.reservationFees]);
   push(["Merchant fees", totals.merchantFees]);
   push(["Withholding tax", totals.withholdingTax]);
   push(["Net collection", totals.netCollection], true);
-
-  const hmoSummary = summarizeHmo(report.hmoVisits);
-  if (hmoSummary.lines.length > 0) {
-    push([]);
-    push(
-      ["HMO summary", "Patients", "Visits", "Billed", "Received", "To collect"],
-      true,
-    );
-    for (const row of hmoSummary.rows) {
-      push([
-        row.hmo,
-        String(row.patients),
-        String(row.visits),
-        row.billed,
-        row.received,
-        row.toCollect,
-      ]);
-    }
-    push(
-      [
-        "Total HMO",
-        String(hmoSummary.total.patients),
-        String(hmoSummary.total.visits),
-        hmoSummary.total.billed,
-        hmoSummary.total.received,
-        hmoSummary.total.toCollect,
-      ],
-      true,
-    );
-  }
-
-  if (report.hmoLines.length > 0) {
-    push([]);
-    push(
-      [
-        "HMO",
-        "Patient",
-        "HMO account #",
-        "LOA #",
-        "LOE #",
-        "Procedure",
-        "Tooth #",
-        "Amount",
-      ],
-      true,
-    );
-    let hmoTotal = 0;
-    for (const line of report.hmoLines) {
-      hmoTotal = round2(hmoTotal + line.amount);
-      push([
-        line.hmo,
-        line.patientName,
-        line.hmoAccountNumber,
-        // Same wording as the HMO billing (LOA_PENDING_TEXT).
-        line.loaNumber.trim() || "LOA pending",
-        line.loeNumber,
-        line.procedure,
-        line.teeth,
-        line.amount,
-      ]);
-    }
-    push(["Total HMO amount", "", "", "", "", "", "", hmoTotal], true);
-  }
 
   return {
     name: "Day end",

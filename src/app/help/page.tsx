@@ -79,7 +79,7 @@ const GROUPS: Group[] = [
       },
       {
         q: "Where do I see how much each HMO owes?",
-        a: "On Day end, the HMO summary lists, per HMO, the visits, the amount billed, the amount received and the amount still to collect.",
+        a: "Open the HMO billing tab (Transactions), pick the HMO and the dates: it lists every HMO procedure with its total. Day end also shows each HMO visit on its own row with the amount billed.",
       },
       {
         q: "Where do I enter the patient's HMO company and account number?",
@@ -92,7 +92,7 @@ const GROUPS: Group[] = [
     items: [
       {
         q: "What is on the Day end page?",
-        a: "The day's visits, payments by method, the HMO summary, every HMO procedure (company, patient, account #, LOA, LOE, tooth # and amount) and the totals for the branch. Expenses are not part of the report. Staff see their own branch; admins can pick a branch.",
+        a: "One table of the day's payments and visits, with the HMO details (HMO, account #, LOA, LOE, tooth # and amount billed) on the same row as the payment, then the breakdown by payment method and the totals for the branch. There is no separate HMO section and no expenses. Staff see their own branch; admins can pick a branch.",
       },
       {
         q: "Can I download a report?",

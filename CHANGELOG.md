@@ -36,9 +36,13 @@ HMO billing and a cleaner Day end report.
 
 ### Changed
 
-- **Day end:** the HMO section now lists every HMO procedure with company,
-  patient, HMO account #, LOA #, LOE #, procedure, tooth # and amount (same
-  rows the billing uses). The Excel and CSV downloads carry the same columns.
+- **Day end is one table.** HMO details sit on the same row as the payment
+  or visit: HMO, HMO account #, LOA #, LOE #, tooth # and HMO billed (after
+  the clinic's original columns, in the screen, Excel and CSV). There is no
+  separate HMO summary or HMO list any more; the breakdown by payment method
+  and the totals remain, plus a "billed to HMOs" figure. A visit with several
+  procedures is one row (LOA and tooth numbers joined), and the billed amount
+  is counted once per visit.
 
 ### Removed
 

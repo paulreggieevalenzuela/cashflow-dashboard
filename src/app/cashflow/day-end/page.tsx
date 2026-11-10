@@ -1,18 +1,15 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth/access";
 import { DownloadButton } from "@/components/ui/download-button";
-import { HmoBillingTable } from "@/components/cashflow/hmo-billing-table";
 import { TransactionsTabs } from "@/components/cashflow/transactions-tabs";
-import { summarizeHmoLines } from "@/lib/cashflow/hmo-billing";
 import {
   DAY_END_HEADERS,
   dayEndFileName,
   formatSheetDate,
   isValidIsoDate,
+  LOA_PENDING,
   summarizeDayEnd,
-  summarizeHmo,
 } from "@/lib/cashflow/day-end";
 import { isHmoPayment } from "@/lib/cashflow/pricing";
 import { todayInManila } from "@/lib/cashflow/visit-status";
@@ -51,8 +48,6 @@ export default async function DayEndPage({
   });
   const report = await getDayEndReport({ branchId: scope.branchId, date });
   const { breakdown, totals } = summarizeDayEnd(report);
-  const hmoSummary = summarizeHmo(report.hmoVisits);
-  const hmoLineTotals = summarizeHmoLines(report.hmoLines);
   const isAdmin = session.user.role === "admin";
 
   const query = new URLSearchParams({
@@ -138,7 +133,7 @@ export default async function DayEndPage({
         <Stat
           label="Paid through HMO"
           value={money.format(totals.hmo)}
-          hint="billed to the HMO, included in the total"
+          hint={`included in the total · ${money.format(totals.hmoBilled)} billed to HMOs on the visits below`}
         />
         <Stat
           label="Reservation fees"
@@ -147,106 +142,8 @@ export default async function DayEndPage({
         />
       </div>
 
-      <section
-        aria-labelledby="hmo-summary-heading"
-        className="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-950"
-      >
-        <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <div>
-            <h3
-              id="hmo-summary-heading"
-              className="text-sm font-semibold text-zinc-900 dark:text-zinc-50"
-            >
-              HMO summary
-            </h3>
-            <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
-              The day&rsquo;s visits billed to an HMO, whether or not the HMO
-              has paid yet.
-            </p>
-          </div>
-          <p className="text-sm text-zinc-900 dark:text-zinc-50">
-            <span className="font-semibold">Total billed to HMOs</span>{" "}
-            <span className="tabular-nums">
-              {money.format(hmoSummary.total.billed)}
-            </span>
-          </p>
-        </div>
-        {hmoSummary.lines.length === 0 ? (
-          <p className="mt-3 text-sm text-zinc-500 dark:text-zinc-400">
-            No HMO visits on this day.
-          </p>
-        ) : (
-          <>
-            <div className="mt-3 overflow-x-auto">
-              <table className="w-full min-w-[520px] text-left text-sm">
-                <thead className="text-xs uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-                  <tr>
-                    <th className="py-2 pr-3 font-medium">HMO</th>
-                    <th className="px-3 py-2 text-right font-medium">
-                      Patients
-                    </th>
-                    <th className="px-3 py-2 text-right font-medium">Visits</th>
-                    <th className="px-3 py-2 text-right font-medium">Billed</th>
-                    <th className="px-3 py-2 text-right font-medium">
-                      Received
-                    </th>
-                    <th className="py-2 pl-3 text-right font-medium">
-                      To collect
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
-                  {hmoSummary.rows.map((row) => (
-                    <tr key={row.hmo}>
-                      <td className="py-2 pr-3">{row.hmo}</td>
-                      <HmoNumber value={row.patients} />
-                      <HmoNumber value={row.visits} />
-                      <HmoMoney value={row.billed} />
-                      <HmoMoney value={row.received} />
-                      <HmoMoney value={row.toCollect} last />
-                    </tr>
-                  ))}
-                </tbody>
-                <tfoot>
-                  <tr className="border-t border-zinc-300 font-semibold dark:border-zinc-700">
-                    <td className="py-2 pr-3">Total</td>
-                    <HmoNumber value={hmoSummary.total.patients} />
-                    <HmoNumber value={hmoSummary.total.visits} />
-                    <HmoMoney value={hmoSummary.total.billed} />
-                    <HmoMoney value={hmoSummary.total.received} />
-                    <HmoMoney value={hmoSummary.total.toCollect} last />
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
-
-            <h4 className="mt-5 text-xs font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-              HMO work by procedure
-            </h4>
-            <div className="mt-2">
-              <HmoBillingTable
-                lines={report.hmoLines}
-                total={hmoLineTotals.total}
-                showHmo
-                emptyText="No HMO procedure lines on this day."
-              />
-            </div>
-            <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">
-              To bill an HMO for a range of dates, use the{" "}
-              <Link
-                href="/cashflow/hmo"
-                className="text-amber-700 hover:underline dark:text-amber-400"
-              >
-                HMO billing
-              </Link>{" "}
-              tab.
-            </p>
-          </>
-        )}
-      </section>
-
       <div className="overflow-x-auto rounded-lg border border-zinc-200 dark:border-zinc-800">
-        <table className="w-full min-w-[1100px] text-left text-sm">
+        <table className="w-full min-w-[1600px] text-left text-sm">
           <thead className="bg-zinc-50 text-xs uppercase tracking-wide text-zinc-500 dark:bg-zinc-900 dark:text-zinc-400">
             <tr>
               {DAY_END_HEADERS.filter((name) => name !== "Date").map((name) => (
@@ -260,6 +157,7 @@ export default async function DayEndPage({
                       "Merchant Fee",
                       "Withholding Tax",
                       "Net Collection",
+                      "HMO Billed",
                     ].includes(name)
                       ? "text-right"
                       : ""
@@ -312,6 +210,36 @@ export default async function DayEndPage({
                   <Money value={row.merchantFee} />
                   <Money value={row.withholdingTax} />
                   <Money value={row.netCollection} />
+                  <td className="whitespace-nowrap px-3 py-2.5">
+                    {row.hmo || <span className="text-zinc-400">—</span>}
+                  </td>
+                  <td className="px-3 py-2.5 font-mono text-xs">
+                    {row.hmo ? (
+                      row.hmoAccountNumber || (
+                        <span className="font-sans text-zinc-400">Not on file</span>
+                      )
+                    ) : (
+                      <span className="text-zinc-400">—</span>
+                    )}
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-2.5 font-mono text-xs">
+                    {row.hmo ? (
+                      row.loaNumber || (
+                        <span className="font-sans text-orange-600 dark:text-orange-400">
+                          {LOA_PENDING}
+                        </span>
+                      )
+                    ) : (
+                      <span className="text-zinc-400">—</span>
+                    )}
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-2.5">
+                    {row.loeNumber || <span className="text-zinc-400">—</span>}
+                  </td>
+                  <td className="px-3 py-2.5">
+                    {row.teeth || <span className="text-zinc-400">—</span>}
+                  </td>
+                  <Money value={row.hmoBilled} />
                 </tr>
               ))
             )}
@@ -371,22 +299,6 @@ function Stat({
 function Money({ value }: { value: number }) {
   return (
     <td className="whitespace-nowrap px-3 py-2.5 text-right tabular-nums">
-      {value === 0 ? <span className="text-zinc-400">—</span> : money.format(value)}
-    </td>
-  );
-}
-
-function HmoNumber({ value }: { value: number }) {
-  return <td className="px-3 py-2 text-right tabular-nums">{value}</td>;
-}
-
-function HmoMoney({ value, last }: { value: number; last?: boolean }) {
-  return (
-    <td
-      className={`whitespace-nowrap py-2 text-right tabular-nums ${
-        last ? "pl-3" : "px-3"
-      }`}
-    >
       {value === 0 ? <span className="text-zinc-400">—</span> : money.format(value)}
     </td>
   );

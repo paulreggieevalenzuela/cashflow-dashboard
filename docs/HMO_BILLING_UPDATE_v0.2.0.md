@@ -12,7 +12,7 @@ in the app, and how it was tested.
 |---|---|---|---|
 | 1 | Add HMO tab in Transactions and generating reports | New **HMO billing** tab next to Day end and Audit. Preview the rows, then **Generate billing** to save a numbered billing. A list of saved billings sits under the preview. | Transactions → HMO billing |
 | 2 | Filter the date by range | **From** and **To** dates (both days included; defaults to the 1st of the month through today; at most one year). Also filters by HMO and branch. | HMO billing filters |
-| 3 | Fields: company, HMO acct #, LOE, LOA, Amount, Tooth # (also in Day end if missing) | Every row shows **HMO company, patient, HMO account #, LOA #, LOE #, procedure, tooth # and amount**. Day end's HMO section now has the same columns, one row per procedure (it previously showed per-visit rows without LOE and tooth #). | HMO billing, saved billing, Day end page, Day end Excel/CSV |
+| 3 | Fields: company, HMO acct #, LOE, LOA, Amount, Tooth # (also in Day end if missing) | Every row shows **HMO company, patient, HMO account #, LOA #, LOE #, procedure, tooth # and amount**. Day end now shows the same details (HMO, account #, LOA, LOE, tooth #, amount billed) on the same row as each payment or visit, in one table — there is no separate HMO section any more. | HMO billing, saved billing, Day end page, Day end Excel/CSV |
 | 4 | Total amount of billing | Shown on the preview, the saved billing, the print page, and the Excel/CSV header and footer. Also shows lines, patients and how many lines are still "LOA pending" (these are counted in the total). | All HMO billing views |
 | 5 | Auto-generate billing number | `HMO-<branch code>-<YY>-<running number>`, e.g. `HMO-MAR-26-0001`. The running number counts per branch per year and is issued by one atomic database step, so two people can never get the same number. | Generate billing |
 | 6 | Cut-off date (date range of that billing) | The From–To range is saved on the billing and printed as "November 1 – 9, 2026" on the screen, PDF, Excel and CSV. | Saved billing and downloads |
@@ -76,8 +76,11 @@ twice). Still pending from earlier work: `scripts/sql/2026-11-line-loa.sql`,
   never reused or duplicated.
 - The HMO account # comes from the patient's profile. Lines for patients with
   no account # on file show "Not on file".
-- Day end still lists lines already on a saved billing (it reports the day);
-  the HMO billing tab leaves them out.
+- Day end lists every HMO visit of the day, even if already on a saved billing
+  (it reports the day); the HMO billing tab leaves those out.
+- Day end has one row per payment or visit, so a visit with several HMO
+  procedures is one row with its LOA and tooth numbers joined by commas. For a
+  per-procedure list use the HMO billing tab.
 
 ## How it was tested
 

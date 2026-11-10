@@ -10,12 +10,10 @@ import {
 } from "@/lib/db/schema";
 import {
   hmoNameFor,
-  type DayEndHmoVisit,
   type DayEndReport,
   type DayEndRow,
 } from "@/lib/cashflow/day-end";
-import { getInvoiceSummaries } from "@/lib/db/invoices";
-import { getHmoBillingLines } from "@/lib/db/hmo-billing";
+import { isCheckInPlaceholder } from "@/lib/cashflow/visit-status";
 import {
   allocateProportionally,
   computeMerchantFee,
@@ -44,113 +42,106 @@ type LineLite = {
   withholdingTax: string;
   remarks: string;
   lineNumber: number | null;
+  paymentType: string;
+  teeth: string;
+  loaNumber: string;
 };
 
 function distinct(values: string[]): string[] {
   return [...new Set(values.map((v) => v.trim()).filter(Boolean))];
 }
 
+type HmoInfo = Pick<
+  DayEndRow,
+  "hmo" | "hmoAccountNumber" | "loaNumber" | "loeNumber" | "teeth"
+> & { billed: number };
+
+const NO_HMO: HmoInfo = {
+  hmo: "",
+  hmoAccountNumber: "",
+  loaNumber: "",
+  loeNumber: "",
+  teeth: "",
+  billed: 0,
+};
+
 /**
- * The day's visits that are billed to an HMO: one entry per visit whose
- * procedures use an HMO payment method, with what was billed, what has been
- * received so far, the LOA number and the patient's HMO account number.
- * A visit counts on its own visit date, paid or not.
+ * HMO details per visit, so they can sit on the same row as the payment:
+ * company, the patient's account number, LOA (per procedure, falling back to
+ * the visit's), LOE, tooth numbers and what is billed to the HMO. A visit with
+ * no HMO procedure line gets blanks.
  */
-async function getHmoVisits(input: {
-  date: string;
-  branchFilter: ReturnType<typeof eq> | undefined;
-}): Promise<DayEndHmoVisit[]> {
-  const dayVisits = await db
+async function getHmoInfoByInvoice(
+  invoiceIds: string[],
+  linesByInvoice: Map<string, LineLite[]>,
+): Promise<Map<string, HmoInfo>> {
+  const result = new Map<string, HmoInfo>();
+  const hmoInvoiceIds = invoiceIds.filter((id) =>
+    (linesByInvoice.get(id) ?? []).some(
+      (line) =>
+        isHmoPayment(line.paymentType) && !isCheckInPlaceholder(line.procedure),
+    ),
+  );
+  if (hmoInvoiceIds.length === 0) return result;
+
+  const visits = await db
     .select({
       id: invoices.id,
       loaNumber: invoices.loaNumber,
+      loeNumber: invoices.loeNumber,
       patientId: invoices.patientId,
     })
     .from(invoices)
-    .where(and(eq(invoices.visitDate, input.date), input.branchFilter))
-    .orderBy(asc(invoices.createdAt));
-  if (dayVisits.length === 0) return [];
-
-  const ids = dayVisits.map((visit) => visit.id);
-  const [lines, summaries] = await Promise.all([
-    db
-      .select({
-        invoiceId: transactions.invoiceId,
-        patientName: transactions.patientName,
-        procedure: transactions.procedure,
-        paymentType: transactions.paymentType,
-      })
-      .from(transactions)
-      .where(inArray(transactions.invoiceId, ids))
-      .orderBy(asc(transactions.lineNumber), asc(transactions.createdAt)),
-    getInvoiceSummaries(ids),
-  ]);
-
-  const linesByInvoice = new Map<string, typeof lines>();
-  for (const line of lines) {
-    if (!line.invoiceId) continue;
-    const list = linesByInvoice.get(line.invoiceId) ?? [];
-    list.push(line);
-    linesByInvoice.set(line.invoiceId, list);
-  }
-
-  const hmoVisits = dayVisits.flatMap((visit) => {
-    const visitLines = linesByInvoice.get(visit.id) ?? [];
-    const hmoLine = visitLines.find((line) => isHmoPayment(line.paymentType));
-    if (!hmoLine) return [];
-    return [{ visit, visitLines, hmoLine }];
-  });
-  if (hmoVisits.length === 0) return [];
+    .where(inArray(invoices.id, hmoInvoiceIds));
 
   // The patient's HMO account number comes from their profile.
   const patientIds = [
-    ...new Set(
-      hmoVisits.flatMap(({ visit }) => (visit.patientId ? [visit.patientId] : [])),
-    ),
+    ...new Set(visits.flatMap((visit) => (visit.patientId ? [visit.patientId] : []))),
   ];
   const accountByPatient = new Map<string, string>();
   if (patientIds.length > 0) {
     try {
       const accounts = await db
-        .select({
-          id: patients.id,
-          hmoAccountNumber: patients.hmoAccountNumber,
-        })
+        .select({ id: patients.id, account: patients.hmoAccountNumber })
         .from(patients)
         .where(inArray(patients.id, patientIds));
-      for (const account of accounts) {
-        accountByPatient.set(account.id, account.hmoAccountNumber);
-      }
+      for (const account of accounts) accountByPatient.set(account.id, account.account);
     } catch (error) {
-      // Until 2026-10-patient-hmo-details.sql is run the column does not
-      // exist: the report still works, just without account numbers.
+      // Until 2026-10-patient-hmo-details.sql is run the column is missing:
+      // the report still works, without account numbers.
       if (!String(error).includes("hmo_account_number")) throw error;
-      console.warn(
-        "Day end: patients.hmo_account_number is missing; run scripts/sql/2026-10-patient-hmo-details.sql.",
-      );
+      console.warn("Day end: patients.hmo_account_number is missing.");
     }
   }
 
-  return hmoVisits.map(({ visit, visitLines, hmoLine }) => {
-    const summary = summaries[visit.id];
-    return {
-      hmo: hmoNameFor(hmoLine.paymentType),
-      patientName: hmoLine.patientName,
+  for (const visit of visits) {
+    const hmoLines = (linesByInvoice.get(visit.id) ?? []).filter(
+      (line) =>
+        isHmoPayment(line.paymentType) && !isCheckInPlaceholder(line.procedure),
+    );
+    result.set(visit.id, {
+      hmo: distinct(hmoLines.map((line) => hmoNameFor(line.paymentType))).join(" / "),
       hmoAccountNumber: visit.patientId
         ? (accountByPatient.get(visit.patientId) ?? "")
         : "",
-      loaNumber: visit.loaNumber,
-      procedure: distinct(visitLines.map((line) => line.procedure)).join(" + "),
-      billed: round2(summary?.totalDue ?? 0),
-      received: round2(summary?.collected ?? 0),
-    };
-  });
+      loaNumber: distinct(
+        hmoLines.map((line) => line.loaNumber || visit.loaNumber || ""),
+      ).join(", "),
+      loeNumber: (visit.loeNumber ?? "").trim(),
+      teeth: distinct(hmoLines.map((line) => line.teeth ?? "")).join(", "),
+      billed: round2(
+        hmoLines.reduce((sum, line) => sum + Number(line.amountPaid), 0),
+      ),
+    });
+  }
+  return result;
 }
 
 /**
  * Everything received on `date` for one branch (or every branch when
  * `branchId` is null): one row per payment, then one row for each visit of
- * that day that took no payment, plus the day's HMO lines (no expenses).
+ * that day that took no payment. HMO details sit on the same row (no
+ * separate HMO section, no expenses).
  *
  * VAT and withholding tax are kept on the procedure lines of a visit, so a
  * payment carries the share of them that matches its share of the bill. The
@@ -241,6 +232,9 @@ export async function getDayEndReport(input: {
             withholdingTax: transactions.withholdingTax,
             remarks: transactions.remarks,
             lineNumber: transactions.lineNumber,
+            paymentType: transactions.paymentType,
+            teeth: transactions.teeth,
+            loaNumber: transactions.loaNumber,
           })
           .from(transactions)
           .where(inArray(transactions.invoiceId, allInvoiceIds))
@@ -255,6 +249,22 @@ export async function getDayEndReport(input: {
   }
 
   const rows: DayEndRow[] = [];
+  const hmoInfo = await getHmoInfoByInvoice(allInvoiceIds, linesByInvoice);
+  // The billed amount goes on a visit's first row only, so it counts once.
+  const billedShown = new Set<string>();
+  const hmoFor = (invoiceId: string | null | undefined) => {
+    const info = (invoiceId && hmoInfo.get(invoiceId)) || NO_HMO;
+    const first = Boolean(invoiceId) && !billedShown.has(invoiceId as string);
+    if (invoiceId && info.hmo) billedShown.add(invoiceId);
+    return {
+      hmo: info.hmo,
+      hmoAccountNumber: info.hmoAccountNumber,
+      loaNumber: info.loaNumber,
+      loeNumber: info.loeNumber,
+      teeth: info.teeth,
+      hmoBilled: first && info.hmo ? info.billed : 0,
+    };
+  };
 
   // Withholding tax is shared across an invoice's payments of the day in
   // proportion to their amounts.
@@ -324,6 +334,7 @@ export async function getDayEndReport(input: {
       withholdingTax: wht,
       netCollection: Math.max(0, round2(amount - fee - wht)),
       isReservation: payment.transactionType === "Reservation",
+      ...hmoFor(payment.invoiceId),
     });
   }
 
@@ -348,24 +359,11 @@ export async function getDayEndReport(input: {
       withholdingTax: 0,
       netCollection: 0,
       isReservation: visit.transactionType === "Reservation",
+      ...hmoFor(visit.id),
     });
   }
 
-  const hmoVisits = await getHmoVisits({
-    date: input.date,
-    branchFilter,
-  });
-
-  // The same rows the HMO billing uses, so the two cannot disagree. Lines
-  // already on a saved billing are still shown: Day end reports the day.
-  const hmoLines = await getHmoBillingLines({
-    from: input.date,
-    to: input.date,
-    branchId: input.branchId,
-    hmo: null,
-  });
-
-  return { branchName, date: input.date, rows, hmoVisits, hmoLines };
+  return { branchName, date: input.date, rows };
 }
 
 /**
