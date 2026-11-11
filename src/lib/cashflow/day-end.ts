@@ -8,7 +8,8 @@
  * own. The database side is `src/lib/db/day-end.ts`.
  */
 
-import { HMO_PAYMENT_TYPES, isHmoPayment, round2 } from "@/lib/cashflow/pricing";
+import { isHmoPayment, round2 } from "@/lib/cashflow/pricing";
+import { canonicalPaymentName, getCustomPaymentMethods } from "@/lib/cashflow/payment-methods";
 import type { Cell, SheetInput } from "@/lib/cashflow/xlsx";
 
 export type DayEndRow = {
@@ -87,14 +88,17 @@ export const BREAKDOWN_OTHER = "Other / not stated";
 export function breakdownColumnFor(paymentType: string): string {
   const type = paymentType.trim().toLowerCase();
   if (!type) return BREAKDOWN_OTHER;
-  if (type.startsWith("pos")) {
+  if (/^pos\b/.test(type)) {
     if (type.includes("debit")) return "POS - Debit";
     if (type.includes("credit")) return "POS - Credit";
     return BREAKDOWN_OTHER;
   }
   if (type === "elite dental network" || type === "elite") return "Elite";
   const match = BREAKDOWN_COLUMNS.find((name) => name.toLowerCase() === type);
-  return match ?? BREAKDOWN_OTHER;
+  if (match) return match;
+  // A method an owner or admin added gets a column of its own.
+  const added = getCustomPaymentMethods().find((method) => method.name.toLowerCase() === type);
+  return added?.name ?? BREAKDOWN_OTHER;
 }
 
 export type DayEndTotals = {
@@ -120,18 +124,17 @@ export const LOA_PENDING = "LOA pending";
 
 /** The HMO's proper name for a payment type ("avega" → "Avega"). */
 export function hmoNameFor(paymentType: string): string {
-  const wanted = paymentType.trim().toLowerCase();
-  return (
-    HMO_PAYMENT_TYPES.find((name) => name.toLowerCase() === wanted) ??
-    paymentType.trim()
-  );
+  return canonicalPaymentName(paymentType) ?? paymentType.trim();
 }
 
 export function summarizeDayEnd(report: DayEndReport): {
   breakdown: Array<{ label: string; amount: number }>;
   totals: DayEndTotals;
 } {
-  const sums = new Map<string, number>(BREAKDOWN_COLUMNS.map((c) => [c, 0]));
+  const addedColumns = getCustomPaymentMethods();
+  const sums = new Map<string, number>(
+    [...BREAKDOWN_COLUMNS, ...addedColumns.map((method) => method.name)].map((c) => [c, 0]),
+  );
   let collected = 0;
   let merchantFees = 0;
   let withholdingTax = 0;
@@ -159,9 +162,13 @@ export function summarizeDayEnd(report: DayEndReport): {
     if (row.isReservation) reservationFees += row.amountPaid;
   }
 
-  const breakdown = [...BREAKDOWN_COLUMNS, BREAKDOWN_OTHER]
+  const addedLabels = addedColumns
+    .filter((method) => method.active || (sums.get(method.name) ?? 0) !== 0)
+    .map((method) => method.name);
+  const breakdown = [...BREAKDOWN_COLUMNS, ...addedLabels, BREAKDOWN_OTHER]
     .map((label) => ({ label, amount: round2(sums.get(label) ?? 0) }))
-    // The clinic's columns always show; "Other" only when something is in it.
+    // The clinic's columns always show (and the active added ones); "Other"
+    // only when something is in it.
     .filter((item) => item.label !== BREAKDOWN_OTHER || item.amount !== 0);
 
   return {

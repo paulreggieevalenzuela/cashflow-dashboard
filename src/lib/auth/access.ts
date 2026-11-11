@@ -3,6 +3,7 @@ import type { Session } from "next-auth";
 import { rawAuth } from "@/auth";
 import { getAuthState } from "@/lib/db/users";
 import { getAccessProfile } from "@/lib/db/user-access";
+import { ensurePaymentMethods } from "@/lib/db/payment-methods";
 import { sessionRoleOf } from "@/lib/cashflow/user-schema";
 
 /**
@@ -42,11 +43,17 @@ export const getAccess = cache(async (): Promise<Access> => {
   const tokenSaysMustChange = Boolean(session.user.mustChangePassword);
   // What this person may do, and in which clinics, from the database right now
   // (a change made on the Users screen applies on their next click).
-  const profile = await getAccessProfile({
-    userId: state.id,
-    role: state.role,
-    branchId: state.branchId,
-  });
+  // The payment methods an owner or admin added are loaded in the same step
+  // (at most once every 10 seconds), so every page, action and API route knows
+  // which payment types are HMOs.
+  const [profile] = await Promise.all([
+    getAccessProfile({
+      userId: state.id,
+      role: state.role,
+      branchId: state.branchId,
+    }),
+    ensurePaymentMethods(),
+  ]);
   const fresh: Session = {
     ...session,
     user: {

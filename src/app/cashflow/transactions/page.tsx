@@ -3,6 +3,8 @@ import { auth } from "@/lib/auth/access";
 import { can } from "@/lib/auth/guards";
 import { ExpensesTab } from "@/components/cashflow/expenses-tab";
 import { ProceduresManager } from "@/components/cashflow/procedures-manager";
+import { PaymentMethodsManager } from "@/components/cashflow/payment-methods-manager";
+import { listPaymentMethodsWithUse } from "@/lib/db/payment-methods";
 import { RecallsList } from "@/components/cashflow/recalls-list";
 import { TransactionsList } from "@/components/cashflow/transactions-list";
 import {
@@ -59,7 +61,8 @@ export default async function TransactionsPage({
     resolvedSearchParams.tab === "audit" ||
     resolvedSearchParams.tab === "expenses" ||
     resolvedSearchParams.tab === "procedures" ||
-    resolvedSearchParams.tab === "recalls"
+    resolvedSearchParams.tab === "recalls" ||
+    resolvedSearchParams.tab === "payment-methods"
       ? resolvedSearchParams.tab
       : "transactions";
 
@@ -159,6 +162,20 @@ export default async function TransactionsPage({
           rows={rows}
           canEdit={can(session, "procedure.manage")}
         />
+      </div>
+    );
+  }
+
+  if (tab === "payment-methods") {
+    const session = await auth();
+    if (!can(session, "payment_method.manage")) {
+      redirect("/cashflow/transactions");
+    }
+    const { methods, ready } = await listPaymentMethodsWithUse();
+    return (
+      <div className="space-y-6">
+        <TransactionsTabs active="payment-methods" />
+        <PaymentMethodsManager methods={methods} ready={ready} />
       </div>
     );
   }

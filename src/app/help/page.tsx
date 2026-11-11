@@ -154,6 +154,10 @@ const GROUPS: Group[] = [
         a: "Owners and admins cannot undo a delete, but nothing is lost: deleted visits, procedure lines, payments, expenses and attached files are kept in Deleted items for 30 days, and only the superuser can open it. Tell the superuser what was deleted and when, and they can restore it exactly as it was. After 30 days it is removed for good.",
       },
       {
+        q: "How do I add a new HMO or payment method?",
+        a: "Owners and admins: Transactions → Payment methods → type the name, choose HMO / insurance or Other, and press Add. A new HMO then needs its prices under Transactions → Procedures. A method can't be renamed, so check the spelling first. If it should no longer be used, press Hide: old visits keep it. Someone else can be allowed to do this under Users → Manage.",
+      },
+      {
         q: "What are extra privileges?",
         a: "Each role has a standard set of privileges. An extra privilege is one a person has on top of their role, ticked for them under Manage; a removed privilege is one their role would give but was taken away. Users → Access review lists everyone who has exceptions, with sensitive ones in red, so they can be checked now and then.",
       },

@@ -50,8 +50,8 @@ export default async function CommissionsPage() {
           Dentist commission is set by <strong>tier</strong>: put each dentist
           in a tier, and every procedure earns the tier&apos;s rate. A new
           procedure only needs to be added to a tier once. Visits paid through
-          an HMO (Maxicare, Medicard, Intellicare, Avega, Valucare, Elite
-          Dental Network) use the HMO columns, and an HMO visit for a
+          an HMO (Maxicare, Medicard, Intellicare, Avega, Valucare, Asiancare,
+          Elite Dental Network, or one added under Payment methods) use the HMO columns, and an HMO visit for a
           procedure with no HMO rate earns no commission. A rate applies to
           transactions saved after it is set. When a patient is transferred
           to a second dentist on a visit, the commission is worked out at the

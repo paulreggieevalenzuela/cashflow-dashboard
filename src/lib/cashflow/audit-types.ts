@@ -13,6 +13,8 @@ export type AuditAction =
   | "attachment.restored"
   | "user.access_changed"
   | "deleted_items.purged"
+  | "payment_method.added"
+  | "payment_method.changed"
   | "visit.imported"
   | "payment.added"
   | "payment.removed"
@@ -53,6 +55,8 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   "attachment.restored": "File restored",
   "user.access_changed": "Access changed",
   "deleted_items.purged": "Deleted items cleaned up",
+  "payment_method.added": "Payment method added",
+  "payment_method.changed": "Payment method changed",
   "visit.imported": "Visits imported",
   "payment.added": "Payment added",
   "payment.removed": "Payment removed",

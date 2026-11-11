@@ -14,7 +14,9 @@ import {
   PRICE_BASIS_LABELS,
   type PriceBasis,
 } from "@/lib/cashflow/price-basis";
-import { HMO_PAYMENT_TYPES, type VatType } from "@/lib/cashflow/pricing";
+import { hmoPaymentNames } from "@/lib/cashflow/payment-methods";
+import { type VatType } from "@/lib/cashflow/pricing";
+import { useHmoNames } from "@/components/cashflow/payment-methods-context";
 import type {
   PriceHistoryEntry,
   ProcedureAdminRow,
@@ -54,26 +56,25 @@ type Draft = {
   payerPrices: Record<string, string>;
 };
 
-const EMPTY_PAYER_PRICES: Record<string, string> = Object.fromEntries(
-  HMO_PAYMENT_TYPES.map((payer) => [payer, ""]),
-);
-
-const EMPTY_DRAFT: Draft = {
-  name: "",
-  vatType: "vat",
-  price: "",
-  priceBasis: "flat",
-  active: true,
-  note: "",
-  payerPrices: EMPTY_PAYER_PRICES,
-};
+/** A blank form. Built when needed: the HMO list can grow (see Payment methods). */
+function emptyDraft(): Draft {
+  return {
+    name: "",
+    vatType: "vat",
+    price: "",
+    priceBasis: "flat",
+    active: true,
+    note: "",
+    payerPrices: Object.fromEntries(hmoPaymentNames().map((payer) => [payer, ""])),
+  };
+}
 
 /** The typed HMO prices as numbers (null = no price). */
 function payerPricesPayload(
   prices: Record<string, string>,
 ): Record<string, number | null> {
   return Object.fromEntries(
-    HMO_PAYMENT_TYPES.map((payer) => {
+    hmoPaymentNames().map((payer) => {
       const text = (prices[payer] ?? "").trim();
       return [payer, text === "" ? null : Number(text)];
     }),
@@ -89,7 +90,7 @@ function draftFrom(row: ProcedureAdminRow): Draft {
     active: row.active,
     note: "",
     payerPrices: Object.fromEntries(
-      HMO_PAYMENT_TYPES.map((payer) => [
+      hmoPaymentNames().map((payer) => [
         payer,
         row.payerPrices[payer] === undefined
           ? ""
@@ -107,6 +108,7 @@ export function ProceduresManager({
   canEdit: boolean;
 }) {
   const router = useRouter();
+  const hmoNames = useHmoNames();
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
 
@@ -114,7 +116,7 @@ export function ProceduresManager({
   const [editing, setEditing] = useState<ProcedureAdminRow | "new" | null>(
     null,
   );
-  const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT);
+  const [draft, setDraft] = useState<Draft>(emptyDraft);
   const [error, setError] = useState<string | null>(null);
   const [confirmMessage, setConfirmMessage] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -146,7 +148,7 @@ export function ProceduresManager({
   }, [rows, search, filter]);
 
   function openAdd() {
-    setDraft(EMPTY_DRAFT);
+    setDraft(emptyDraft());
     setError(null);
     setConfirmMessage(null);
     setConfirmDelete(false);
@@ -376,7 +378,7 @@ export function ProceduresManager({
                 <td className="px-4 py-3 text-zinc-500 dark:text-zinc-400">
                   {Object.keys(row.payerPrices).length === 0
                     ? "—"
-                    : `${Object.keys(row.payerPrices).length} of ${HMO_PAYMENT_TYPES.length}`}
+                    : `${Object.keys(row.payerPrices).length} of ${hmoNames.length}`}
                 </td>
                 <td className="px-4 py-3">
                   {row.active ? "Active" : "Hidden"}
@@ -529,7 +531,7 @@ export function ProceduresManager({
               HMO prices (₱)
             </p>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              {HMO_PAYMENT_TYPES.map((payer) => (
+              {hmoNames.map((payer) => (
                 <label
                   key={payer}
                   className="flex items-center justify-between gap-3 text-sm text-zinc-600 dark:text-zinc-300"

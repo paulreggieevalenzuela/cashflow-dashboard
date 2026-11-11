@@ -4,7 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Modal } from "@/components/ui/modal";
 import type { Branch } from "@/lib/db/branches";
-import { PAYMENT_TYPES, TRANSACTION_TYPES } from "@/lib/cashflow/constants";
+import { TRANSACTION_TYPES } from "@/lib/cashflow/constants";
+import { useAllPaymentTypes } from "@/components/cashflow/payment-methods-context";
 import {
   ALL_BRANCHES,
   buildTransactionsSearch,
@@ -62,6 +63,7 @@ export function TransactionsToolbar({
   defaultBranchId: string | null;
 }) {
   const router = useRouter();
+  const paymentTypes = useAllPaymentTypes();
   const [searchInput, setSearchInput] = useState(query.q ?? "");
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [draft, setDraft] = useState<FilterDraft>(() => draftFrom(query));
@@ -321,7 +323,7 @@ export function TransactionsToolbar({
                 className={`${FIELD_CLASSES} select-chevron`}
               >
                 <option value="">All payment methods</option>
-                {PAYMENT_TYPES.map((option) => (
+                {paymentTypes.map((option) => (
                   <option key={option} value={option}>
                     {option}
                   </option>

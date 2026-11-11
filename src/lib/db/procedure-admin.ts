@@ -8,7 +8,8 @@ import {
   type PriceHistoryRow,
   type ProcedureRow,
 } from "@/lib/db/schema";
-import { HMO_PAYMENT_TYPES, round2 } from "@/lib/cashflow/pricing";
+import { hmoPaymentNames } from "@/lib/cashflow/payment-methods";
+import { round2 } from "@/lib/cashflow/pricing";
 import {
   normalizePriceBasis,
   type PriceBasis,
@@ -166,7 +167,7 @@ function cleanPayerPrices(
   input: Record<string, number | null>,
 ): Record<string, number | null> {
   const result: Record<string, number | null> = {};
-  for (const payer of HMO_PAYMENT_TYPES) {
+  for (const payer of hmoPaymentNames()) {
     const value = input[payer];
     result[payer] =
       value === null || value === undefined || !(value >= 0)
@@ -198,7 +199,7 @@ async function writePayerPrices(
   actor: Actor,
   note: string,
 ) {
-  for (const payer of HMO_PAYMENT_TYPES) {
+  for (const payer of hmoPaymentNames()) {
     const before = current[payer] ?? null;
     const after = next[payer] ?? null;
     if (before === after) {
@@ -291,7 +292,7 @@ export async function updateProcedure(
   if (priceChanged && oldPrice !== null && oldPrice > 0 && newPrice !== null) {
     changes.push({ label: "Cash", from: oldPrice, to: newPrice });
   }
-  for (const payer of HMO_PAYMENT_TYPES) {
+  for (const payer of hmoPaymentNames()) {
     const from = currentPayer[payer];
     const to = nextPayer[payer];
     if (from !== undefined && from > 0 && to !== null && to !== from) {

@@ -21,7 +21,8 @@ import {
   type HmoBilling,
   type HmoBillingLine,
 } from "@/lib/cashflow/hmo-billing";
-import { HMO_PAYMENT_TYPES, round2 } from "@/lib/cashflow/pricing";
+import { hmoPaymentNames } from "@/lib/cashflow/payment-methods";
+import { round2 } from "@/lib/cashflow/pricing";
 import { isCheckInPlaceholder } from "@/lib/cashflow/visit-status";
 
 const CHUNK = 200;
@@ -58,7 +59,7 @@ export async function getHmoBillingLines(input: {
   hmo: string | null;
 }): Promise<HmoBillingLine[]> {
   const hmoNames = (
-    input.hmo ? [input.hmo] : [...HMO_PAYMENT_TYPES]
+    input.hmo ? [input.hmo] : hmoPaymentNames()
   ).map((name) => name.toLowerCase());
 
   const rows = await db
@@ -203,7 +204,7 @@ export async function createHmoBilling(input: {
 }): Promise<CreateBillingResult> {
   const problem = rangeProblem(input.from, input.to);
   if (problem) return { ok: false, message: problem };
-  const hmo = HMO_PAYMENT_TYPES.find(
+  const hmo = hmoPaymentNames().find(
     (name) => name.toLowerCase() === input.hmo.trim().toLowerCase(),
   );
   if (!hmo) return { ok: false, message: "Pick an HMO." };

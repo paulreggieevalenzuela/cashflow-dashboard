@@ -280,6 +280,23 @@ export const procedurePrices = pgTable(
   (table) => [unique().on(table.procedureId, table.payer)],
 );
 
+/**
+ * Payment methods added by an owner or admin (the built-in ones live in
+ * src/lib/cashflow/payment-methods.ts). Visits and payments keep storing the
+ * method's name as text, so a method is never renamed, only hidden.
+ */
+export const paymentMethods = pgTable("payment_methods", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  name: text("name").notNull(),
+  nameKey: text("name_key").notNull().unique(),
+  kind: text("kind").notNull(),
+  active: boolean("active").notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  createdByName: text("created_by_name").notNull().default(""),
+});
+
+export type PaymentMethodRow = typeof paymentMethods.$inferSelect;
+
 export type PriceHistoryRow = typeof procedurePriceHistory.$inferSelect;
 
 /**

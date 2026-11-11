@@ -26,28 +26,11 @@ export function normalizeVatType(value: string | null | undefined): VatType {
   return isVatType(value) ? value : "non_vat";
 }
 
-/**
- * Payment types that are HMO / dental-insurance providers billed directly
- * (as opposed to cash, e-wallets and cards paid by the patient). A visit
- * paid through one of these earns the dentist's HMO commission rate instead
- * of the cash-paying one (clinic's "LIST - COMMISSION" sheet).
- */
-export const HMO_PAYMENT_TYPES = [
-  "Avega",
-  "Elite Dental Network",
-  "Intellicare",
-  "Maxicare",
-  "Medicard",
-  "Valucare",
-] as const;
-
-export function isHmoPayment(paymentType: string | null | undefined): boolean {
-  const wanted = (paymentType ?? "").trim().toLowerCase();
-  return (
-    wanted !== "" &&
-    HMO_PAYMENT_TYPES.some((name) => name.toLowerCase() === wanted)
-  );
-}
+// Which payment types are HMOs lives in payment-methods.ts (the built-in list
+// plus the methods an owner or admin added). Re-exported so the pricing rules
+// and their callers keep one import.
+export { isHmoPayment } from "@/lib/cashflow/payment-methods";
+import { isHmoPayment } from "@/lib/cashflow/payment-methods";
 
 /** One dentist + procedure commission setting. */
 export type CommissionRateSetting = {

@@ -10,6 +10,8 @@ import { can } from "@/lib/auth/guards";
 import type { UserRole } from "@/lib/cashflow/user-schema";
 import { BranchPolicyProvider } from "@/components/cashflow/branch-policy-context";
 import { CapabilitiesProvider } from "@/components/cashflow/capabilities-context";
+import { PaymentMethodsProvider } from "@/components/cashflow/payment-methods-context";
+import { getCustomPaymentMethods } from "@/lib/cashflow/payment-methods";
 import { countDeletedItems } from "@/lib/db/deleted-items";
 import { countOpenVisits } from "@/lib/db/visit-status";
 import { countActionableResetRequests } from "@/lib/db/password-requests";
@@ -91,7 +93,9 @@ export default async function CashflowLayout({ children }: { children: ReactNode
         className="mx-auto max-w-6xl px-4 py-6 outline-none sm:px-6 sm:py-8 print:max-w-none print:p-0"
       >
         <CapabilitiesProvider permissions={session?.user.permissions ?? []}>
-          <BranchPolicyProvider value={branchPolicy}>{children}</BranchPolicyProvider>
+          <PaymentMethodsProvider methods={[...getCustomPaymentMethods()]}>
+            <BranchPolicyProvider value={branchPolicy}>{children}</BranchPolicyProvider>
+          </PaymentMethodsProvider>
         </CapabilitiesProvider>
       </main>
       <footer className="mx-auto max-w-6xl px-4 pb-8 sm:px-6 print:hidden">

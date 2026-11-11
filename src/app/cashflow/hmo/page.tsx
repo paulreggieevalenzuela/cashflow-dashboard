@@ -15,7 +15,7 @@ import {
   rangeProblem,
   summarizeHmoLines,
 } from "@/lib/cashflow/hmo-billing";
-import { HMO_PAYMENT_TYPES } from "@/lib/cashflow/pricing";
+import { hmoPaymentNames } from "@/lib/cashflow/payment-methods";
 import { todayInManila } from "@/lib/cashflow/visit-status";
 import { listBranches } from "@/lib/db/branches";
 import { resolveDayEndScope } from "@/lib/db/day-end";
@@ -51,7 +51,7 @@ export default async function HmoBillingPage({
   const from = raw.from || `${today.slice(0, 8)}01`;
   const to = raw.to || today;
   const hmo =
-    HMO_PAYMENT_TYPES.find(
+    hmoPaymentNames().find(
       (name) => name.toLowerCase() === (raw.hmo ?? "").trim().toLowerCase(),
     ) ?? "";
 
@@ -132,7 +132,7 @@ export default async function HmoBillingPage({
             className="select-chevron rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50"
           >
             <option value="">All HMOs (preview only)</option>
-            {HMO_PAYMENT_TYPES.map((name) => (
+            {hmoPaymentNames().map((name) => (
               <option key={name} value={name}>
                 {name}
               </option>

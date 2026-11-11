@@ -4,6 +4,36 @@ All notable changes to the ADT Dental Clinic Cashflow app. The version is in
 `package.json` and `src/lib/cashflow/version.ts` (shown at the foot of the Help
 page). Newest first.
 
+## 0.4.2 — 2026-11-11
+
+Payment methods can now be added by owners and admins.
+
+### Added
+
+- **Asiancare** is now a built-in HMO payment method. It can be chosen on visits
+  and payments, has a price column for every procedure (set the prices under
+  Procedures), appears in HMO billing and the filters, and already had its Day
+  end column.
+- **Payment methods** tab (Transactions → Payment methods) for people with the new
+  privilege "Add and hide payment methods" (owners, admins and the superuser by
+  default; it can be given to anyone under Manage). Add an HMO / insurance or an
+  "other" method (card machine, e-wallet, bank). A new HMO gets its price column,
+  HMO billing entry, Day end column and the dentist's HMO commission rate; an
+  "other" method behaves like Cash. A method can be hidden from new visits (old
+  visits keep it) and removed only while it has never been used. Names can't be
+  changed once added, and the same name can't be added twice (capitals ignored).
+  Every change is written to the audit trail.
+- Run `scripts/sql/2026-11-payment-methods.sql` in Neon to turn adding on (one new
+  table, nothing existing is changed). Until then the built-in methods work as before.
+
+### Changed
+
+- The list of payment methods is no longer fixed in the code: forms, filters,
+  price lists, Day end and HMO billing all read the built-in list plus the added
+  methods.
+- Day end: a name that merely starts with "pos" (for example a new HMO called
+  "Posh Dental") is no longer mistaken for a POS card machine.
+
 ## 0.4.1 — 2026-11-10
 
 Deleted items housekeeping and an access review. No database changes.

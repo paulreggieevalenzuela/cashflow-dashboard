@@ -4,13 +4,15 @@
  * server action and the screens.
  */
 
-import { HMO_PAYMENT_TYPES } from "@/lib/cashflow/pricing";
+import { hmoPaymentNames } from "@/lib/cashflow/payment-methods";
 
 export const MAX_HMO_COMPANY_LENGTH = 100;
 export const MAX_HMO_ACCOUNT_LENGTH = 60;
 
 /** Suggestions for the HMO company box (any other name can still be typed). */
-export const HMO_COMPANY_SUGGESTIONS: readonly string[] = HMO_PAYMENT_TYPES;
+export function hmoCompanySuggestions(): readonly string[] {
+  return hmoPaymentNames();
+}
 
 export const BIRTH_DATE_INVALID_MESSAGE =
   "The birthday must be a real date that is not in the future.";

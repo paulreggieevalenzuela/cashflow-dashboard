@@ -34,6 +34,12 @@ const TABS = [
     href: "/cashflow/hmo",
   },
   {
+    key: "payment-methods",
+    label: "Payment methods",
+    href: "/cashflow/transactions?tab=payment-methods",
+    permission: "payment_method.manage",
+  },
+  {
     key: "audit",
     label: "Audit",
     href: "/cashflow/transactions?tab=audit",
@@ -51,9 +57,10 @@ export async function TransactionsTabs({
 }) {
   const session = await auth();
   const isAdmin = can(session, "audit.view");
-  const visible = TABS.filter(
-    (tab) => !("adminOnly" in tab && tab.adminOnly) || isAdmin,
-  );
+  const visible = TABS.filter((tab) => {
+    if ("permission" in tab) return can(session, tab.permission);
+    return !("adminOnly" in tab && tab.adminOnly) || isAdmin;
+  });
   return (
     <nav
       aria-label="Transactions sections"

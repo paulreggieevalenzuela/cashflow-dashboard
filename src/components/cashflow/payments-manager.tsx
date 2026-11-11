@@ -10,7 +10,7 @@ import { FormField } from "@/components/auth/form-field";
 import { AttachmentsPanel } from "@/components/cashflow/attachments-panel";
 import { useCan } from "@/components/cashflow/capabilities-context";
 import { SelectField } from "@/components/cashflow/select-field";
-import { PAYMENT_TYPES } from "@/lib/cashflow/constants";
+import { usePaymentTypeOptions } from "@/components/cashflow/payment-methods-context";
 import {
   round2,
   appliedToBill,
@@ -77,6 +77,7 @@ export function PaymentsManager({
   const canAdd = useCan("payment.add");
   const router = useRouter();
   const [form, setForm] = useState<FormState>(emptyForm);
+  const paymentTypeChoices = usePaymentTypeOptions(form.paymentType);
   const [formError, setFormError] = useState<string | null>(null);
   const [status, setStatus] = useState<"idle" | "submitting">("idle");
   const [rowBusyId, setRowBusyId] = useState<string | null>(null);
@@ -295,7 +296,7 @@ export function PaymentsManager({
             <SelectField
               label="Payment type"
               placeholder="Select payment type"
-              options={PAYMENT_TYPES}
+              options={paymentTypeChoices}
               value={form.paymentType}
               onChange={(event) =>
                 updateField("paymentType", event.target.value)

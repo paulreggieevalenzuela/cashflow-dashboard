@@ -8,11 +8,11 @@ import {
 } from "@/app/cashflow/patients/actions";
 import { Modal } from "@/components/ui/modal";
 import {
-  HMO_COMPANY_SUGGESTIONS,
   MAX_HMO_ACCOUNT_LENGTH,
   MAX_HMO_COMPANY_LENGTH,
 } from "@/lib/cashflow/patient-hmo";
 import { todayInManila } from "@/lib/cashflow/visit-status";
+import { useHmoNames } from "@/components/cashflow/payment-methods-context";
 
 const FIELD =
   "mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-900 shadow-sm outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50";
@@ -38,6 +38,7 @@ export function PatientFormModal({
   buttonClassName?: string;
 }) {
   const router = useRouter();
+  const hmoNames = useHmoNames();
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const [fullName, setFullName] = useState(initial?.fullName ?? "");
@@ -148,7 +149,7 @@ export function PatientFormModal({
                 autoComplete="off"
               />
               <datalist id="patient-hmo-companies">
-                {HMO_COMPANY_SUGGESTIONS.map((name) => (
+                {hmoNames.map((name) => (
                   <option key={name} value={name} />
                 ))}
               </datalist>

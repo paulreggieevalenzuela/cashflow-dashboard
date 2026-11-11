@@ -18,9 +18,9 @@ import { FilePicker } from "@/components/cashflow/file-picker";
 import { PatientCombobox } from "@/components/cashflow/patient-combobox";
 import { ProcedureCombobox } from "@/components/cashflow/procedure-combobox";
 import { SelectField } from "@/components/cashflow/select-field";
+import { usePaymentTypeOptions } from "@/components/cashflow/payment-methods-context";
 import {
   DISCOUNT_ID_TYPES,
-  PAYMENT_TYPES,
   TRANSACTION_TYPES,
   VISIT_TYPES,
 } from "@/lib/cashflow/constants";
@@ -460,6 +460,8 @@ export function TransactionForm(props: TransactionFormProps) {
         },
   );
   const procedureOptions = props.procedures ?? [];
+  // Hidden payment methods are not offered, except the one already on this visit.
+  const paymentTypeChoices = usePaymentTypeOptions(form.paymentType);
   const [errors, setErrors] = useState<FieldErrors>({});
   const [formError, setFormError] = useState<string | null>(null);
   const formErrorRef = useRef<HTMLDivElement>(null);
@@ -1212,7 +1214,7 @@ export function TransactionForm(props: TransactionFormProps) {
                       : "Payment method"
                   }
                   placeholder="Select payment method"
-                  options={PAYMENT_TYPES}
+                  options={paymentTypeChoices}
                   value={form.paymentType}
                   onChange={(event) =>
                     handlePaymentTypeChange(event.target.value)
@@ -1603,7 +1605,7 @@ export function TransactionForm(props: TransactionFormProps) {
                     <SelectField
                       label="Payment type"
                       placeholder="Select payment type"
-                      options={PAYMENT_TYPES}
+                      options={paymentTypeChoices}
                       value={form.paymentType}
                       onChange={(event) =>
                         updateField("paymentType", event.target.value)

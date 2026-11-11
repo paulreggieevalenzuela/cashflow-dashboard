@@ -82,6 +82,11 @@ export const PERMISSION_GROUPS = [
     title: "Rates & Targets",
     permissions: [
       { key: "procedure.manage", label: "Edit the price list and procedures" },
+      {
+        key: "payment_method.manage",
+        label: "Add and hide payment methods (HMOs, cards, e-wallets)",
+        hint: "Methods already used on visits can be hidden, not removed.",
+      },
       { key: "commission.manage", label: "Edit commission rates and tiers" },
       { key: "targets.edit", label: "Edit sales targets" },
     ],
@@ -150,6 +155,7 @@ const DEFAULT_ROLES: Record<Permission, readonly UserRole[]> = {
   "hmo.void": OWNER_ADMIN,
   "performance.view_all": OWNER_ADMIN,
   "procedure.manage": OWNER_ADMIN,
+  "payment_method.manage": OWNER_ADMIN,
   "commission.manage": OWNER_ADMIN,
   "targets.edit": OWNER_ADMIN,
   "user.manage": OWNER_ADMIN,

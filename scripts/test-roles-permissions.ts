@@ -33,7 +33,7 @@ async function main() {
 
   // ───────────────────────── pure rules ─────────────────────────
   const { ALL_PERMISSIONS, roleDefaults, effectivePermissions, overridesFor } = perms;
-  check("24 privileges in the catalog", ALL_PERMISSIONS.length === 24, ALL_PERMISSIONS.length);
+  check("25 privileges in the catalog", ALL_PERMISSIONS.length === 25, ALL_PERMISSIONS.length);
   check("no duplicate keys", new Set(ALL_PERMISSIONS).size === ALL_PERMISSIONS.length);
   check("superuser holds every privilege", roleDefaults("superuser").length === ALL_PERMISSIONS.length);
   check("owner and admin defaults are identical",
