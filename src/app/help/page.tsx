@@ -92,7 +92,7 @@ const GROUPS: Group[] = [
     items: [
       {
         q: "What is on the Day end page?",
-        a: "One table of the day's payments and visits, with the HMO details (HMO, account #, LOA, LOE, tooth # and amount billed) on the same row as the payment, then the breakdown by payment method and the totals for the branch. There is no separate HMO section and no expenses. Staff see their own branch; admins can pick a branch.",
+        a: "One table of the day's payments and visits, with the HMO details (HMO, account #, LOA, LOE, tooth # and amount billed) on the same row. An HMO visit shows the HMO as its payment type with the amount billed to the HMO, because the HMO pays later; that amount is in the HMO's column of the breakdown, in the HMO figure and in the total. Below are the breakdown by payment method and the totals for the branch. There is no separate HMO section and no expenses. Staff see their own branch; admins can pick a branch.",
       },
       {
         q: "Can I download a report?",

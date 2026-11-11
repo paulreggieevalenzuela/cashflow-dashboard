@@ -13,8 +13,10 @@ import { canonicalPaymentName, getCustomPaymentMethods } from "@/lib/cashflow/pa
 import type { Cell, SheetInput } from "@/lib/cashflow/xlsx";
 
 export type DayEndRow = {
-  /** A payment received that day, or a visit of that day with no payment. */
-  kind: "payment" | "unpaid";
+  /** A payment received that day, a visit of that day with no payment, or an
+   * HMO visit with no payment (billed to the HMO, which pays later: its
+   * amount is the HMO amount, so it is not "unpaid"). */
+  kind: "payment" | "unpaid" | "hmo";
   /** YYYY-MM-DD */
   date: string;
   visitId: string;
@@ -43,6 +45,10 @@ export type DayEndRow = {
   /** What the visit is billed to the HMO. Shown on the visit's first row of
    * the day only, so it is never counted twice. */
   hmoBilled: number;
+  /** What this row adds to the HMO columns of the breakdown: the amount
+   * billed to each HMO, on the visit's first row only (so a visit counts
+   * once, whether or not the HMO has paid yet). */
+  hmoParts: Array<{ name: string; amount: number }>;
 };
 
 export type DayEndReport = {
@@ -107,7 +113,8 @@ export type DayEndTotals = {
   merchantFees: number;
   withholdingTax: number;
   netCollection: number;
-  /** Part of `collected` paid through an HMO (billed to the HMO, not cash in hand). */
+  /** Part of `collected` that is an HMO amount: billed to the HMO on the
+   * day's visits (it pays later), not cash in hand. */
   hmo: number;
   /** Billed to HMOs for the visits on the report (each visit once). */
   hmoBilled: number;
@@ -147,11 +154,27 @@ export function summarizeDayEnd(report: DayEndReport): {
 
   for (const row of report.rows) {
     hmoBilled += row.hmoBilled;
+
+    // The HMO amount: what the visits are billed to each HMO (an HMO pays
+    // later, so there is often no payment row for it). It counts in that
+    // HMO's column, in the total and in "HMO".
+    for (const part of row.hmoParts ?? []) {
+      const column = breakdownColumnFor(part.name);
+      sums.set(column, round2((sums.get(column) ?? 0) + part.amount));
+      collected += part.amount;
+      netCollection += part.amount;
+      hmo += part.amount;
+    }
+
+    if (row.kind === "hmo") continue; // all of it is the HMO amount above
     if (row.kind === "unpaid") {
       visitsWithoutPayment += 1;
       continue;
     }
     paymentCount += 1;
+    // An HMO-typed payment on a visit whose HMO amount is already counted
+    // above would be counted twice; it is only a record of the HMO paying.
+    if (isHmoPayment(row.paymentType) && row.hmo) continue;
     const column = breakdownColumnFor(row.paymentType);
     sums.set(column, round2((sums.get(column) ?? 0) + row.amountPaid));
     collected += row.amountPaid;
@@ -275,7 +298,11 @@ export function buildDayEndSheet(report: DayEndReport): SheetInput {
       row.vatExclusive,
       row.vatAmount,
       row.invoiceNumber,
-      unpaid ? row.remarks || "No payment recorded" : row.remarks,
+      unpaid
+        ? row.remarks || "No payment recorded"
+        : row.kind === "hmo"
+          ? row.remarks || "Billed to the HMO"
+          : row.remarks,
       row.merchantFee,
       row.withholdingTax,
       row.netCollection,

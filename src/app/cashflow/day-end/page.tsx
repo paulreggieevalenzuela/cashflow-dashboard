@@ -67,8 +67,9 @@ export default async function DayEndPage({
             Day end report · {report.branchName} · {formatSheetDate(date, true)}
           </h2>
           <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-            Every payment received on the day, by payment method. Visits of
-            the day with no payment are listed with 0.00.
+            Every payment received on the day, by payment method. A visit
+            billed to an HMO shows the HMO amount (the HMO pays later); other
+            visits of the day with no payment are listed with 0.00.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -140,9 +141,9 @@ export default async function DayEndPage({
           hint={`after ${money.format(totals.merchantFees)} card fees and ${money.format(totals.withholdingTax)} tax`}
         />
         <Stat
-          label="Paid through HMO"
+          label="HMO"
           value={money.format(totals.hmo)}
-          hint={`included in the total · ${money.format(totals.hmoBilled)} billed to HMOs on the visits below`}
+          hint="billed to HMOs (they pay later), included in the total"
         />
         <Stat
           label="Reservation fees"
@@ -201,7 +202,7 @@ export default async function DayEndPage({
                   <td className="px-3 py-2.5">{row.procedure}</td>
                   <td className="whitespace-nowrap px-3 py-2.5">
                     {row.paymentType || "—"}
-                    {isHmoPayment(row.paymentType) && (
+                    {(row.kind === "hmo" || isHmoPayment(row.paymentType)) && (
                       <span className="ml-1.5 rounded-full bg-sky-50 px-1.5 py-0.5 text-[10px] font-medium text-sky-700 dark:bg-sky-950 dark:text-sky-300">
                         HMO
                       </span>
@@ -214,7 +215,9 @@ export default async function DayEndPage({
                   <td className="px-3 py-2.5">
                     {row.kind === "unpaid"
                       ? row.remarks || "No payment recorded"
-                      : row.remarks || "—"}
+                      : row.kind === "hmo"
+                        ? row.remarks || "Billed to the HMO"
+                        : row.remarks || "—"}
                   </td>
                   <Money value={row.merchantFee} />
                   <Money value={row.withholdingTax} />

@@ -4,6 +4,27 @@ All notable changes to the ADT Dental Clinic Cashflow app. The version is in
 `package.json` and `src/lib/cashflow/version.ts` (shown at the foot of the Help
 page). Newest first.
 
+## 0.4.3 — 2026-11-11
+
+Day end report: the HMO amount now has a value.
+
+### Fixed
+
+- **The HMO amount was blank (0.00) on the Day end report.** An HMO pays the
+  clinic later, so an HMO visit has no payment on its day and the report only
+  counted payments. Now an HMO visit with no payment shows the HMO as its
+  payment type with the amount billed to the HMO (and the note "Billed to the
+  HMO"), instead of "No payment recorded". That amount is counted in the HMO's
+  own column of the breakdown (Maxicare, Intellicare, Asiancare, an added HMO,
+  ...), in the **HMO** figure at the top, in Total collected and in Net
+  collection. "Cash in hand" (collected without HMO) is unchanged.
+- A visit paid partly in cash and partly through an HMO shows both: the cash in
+  the cash column and the HMO share in the HMO column. A visit with two HMOs is
+  split by company. When an HMO pays later (an HMO payment recorded on another
+  day), that day's report shows the amount received. The same money is never
+  counted twice on one report.
+- Applies to the screen, the Excel file and the CSV. No database change.
+
 ## 0.4.2 — 2026-11-11
 
 Payment methods can now be added by owners and admins.

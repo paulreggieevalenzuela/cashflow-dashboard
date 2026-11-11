@@ -53,7 +53,7 @@ function distinct(values: string[]): string[] {
 type HmoInfo = Pick<
   DayEndRow,
   "hmo" | "hmoAccountNumber" | "loaNumber" | "loeNumber" | "teeth"
-> & { billed: number };
+> & { billed: number; billedByHmo: Array<{ name: string; amount: number }> };
 
 const NO_HMO: HmoInfo = {
   hmo: "",
@@ -62,6 +62,7 @@ const NO_HMO: HmoInfo = {
   loeNumber: "",
   teeth: "",
   billed: 0,
+  billedByHmo: [],
 };
 
 /**
@@ -118,7 +119,13 @@ async function getHmoInfoByInvoice(
       (line) =>
         isHmoPayment(line.paymentType) && !isCheckInPlaceholder(line.procedure),
     );
+    const byHmo = new Map<string, number>();
+    for (const line of hmoLines) {
+      const name = hmoNameFor(line.paymentType);
+      byHmo.set(name, round2((byHmo.get(name) ?? 0) + Number(line.amountPaid)));
+    }
     result.set(visit.id, {
+      billedByHmo: [...byHmo].map(([name, amount]) => ({ name, amount })),
       hmo: distinct(hmoLines.map((line) => hmoNameFor(line.paymentType))).join(" / "),
       hmoAccountNumber: visit.patientId
         ? (accountByPatient.get(visit.patientId) ?? "")
@@ -176,6 +183,7 @@ export async function getDayEndReport(input: {
       paidAt: payments.paidAt,
       invoiceNumber: invoices.invoiceNumber,
       transactionType: invoices.transactionType,
+      visitDate: invoices.visitDate,
     })
     .from(payments)
     .innerJoin(invoices, eq(invoices.id, payments.invoiceId))
@@ -251,10 +259,23 @@ export async function getDayEndReport(input: {
   const hmoInfo = await getHmoInfoByInvoice(allInvoiceIds, linesByInvoice);
   // The billed amount goes on a visit's first row only, so it counts once.
   const billedShown = new Set<string>();
-  const hmoFor = (invoiceId: string | null | undefined) => {
+  const hmoFor = (
+    invoiceId: string | null | undefined,
+    /** The visit is dated on the report's day, so what it is billed to the
+     * HMO counts here (an HMO pays later: there may be no payment at all). */
+    visitIsToday: boolean,
+    /** An HMO payment received for the visit (counted instead of the billed
+     * amount when the visit is from an earlier day). */
+    payment?: { name: string; amount: number },
+  ) => {
     const info = (invoiceId && hmoInfo.get(invoiceId)) || NO_HMO;
     const first = Boolean(invoiceId) && !billedShown.has(invoiceId as string);
     if (invoiceId && info.hmo) billedShown.add(invoiceId);
+    const parts: Array<{ name: string; amount: number }> = [];
+    if (info.hmo && visitIsToday && first) parts.push(...info.billedByHmo);
+    else if (info.hmo && !visitIsToday && payment && isHmoPayment(payment.name)) {
+      parts.push(payment);
+    }
     return {
       hmo: info.hmo,
       hmoAccountNumber: info.hmoAccountNumber,
@@ -262,6 +283,7 @@ export async function getDayEndReport(input: {
       loeNumber: info.loeNumber,
       teeth: info.teeth,
       hmoBilled: first && info.hmo ? info.billed : 0,
+      hmoParts: parts,
     };
   };
 
@@ -333,7 +355,10 @@ export async function getDayEndReport(input: {
       withholdingTax: wht,
       netCollection: Math.max(0, round2(amount - fee - wht)),
       isReservation: payment.transactionType === "Reservation",
-      ...hmoFor(payment.invoiceId),
+      ...hmoFor(payment.invoiceId, payment.visitDate === input.date, {
+        name: payment.paymentType,
+        amount,
+      }),
     });
   }
 
@@ -341,24 +366,37 @@ export async function getDayEndReport(input: {
     const visitLines = linesByInvoice.get(visit.id) ?? [];
     const first = visitLines[0];
     if (!first) continue;
+    const hmo = hmoFor(visit.id, true);
+    const realLines = visitLines.filter((line) => !isCheckInPlaceholder(line.procedure));
+    // A visit billed only to an HMO has no payment because the HMO pays
+    // later: its row carries the HMO amount instead of "no payment".
+    const hmoOnly =
+      hmo.hmo !== "" &&
+      realLines.length > 0 &&
+      realLines.every((line) => isHmoPayment(line.paymentType));
+    const billed = hmo.hmoBilled;
     rows.push({
-      kind: "unpaid",
+      kind: hmoOnly ? "hmo" : "unpaid",
       date: input.date,
       visitId: first.visitId,
       patientName: first.patientName,
       dentist: distinct(visitLines.map((line) => line.dentist)).join(" / "),
       procedure: distinct(visitLines.map((line) => line.procedure)).join(" + "),
-      paymentType: "",
-      amountPaid: 0,
-      vatExclusive: 0,
-      vatAmount: 0,
+      paymentType: hmoOnly ? hmo.hmo : "",
+      amountPaid: hmoOnly ? billed : 0,
+      vatExclusive: hmoOnly
+        ? round2(realLines.reduce((sum, line) => sum + Number(line.vatExclusive), 0))
+        : 0,
+      vatAmount: hmoOnly
+        ? round2(realLines.reduce((sum, line) => sum + Number(line.vatAmount), 0))
+        : 0,
       invoiceNumber: visit.invoiceNumber,
       remarks: distinct(visitLines.map((line) => line.remarks)).join(" · "),
       merchantFee: 0,
       withholdingTax: 0,
-      netCollection: 0,
+      netCollection: hmoOnly ? billed : 0,
       isReservation: visit.transactionType === "Reservation",
-      ...hmoFor(visit.id),
+      ...hmo,
     });
   }
 
