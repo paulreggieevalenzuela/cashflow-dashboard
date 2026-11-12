@@ -25,6 +25,7 @@ import {
 import type { CashflowTransaction } from "@/lib/cashflow/schema";
 import { deleteTransaction } from "@/lib/db/transactions";
 import { listPaymentsForInvoice, type Payment } from "@/lib/db/payments";
+import { lineLockMessage, visitLockMessage } from "@/lib/db/transaction-checks";
 
 type ActionResult<T> =
   | { ok: true; data: T }
@@ -133,6 +134,16 @@ export async function updateInvoiceAction(
     return { ok: false, message: guard.message };
   }
   const session = guard.session;
+
+  // A checked visit is locked: only the superuser can change it.
+  const locked = await visitLockMessage(
+    invoiceId,
+    { isSuperuser: session.user.isSuperuser },
+    "edit",
+  );
+  if (locked) {
+    return { ok: false, message: locked };
+  }
 
   const parsed = parseInvoiceInput(input);
   if (!parsed.ok) {
@@ -323,6 +334,11 @@ export async function removeTransactionAction(id: string): Promise<ActionResult<
   }
   const session = guard.session;
 
+  const locked = await lineLockMessage(id, { isSuperuser: session.user.isSuperuser }, "remove");
+  if (locked) {
+    return { ok: false, message: locked };
+  }
+
   try {
     await deleteTransaction(id, {
       userId: session.user.id,
@@ -347,6 +363,15 @@ export async function removeInvoiceAction(invoiceId: string): Promise<ActionResu
     return { ok: false, message: guard.message };
   }
   const session = guard.session;
+
+  const locked = await visitLockMessage(
+    invoiceId,
+    { isSuperuser: session.user.isSuperuser },
+    "remove",
+  );
+  if (locked) {
+    return { ok: false, message: locked };
+  }
 
   try {
     await deleteInvoice(invoiceId, {

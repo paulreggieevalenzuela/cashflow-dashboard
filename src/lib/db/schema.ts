@@ -297,6 +297,51 @@ export const paymentMethods = pgTable("payment_methods", {
 
 export type PaymentMethodRow = typeof paymentMethods.$inferSelect;
 
+/**
+ * A transaction line the branch manager / admin has checked ("ticked") after
+ * the daily review. A visit with a checked line is locked: only the superuser
+ * can edit, remove or unlock it. Kept in its own table (one row per checked
+ * line) so nothing existing changes and the app still runs before the SQL
+ * script is run. Deleting the line deletes its check.
+ */
+export const transactionChecks = pgTable(
+  "transaction_checks",
+  {
+    transactionId: text("transaction_id")
+      .primaryKey()
+      .references(() => transactions.id, { onDelete: "cascade" }),
+    checkedAt: timestamp("checked_at", { withTimezone: true }).notNull().defaultNow(),
+    checkedByUserId: uuid("checked_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    checkedByName: text("checked_by_name").notNull().default(""),
+  },
+  (table) => [index("transaction_checks_checked_at_idx").on(table.checkedAt)],
+);
+
+/**
+ * The second check, by Headquarters, on a visit the Branch manager has already
+ * checked (a row in `transaction_checks`). Same shape, own table, so the first
+ * check and its lock are untouched. One row per line; deleting the line
+ * deletes it. Created by scripts/sql/2026-11-transaction-hq-checks.sql.
+ */
+export const transactionHqChecks = pgTable(
+  "transaction_hq_checks",
+  {
+    transactionId: text("transaction_id")
+      .primaryKey()
+      .references(() => transactions.id, { onDelete: "cascade" }),
+    checkedAt: timestamp("checked_at", { withTimezone: true }).notNull().defaultNow(),
+    checkedByUserId: uuid("checked_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    checkedByName: text("checked_by_name").notNull().default(""),
+  },
+  (table) => [index("transaction_hq_checks_checked_at_idx").on(table.checkedAt)],
+);
+
+export type TransactionCheckRow = typeof transactionChecks.$inferSelect;
+
 export type PriceHistoryRow = typeof procedurePriceHistory.$inferSelect;
 
 /**
@@ -571,6 +616,34 @@ export const patients = pgTable("patients", {
 }, (table) => [
   index("patients_name_key_prefix_idx").on(table.nameKey.op("text_pattern_ops")),
 ]);
+
+/**
+ * A patient's HMOs: one row per company with the patient's member / account
+ * number for it (a patient can belong to several). The first one (position 0)
+ * is also copied into `patients.hmo_company` / `hmo_account_number`, which the
+ * older screens and searches still read. Created by
+ * scripts/sql/2026-11-patient-hmos.sql.
+ */
+export const patientHmos = pgTable(
+  "patient_hmos",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    patientId: uuid("patient_id")
+      .notNull()
+      .references(() => patients.id, { onDelete: "cascade" }),
+    company: text("company").notNull(),
+    /** The company name, lower case, so "Maxicare" and "maxicare " are one. */
+    companyKey: text("company_key").notNull(),
+    accountNumber: text("account_number").notNull().default(""),
+    position: integer("position").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("patient_hmos_patient_company_idx").on(table.patientId, table.companyKey),
+  ],
+);
+
+export type PatientHmoRow = typeof patientHmos.$inferSelect;
 
 export type PatientRow = typeof patients.$inferSelect;
 export type NewPatientRow = typeof patients.$inferInsert;

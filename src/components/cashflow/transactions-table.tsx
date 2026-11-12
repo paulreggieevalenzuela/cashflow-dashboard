@@ -7,7 +7,23 @@ import {
   getInvoiceForEditAction,
   removeInvoiceAction,
 } from "@/app/cashflow/actions";
+import {
+  approveVisitsHqAction,
+  checkVisitsAction,
+  uncheckVisitAction,
+} from "@/app/cashflow/transactions/check-actions";
 import { LoaPendingBadge } from "@/components/cashflow/loa-pending-badge";
+import { Spinner } from "@/components/ui/spinner";
+import {
+  approvalStageOf,
+  canApproveVisitHq,
+  canCheckVisit,
+  checkStateOf,
+  formatCheckedAt,
+  isVisitLocked,
+  NO_CHECK,
+  type VisitCheck,
+} from "@/lib/cashflow/transaction-lock";
 import { PaymentsManager } from "@/components/cashflow/payments-manager";
 import { TransactionForm } from "@/components/cashflow/transaction-form";
 import {
@@ -108,6 +124,42 @@ function BalanceBadge({
   );
 }
 
+function ApprovedIcon() {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 20 20"
+      fill="currentColor"
+      className="h-4 w-4"
+      aria-hidden="true"
+    >
+      <path
+        fillRule="evenodd"
+        d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm3.857-9.809a.75.75 0 0 0-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 1 0-1.06 1.061l2.5 2.5a.75.75 0 0 0 1.137-.089l4-5.5Z"
+        clipRule="evenodd"
+      />
+    </svg>
+  );
+}
+
+function LockIcon() {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 20 20"
+      fill="currentColor"
+      className="h-4 w-4"
+      aria-hidden="true"
+    >
+      <path
+        fillRule="evenodd"
+        d="M10 1a4.5 4.5 0 0 0-4.5 4.5V9H5a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2h-.5V5.5A4.5 4.5 0 0 0 10 1Zm3 8V5.5a3 3 0 1 0-6 0V9h6Z"
+        clipRule="evenodd"
+      />
+    </svg>
+  );
+}
+
 function RowActionsMenu({
   transaction,
   canDelete,
@@ -115,6 +167,7 @@ function RowActionsMenu({
   onRemove,
   onEdit,
   editLocked = false,
+  lockedNote,
 }: {
   transaction: CashflowTransaction;
   canDelete: boolean;
@@ -123,6 +176,8 @@ function RowActionsMenu({
   onEdit: () => void;
   /** Cleared visits can be edited only by admins and staff. */
   editLocked?: boolean;
+  /** Shown instead of the default reason when the visit is checked and locked. */
+  lockedNote?: string;
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -207,7 +262,8 @@ function RowActionsMenu({
             disabled={editLocked}
             title={
               editLocked
-                ? "Cleared visits are locked. An admin or staff member can correct it."
+                ? (lockedNote ??
+                  "Cleared visits are locked. An admin or staff member can correct it.")
                 : undefined
             }
             onClick={() => {
@@ -271,6 +327,13 @@ export function TransactionsTable({
   branches,
   procedures,
   discountTypes,
+  visitChecks = {},
+  checksReady = false,
+  canVerify = false,
+  canVerifyHq = false,
+  hqReady = false,
+  currentUserId = null,
+  isSuperuser = false,
 }: {
   transactions: CashflowTransaction[];
   canDelete?: boolean;
@@ -283,9 +346,140 @@ export function TransactionsTable({
   branches: Branch[];
   procedures: ProcedureOption[];
   discountTypes: DiscountTypeOption[];
+  /** The daily check per visit (how many lines are ticked, by whom, when). */
+  visitChecks?: Record<string, VisitCheck>;
+  /** False until the transaction_checks SQL script has been run. */
+  checksReady?: boolean;
+  /** May give the Branch manager check (the first one). */
+  canVerify?: boolean;
+  /** May give the Headquarters check (the second one). */
+  canVerifyHq?: boolean;
+  /** False until scripts/sql/2026-11-transaction-hq-checks.sql has been run. */
+  hqReady?: boolean;
+  /** The signed-in person (Headquarters can't be the one who gave the Branch check). */
+  currentUserId?: string | null;
+  /** The superuser can still edit a checked visit, and unlock it. */
+  isSuperuser?: boolean;
 }) {
   const router = useRouter();
   const [removingId, setRemovingId] = useState<string | null>(null);
+  // The daily check: visits ticked on this page, waiting for "Check and lock".
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [checking, setChecking] = useState(false);
+  // Headquarters' own selection (visits the Branch manager has already checked).
+  const [selectedHq, setSelectedHq] = useState<Set<string>>(new Set());
+  const [approving, setApproving] = useState(false);
+  const [unlockingId, setUnlockingId] = useState<string | null>(null);
+  const [checkNotice, setCheckNotice] = useState<{ ok: boolean; text: string } | null>(null);
+  const checkOf = (invoiceId: string | null | undefined): VisitCheck =>
+    (invoiceId && visitChecks[invoiceId]) || NO_CHECK;
+  const showCheckColumn =
+    canVerify ||
+    canVerifyHq ||
+    isSuperuser ||
+    transactions.some((row) => isVisitLocked(checkOf(row.invoiceId)));
+  const eligible = (row: CashflowTransaction) =>
+    canVerify &&
+    checksReady &&
+    Boolean(row.invoiceId) &&
+    canCheckVisit({
+      status: (row.invoiceId && invoiceSummaries[row.invoiceId]?.status) || "",
+      procedures: [row.procedure],
+      state: checkStateOf(checkOf(row.invoiceId)),
+    }).ok;
+  const hqDecision = (row: CashflowTransaction) =>
+    canApproveVisitHq({
+      check: checkOf(row.invoiceId),
+      actorUserId: currentUserId,
+      isSuperuser,
+    });
+  const eligibleHq = (row: CashflowTransaction) =>
+    canVerifyHq && hqReady && Boolean(row.invoiceId) && hqDecision(row).ok;
+  const eligibleHqIds = transactions.flatMap((row) =>
+    eligibleHq(row) && row.invoiceId ? [row.invoiceId] : [],
+  );
+  const allHqSelected =
+    eligibleHqIds.length > 0 && eligibleHqIds.every((id) => selectedHq.has(id));
+  const eligibleIds = transactions.flatMap((row) =>
+    eligible(row) && row.invoiceId ? [row.invoiceId] : [],
+  );
+  const allSelected =
+    eligibleIds.length > 0 && eligibleIds.every((id) => selected.has(id));
+
+  function toggleOne(invoiceId: string) {
+    setSelected((current) => {
+      const next = new Set(current);
+      if (next.has(invoiceId)) next.delete(invoiceId);
+      else next.add(invoiceId);
+      return next;
+    });
+  }
+
+  function toggleOneHq(invoiceId: string) {
+    setSelectedHq((current) => {
+      const next = new Set(current);
+      if (next.has(invoiceId)) next.delete(invoiceId);
+      else next.add(invoiceId);
+      return next;
+    });
+  }
+
+  async function handleApproveSelected() {
+    const ids = [...selectedHq];
+    if (ids.length === 0) return;
+    if (
+      !window.confirm(
+        `Approve ${ids.length} ${ids.length === 1 ? "visit" : "visits"} as Headquarters? This is the last check.`,
+      )
+    ) {
+      return;
+    }
+    setApproving(true);
+    setCheckNotice(null);
+    try {
+      const result = await approveVisitsHqAction(ids);
+      setCheckNotice({ ok: result.ok, text: result.message });
+      setSelectedHq(new Set());
+      router.refresh();
+    } finally {
+      setApproving(false);
+    }
+  }
+
+  async function handleCheckSelected() {
+    const ids = [...selected];
+    if (ids.length === 0) return;
+    if (
+      !window.confirm(
+        `Check ${ids.length} ${ids.length === 1 ? "visit" : "visits"}? Each will be locked: only the superuser can edit, remove or unlock it.`,
+      )
+    ) {
+      return;
+    }
+    setChecking(true);
+    setCheckNotice(null);
+    try {
+      const result = await checkVisitsAction(ids);
+      setCheckNotice({ ok: result.ok, text: result.message });
+      setSelected(new Set());
+      router.refresh();
+    } finally {
+      setChecking(false);
+    }
+  }
+
+  async function handleUnlock(invoiceId: string) {
+    if (!window.confirm("Unlock this visit so it can be edited again?")) return;
+    setUnlockingId(invoiceId);
+    setCheckNotice(null);
+    try {
+      const result = await uncheckVisitAction(invoiceId);
+      setCheckNotice({ ok: result.ok, text: result.message });
+      router.refresh();
+    } finally {
+      setUnlockingId(null);
+    }
+  }
   // One shared modal for the whole table rather than one per row — opened
   // by whichever row's action menu was used to edit. The visit's full set of
   // lines is fetched when it opens (the table only holds this page's rows).
@@ -423,10 +617,120 @@ export function TransactionsTable({
   }
 
   return (
+    <>
+    {checkNotice && (
+      <p
+        role={checkNotice.ok ? "status" : "alert"}
+        className={`mb-3 rounded-lg border px-4 py-3 text-sm ${
+          checkNotice.ok
+            ? "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-300"
+            : "border-red-200 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300"
+        }`}
+      >
+        {checkNotice.text}
+      </p>
+    )}
+    {canVerify && selected.size > 0 && (
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-200">
+        <span>
+          {selected.size} {selected.size === 1 ? "visit" : "visits"} selected for the Branch
+          manager check. Checking locks them: only the superuser can edit, remove or unlock
+          them. Headquarters checks them next.
+        </span>
+        <span className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setSelected(new Set())}
+            disabled={checking}
+            className="rounded-lg border border-emerald-300 bg-white px-3 py-1.5 text-xs font-medium text-emerald-800 hover:bg-emerald-100 disabled:opacity-60 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-200"
+          >
+            Clear selection
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleCheckSelected()}
+            disabled={checking}
+            aria-busy={checking}
+            className="inline-flex items-center gap-2 rounded-lg bg-emerald-600 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
+          >
+            {checking && <Spinner className="h-3 w-3" />}
+            {checking ? "Checking..." : `Check and lock ${selected.size}`}
+          </button>
+        </span>
+      </div>
+    )}
+    {canVerifyHq && selectedHq.size > 0 && (
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900 dark:border-sky-900 dark:bg-sky-950 dark:text-sky-200">
+        <span>
+          {selectedHq.size} {selectedHq.size === 1 ? "visit" : "visits"} selected for the
+          Headquarters check. This is the last check.
+        </span>
+        <span className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setSelectedHq(new Set())}
+            disabled={approving}
+            className="rounded-lg border border-sky-300 bg-white px-3 py-1.5 text-xs font-medium text-sky-800 hover:bg-sky-100 disabled:opacity-60 dark:border-sky-800 dark:bg-sky-950 dark:text-sky-200"
+          >
+            Clear selection
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleApproveSelected()}
+            disabled={approving}
+            aria-busy={approving}
+            className="inline-flex items-center gap-2 rounded-lg bg-sky-600 px-3.5 py-1.5 text-xs font-semibold text-white hover:bg-sky-700 disabled:opacity-60"
+          >
+            {approving && <Spinner className="h-3 w-3" />}
+            {approving ? "Approving..." : `Approve ${selectedHq.size} as Headquarters`}
+          </button>
+        </span>
+      </div>
+    )}
     <div className="overflow-x-auto rounded-lg border border-zinc-200 dark:border-zinc-800">
       <table className="w-full min-w-[900px] text-left text-sm">
         <thead className="bg-zinc-50 text-xs uppercase tracking-wide text-zinc-500 dark:bg-zinc-900 dark:text-zinc-400">
           <tr>
+            {showCheckColumn && (
+              <>
+                <th className="w-20 px-3 py-3 text-center font-medium">
+                  <span className="block text-[10px] leading-none">Branch</span>
+                  {canVerify ? (
+                    <input
+                      type="checkbox"
+                      aria-label="Select every visit on this page that the Branch manager can check"
+                      title="Select every visit on this page that can be checked"
+                      checked={allSelected}
+                      disabled={eligibleIds.length === 0 || checking}
+                      onChange={() =>
+                        setSelected(allSelected ? new Set() : new Set(eligibleIds))
+                      }
+                      className="mx-auto mt-1.5 block h-4 w-4 rounded border-zinc-300 accent-emerald-600 disabled:opacity-40"
+                    />
+                  ) : (
+                    <span className="sr-only">Checked by the Branch manager</span>
+                  )}
+                </th>
+                <th className="w-28 px-6 py-3 text-center font-medium">
+                  <span className="block text-[10px] leading-none">HQ</span>
+                  {canVerifyHq ? (
+                    <input
+                      type="checkbox"
+                      aria-label="Select every visit on this page that Headquarters can approve"
+                      title="Select every visit on this page that Headquarters can approve"
+                      checked={allHqSelected}
+                      disabled={eligibleHqIds.length === 0 || approving}
+                      onChange={() =>
+                        setSelectedHq(allHqSelected ? new Set() : new Set(eligibleHqIds))
+                      }
+                      className="mx-auto mt-1.5 block h-4 w-4 rounded border-zinc-300 accent-sky-600 disabled:opacity-40"
+                    />
+                  ) : (
+                    <span className="sr-only">Approved by Headquarters</span>
+                  )}
+                </th>
+              </>
+            )}
             <SortableHeader label="Date" column="date" query={query} />
             <SortableHeader
               label="Patient"
@@ -457,12 +761,139 @@ export function TransactionsTable({
             const summary = transaction.invoiceId
               ? invoiceSummaries[transaction.invoiceId]
               : undefined;
+            const check = checkOf(transaction.invoiceId);
+            const isChecked = isVisitLocked(check);
+            const checkedLock = isChecked && !isSuperuser;
+            const canTick = eligible(transaction);
+            const why =
+              !isChecked && canVerify
+                ? canCheckVisit({
+                    status: summary?.status ?? "",
+                    procedures: [transaction.procedure],
+                    state: "none",
+                  })
+                : null;
 
             return (
               <tr
                 key={transaction.id}
-                className="text-zinc-700 dark:text-zinc-300"
+                className={`text-zinc-700 dark:text-zinc-300 ${
+                  isChecked ? "bg-emerald-50/40 dark:bg-emerald-950/20" : ""
+                }`}
               >
+                {showCheckColumn && (
+                  <>
+                  <td className="w-20 px-3 py-3 text-center">
+                    {isChecked ? (
+                      isSuperuser ? (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            transaction.invoiceId && void handleUnlock(transaction.invoiceId)
+                          }
+                          disabled={unlockingId === transaction.invoiceId}
+                          title={`Checked by the Branch manager: ${check.checkedBy || "someone"}${check.checkedAt ? ` on ${formatCheckedAt(check.checkedAt)}` : ""}. Click to unlock (removes both checks).`}
+                          aria-label="Checked and locked. Click to unlock."
+                          className="inline-flex h-5 w-5 items-center justify-center rounded text-emerald-600 hover:bg-emerald-100 disabled:opacity-50 dark:text-emerald-400 dark:hover:bg-emerald-900/40"
+                        >
+                          {unlockingId === transaction.invoiceId ? (
+                            <Spinner className="h-3.5 w-3.5" />
+                          ) : (
+                            <LockIcon />
+                          )}
+                        </button>
+                      ) : (
+                        <span
+                          title={`Checked by the Branch manager: ${check.checkedBy || "someone"}${check.checkedAt ? ` on ${formatCheckedAt(check.checkedAt)}` : ""}. Locked: only the superuser can change it.`}
+                          className="inline-flex h-5 w-5 items-center justify-center text-emerald-600 dark:text-emerald-400"
+                        >
+                          <LockIcon />
+                          <span className="sr-only">Checked and locked</span>
+                        </span>
+                      )
+                    ) : canVerify ? (
+                      <input
+                        type="checkbox"
+                        aria-label={`Check the visit of ${transaction.patientName}`}
+                        title={
+                          canTick
+                            ? "Tick to check this visit, then press Check and lock"
+                            : !checksReady
+                              ? "Run the transaction-checks SQL script first."
+                              : (why && !why.ok ? why.reason : undefined)
+                        }
+                        disabled={!canTick || checking}
+                        checked={Boolean(
+                          transaction.invoiceId && selected.has(transaction.invoiceId),
+                        )}
+                        onChange={() =>
+                          transaction.invoiceId && toggleOne(transaction.invoiceId)
+                        }
+                        className="h-4 w-4 rounded border-zinc-300 accent-emerald-600 disabled:opacity-40"
+                      />
+                    ) : null}
+                  </td>
+                  <td className="w-28 px-6 py-3 text-center">
+                    {(() => {
+                      const stage = approvalStageOf(check);
+                      if (stage === "approved") {
+                        return (
+                          <span
+                            title={`Approved by Headquarters: ${check.hqCheckedBy || "someone"}${check.hqCheckedAt ? ` on ${formatCheckedAt(check.hqCheckedAt)}` : ""}.`}
+                            className="inline-flex h-5 w-5 items-center justify-center text-sky-600 dark:text-sky-400"
+                          >
+                            <ApprovedIcon />
+                            <span className="sr-only">Approved by Headquarters</span>
+                          </span>
+                        );
+                      }
+                      if (stage === "none") {
+                        return (
+                          <span
+                            title="Waits for the Branch manager's check first."
+                            className="text-zinc-300 dark:text-zinc-700"
+                          >
+                            &ndash;
+                          </span>
+                        );
+                      }
+                      // Checked by the branch, waiting for Headquarters.
+                      if (!canVerifyHq) {
+                        return (
+                          <span
+                            title="Checked by the Branch manager. Waiting for Headquarters."
+                            className="text-[11px] font-medium text-amber-600 dark:text-amber-400"
+                          >
+                            Waiting
+                          </span>
+                        );
+                      }
+                      const decision = hqDecision(transaction);
+                      return (
+                        <input
+                          type="checkbox"
+                          aria-label={`Approve the visit of ${transaction.patientName} as Headquarters`}
+                          title={
+                            !hqReady
+                              ? "Run the Headquarters SQL script first."
+                              : decision.ok
+                                ? "Tick to approve this visit as Headquarters, then press Approve"
+                                : decision.reason
+                          }
+                          disabled={!eligibleHq(transaction) || approving}
+                          checked={Boolean(
+                            transaction.invoiceId && selectedHq.has(transaction.invoiceId),
+                          )}
+                          onChange={() =>
+                            transaction.invoiceId && toggleOneHq(transaction.invoiceId)
+                          }
+                          className="h-4 w-4 rounded border-zinc-300 accent-sky-600 disabled:opacity-40"
+                        />
+                      );
+                    })()}
+                  </td>
+                  </>
+                )}
                 <td className="whitespace-nowrap px-4 py-3">
                   {transaction.date}
                 </td>
@@ -518,14 +949,20 @@ export function TransactionsTable({
                   <div className="flex items-center justify-end">
                     <RowActionsMenu
                       transaction={transaction}
-                      canDelete={canDelete}
+                      canDelete={canDelete && !checkedLock}
                       isRemoving={removingId === transaction.id}
                       onRemove={() => handleRemove(transaction)}
                       onEdit={() => openEditor(transaction)}
                       editLocked={
-                        !canDelete &&
-                        !canEditCleared &&
-                        summary?.status === "Cleared"
+                        checkedLock ||
+                        (!canDelete &&
+                          !canEditCleared &&
+                          summary?.status === "Cleared")
+                      }
+                      lockedNote={
+                        checkedLock
+                          ? "Checked and locked. Only the superuser can change it."
+                          : undefined
                       }
                     />
                   </div>
@@ -537,5 +974,6 @@ export function TransactionsTable({
       </table>
       {editModal}
     </div>
+    </>
   );
 }

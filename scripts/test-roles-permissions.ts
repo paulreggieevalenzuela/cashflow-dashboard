@@ -33,11 +33,13 @@ async function main() {
 
   // ───────────────────────── pure rules ─────────────────────────
   const { ALL_PERMISSIONS, roleDefaults, effectivePermissions, overridesFor } = perms;
-  check("25 privileges in the catalog", ALL_PERMISSIONS.length === 25, ALL_PERMISSIONS.length);
+  check("27 privileges in the catalog", ALL_PERMISSIONS.length === 27, ALL_PERMISSIONS.length);
   check("no duplicate keys", new Set(ALL_PERMISSIONS).size === ALL_PERMISSIONS.length);
   check("superuser holds every privilege", roleDefaults("superuser").length === ALL_PERMISSIONS.length);
-  check("owner and admin defaults are identical",
-    JSON.stringify(roleDefaults("owner")) === JSON.stringify(roleDefaults("admin")));
+  // The owner has everything an admin has, plus the Headquarters check.
+  check("owner defaults are the admin defaults plus the Headquarters check",
+    JSON.stringify(roleDefaults("owner").filter((key) => key !== "transaction.verify_hq")) === JSON.stringify(roleDefaults("admin")) &&
+    roleDefaults("owner").includes("transaction.verify_hq") && !roleDefaults("admin").includes("transaction.verify_hq"));
   check("admin can delete visits, staff cannot",
     roleDefaults("admin").includes("visit.delete") && !roleDefaults("staff").includes("visit.delete"));
   check("staff can edit a Cleared visit, dentist cannot",
@@ -73,10 +75,18 @@ async function main() {
   // who manages whom
   const M = (a: string, b: string) => perms.canManageUser({ id: "a", role: a as never }, { id: "b", role: b as never }).ok;
   check("superuser manages owner/admin/dentist/staff", ["owner", "admin", "dentist", "staff"].every((r) => M("superuser", r)));
-  check("owner manages admin/dentist/staff, not another owner", M("owner", "admin") && M("owner", "dentist") && M("owner", "staff") && !M("owner", "owner"));
-  check("admin manages dentist/staff only", M("admin", "dentist") && M("admin", "staff") && !M("admin", "admin") && !M("admin", "owner"));
+  check("owner manages owner (a peer), admin, dentist and staff", M("owner", "owner") && M("owner", "admin") && M("owner", "dentist") && M("owner", "staff"));
+  check("admin manages admin (a peer), dentist and staff, but not an owner", M("admin", "admin") && M("admin", "dentist") && M("admin", "staff") && !M("admin", "owner"));
   check("nobody manages the superuser", ["superuser", "owner", "admin"].every((r) => !M(r, "superuser")));
-  check("nobody manages themselves", !perms.canManageUser({ id: "x", role: "owner" }, { id: "x", role: "owner" }).ok);
+  check("nobody manages themselves", !perms.canManageUser({ id: "x", role: "owner" }, { id: "x", role: "owner" }).ok && !perms.canManageUser({ id: "x", role: "admin" }, { id: "x", role: "admin" }).ok);
+  const X = (a: string, b: string) => perms.canRemoveUser({ id: "a", role: a as never }, { id: "b", role: b as never }).ok;
+  check("remove: peers are edited but not removed (owner/owner, admin/admin)", !X("owner", "owner") && !X("admin", "admin") && !X("admin", "owner"));
+  check("remove: from above works (owner removes admin/staff, admin removes staff/dentist, superuser removes owner)", X("owner", "admin") && X("owner", "staff") && X("admin", "staff") && X("admin", "dentist") && X("superuser", "owner") && !X("owner", "superuser"));
+  check("remove: not yourself", !perms.canRemoveUser({ id: "x", role: "owner" }, { id: "x", role: "admin" }).ok);
+  const mr = perms.managerRoleOf;
+  check("only admin, owner and superuser manage users, whatever is ticked",
+    mr({ isSuperuser: true }) === "superuser" && mr({ isOwner: true, role: "admin" }) === "owner" && mr({ role: "admin" }) === "admin" &&
+    mr({ role: "staff" }) === null && mr({ role: "dentist" }) === null && mr({}) === null);
   check("dentist/staff manage nobody", !M("dentist", "staff") && !M("staff", "dentist"));
   check("assignable roles", JSON.stringify(perms.assignableRolesFor("superuser")) === '["owner","admin","dentist","staff"]'
     && JSON.stringify(perms.assignableRolesFor("owner")) === '["admin","dentist","staff"]'

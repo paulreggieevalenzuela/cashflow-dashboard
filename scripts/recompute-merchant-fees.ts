@@ -30,7 +30,11 @@ async function main() {
     .from(payments)
     .where(inArray(sql`lower(trim(${payments.paymentType}))`, cardTypes));
 
-  const invoiceIds = rows.flatMap((row) => (row.invoiceId ? [row.invoiceId] : []));
+  const withCard = rows.flatMap((row) => (row.invoiceId ? [row.invoiceId] : []));
+  // Checked (locked) visits are left exactly as they were checked.
+  const { getVisitChecks } = await import("../src/lib/db/transaction-checks");
+  const checks = await getVisitChecks(withCard);
+  const invoiceIds = withCard.filter((id) => (checks[id]?.checked ?? 0) === 0);
   if (invoiceIds.length === 0) {
     console.log("No visits with a card payment — nothing to refresh.");
     return;

@@ -69,6 +69,11 @@ export function CashflowNav({
         // Staff see Performance only while staff performance is shown.
         return role !== "staff" || SHOW_STAFF_PERFORMANCE || permissions.includes("performance.view_all");
       }
+      // Users is only for admins, owners and the superuser, even if the
+      // privilege was ticked for somebody else.
+      if (link.permission === "user.manage" && role !== "admin" && role !== "owner" && role !== "superuser") {
+        return false;
+      }
       return permissions.includes(link.permission);
     }),
   ];

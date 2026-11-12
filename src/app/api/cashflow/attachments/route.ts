@@ -1,3 +1,4 @@
+import { visitLockMessage } from "@/lib/db/transaction-checks";
 import { auth } from "@/lib/auth/access";
 import { can } from "@/lib/auth/guards";
 import {
@@ -73,6 +74,15 @@ export async function POST(request: Request) {
     }
   } else if (!(await getInvoiceById(invoiceId))) {
     return problem("That transaction no longer exists.", 404);
+  } else {
+    const locked = await visitLockMessage(
+      invoiceId,
+      { isSuperuser: session.user.isSuperuser },
+      "attach a file",
+    );
+    if (locked) {
+      return problem(locked, 403);
+    }
   }
 
   let paymentId: string | null = null;

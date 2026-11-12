@@ -15,7 +15,7 @@ import {
   type PasswordDialogState,
 } from "@/components/cashflow/password-dialog";
 import { Spinner } from "@/components/ui/spinner";
-import { canManageUser, worksInEveryClinic } from "@/lib/auth/permissions";
+import { canManageUser, canRemoveUser, worksInEveryClinic } from "@/lib/auth/permissions";
 import { canActOnRequestFor, canResetPassword } from "@/lib/auth/reset-rules";
 import {
   USER_ROLE_LABELS,
@@ -415,6 +415,7 @@ export function UsersManager({
               const isBusy = rowBusyId === user.id;
               const me = { id: currentUserId, role: currentUserRole };
               const mayManage = canManageUser(me, { id: user.id, role: user.role }).ok;
+              const mayRemove = canRemoveUser(me, { id: user.id, role: user.role }).ok;
               const mayReset = canResetPassword(me, { id: user.id, role: user.role }).ok;
 
               return (
@@ -481,7 +482,7 @@ export function UsersManager({
                         Reset password
                       </button>
                     )}
-                    {mayManage && !isSelf && (
+                    {mayRemove && !isSelf && (
                       <button
                         type="button"
                         onClick={() => handleDelete(user)}

@@ -1,11 +1,20 @@
+import { legacyHmoList, type PatientHmoEntry } from "@/lib/cashflow/patient-hmo";
+import {
+  listPatientHmos,
+  mergePatientHmos,
+  patientHmosReady,
+  savePatientHmos,
+} from "@/lib/db/patient-hmos";
 import { and, asc, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
 import { balanceDueOf, isCheckInPlaceholder } from "@/lib/cashflow/visit-status";
 import { db } from "@/lib/db/client";
+import { checksSchemaMissing, lineNotCheckedSql } from "@/lib/db/transaction-checks";
 import { getInvoiceSummaries } from "@/lib/db/invoices";
 import { cleanDisplayName, normalizeNameKey } from "@/lib/db/patients";
 import {
   branches,
   invoices,
+  patientHmos,
   patients,
   payments,
   transactions,
@@ -134,6 +143,12 @@ export async function listPatientsPage(input: {
         ilike(patients.fullName, term),
         ilike(patients.contactNumber, term),
         ilike(patients.hmoAccountNumber, term),
+        // Any of the patient's HMOs (company or account number), once the list exists.
+        ...((await patientHmosReady())
+          ? [
+              sql`exists (select 1 from ${patientHmos} ph where ph.patient_id = ${patients.id} and (ph.account_number ilike ${term} or ph.company ilike ${term}))`,
+            ]
+          : []),
       ),
     );
   }
@@ -233,6 +248,10 @@ export type PatientProfile = {
     birthDate: string;
     hmoCompany: string;
     hmoAccountNumber: string;
+    /** Every HMO the patient has: company + account number, first one first. */
+    hmos: PatientHmoEntry[];
+    /** False until scripts/sql/2026-11-patient-hmos.sql is run (one HMO per patient). */
+    hmoListReady: boolean;
     createdAt: string;
   };
   invoices: PatientInvoiceRow[];
@@ -348,6 +367,10 @@ export async function getPatientProfile(
       birthDate: patient.birthDate,
       hmoCompany: patient.hmoCompany,
       hmoAccountNumber: patient.hmoAccountNumber,
+      hmos:
+        (await listPatientHmos([patient.id])).get(patient.id) ??
+        legacyHmoList(patient.hmoCompany, patient.hmoAccountNumber),
+      hmoListReady: await patientHmosReady(),
       createdAt: patient.createdAt.toISOString(),
     },
     invoices: rows,
@@ -375,8 +398,11 @@ export type PatientInput = {
   notes: string;
   /** YYYY-MM-DD, or "" when not known. */
   birthDate: string;
+  /** The first HMO (the older single fields; kept in step with `hmos`). */
   hmoCompany: string;
   hmoAccountNumber: string;
+  /** The patient's whole HMO list (already cleaned). Left out = not changed. */
+  hmos?: PatientHmoEntry[];
 };
 
 export type PatientResult =
@@ -420,6 +446,9 @@ export async function createPatient(
       hmoAccountNumber: input.hmoAccountNumber,
     })
     .returning({ id: patients.id });
+  if (input.hmos && input.hmos.length > 0) {
+    await savePatientHmos(row.id, input.hmos);
+  }
   return { ok: true, id: row.id };
 }
 
@@ -452,12 +481,22 @@ export async function updatePatient(
       hmoAccountNumber: input.hmoAccountNumber,
     })
     .where(eq(patients.id, id));
+  if (input.hmos) {
+    await savePatientHmos(id, input.hmos);
+  }
   // Visits keep showing the name they were saved with, so keep the stored
   // display name in step with the patient record.
-  await db
-    .update(transactions)
-    .set({ patientName: fullName })
-    .where(eq(transactions.patientId, id));
+  // A checked (locked) visit keeps the name it was saved with.
+  const renameWhere = eq(transactions.patientId, id);
+  try {
+    await db
+      .update(transactions)
+      .set({ patientName: fullName })
+      .where(and(renameWhere, lineNotCheckedSql()));
+  } catch (error) {
+    if (!checksSchemaMissing(error)) throw error;
+    await db.update(transactions).set({ patientName: fullName }).where(renameWhere);
+  }
   return { ok: true, id };
 }
 
@@ -501,6 +540,8 @@ export async function mergePatients(
       notes: [target[0].notes, source[0].notes].filter(Boolean).join("\n"),
     })
     .where(eq(patients.id, targetId));
+  // The removed record's HMOs the kept one doesn't have yet move across.
+  await mergePatientHmos(sourceId, targetId);
   await db.delete(patients).where(eq(patients.id, sourceId));
   return { ok: true, movedVisits: moved.length };
 }

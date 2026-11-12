@@ -57,6 +57,7 @@ export function PaymentsManager({
   readOnly = false,
   attachments,
   onChanged,
+  locked = false,
 }: {
   invoiceId: string;
   totalDue: number;
@@ -72,6 +73,8 @@ export function PaymentsManager({
   /** Called after a payment was recorded or removed, for a parent that
    * holds its own copy of the payments (the table's edit pop-up). */
   onChanged?: () => void;
+  /** The visit is checked and locked: its proof files can't be changed. */
+  locked?: boolean;
 }) {
   const canDelete = useCan("payment.delete");
   const canAdd = useCan("payment.add");
@@ -220,6 +223,7 @@ export function PaymentsManager({
                         (item) => item.paymentId === payment.id,
                       )}
                       buttonLabel="Attach proof of payment"
+                      locked={locked}
                     />
                   </div>
                 )}

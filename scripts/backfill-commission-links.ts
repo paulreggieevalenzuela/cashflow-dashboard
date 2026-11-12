@@ -15,7 +15,14 @@ config({ path: ".env.local" });
 async function main() {
   const { listTransactions, upsertTransactions } = await import("../src/lib/db/transactions");
 
-  const rows = await listTransactions();
+  const all = await listTransactions();
+  // Checked (locked) lines are never re-priced: they keep the numbers they
+  // were checked with. (Nothing is skipped until the checks table exists.)
+  const { getVisitChecks } = await import("../src/lib/db/transaction-checks");
+  const invoiceIds = [...new Set(all.flatMap((row) => (row.invoiceId ? [row.invoiceId] : [])))];
+  const checks = await getVisitChecks(invoiceIds);
+  const rows = all.filter((row) => !(row.invoiceId && (checks[row.invoiceId]?.checked ?? 0) > 0));
+  const skipped = all.length - rows.length;
   if (rows.length === 0) {
     console.log("No transactions to backfill.");
     return;
@@ -23,7 +30,7 @@ async function main() {
 
   await upsertTransactions(rows);
   console.log(
-    `Backfilled dentist/procedure links and commission for ${rows.length} transaction(s).`,
+    `Backfilled dentist/procedure links and commission for ${rows.length} transaction(s)${skipped > 0 ? `; left ${skipped} checked (locked) line(s) as they are` : ""}.`,
   );
 }
 

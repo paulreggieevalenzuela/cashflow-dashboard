@@ -61,6 +61,14 @@ const GROUPS: Group[] = [
         a: "It is built from the date and time, the branch and a code, in the form MMDDYYHHMM-BRANCH-CODE, so each visit has a unique reference you can quote.",
       },
       {
+        q: "When do Cleared visits leave the Queue?",
+        a: "The Cleared column only shows visits finished today. When the day ends (Manila time) they are gone from the Queue; they stay in Transactions. Visits still waiting, with the dentist or at the cashier stay on the Queue until they are Cleared.",
+      },
+      {
+        q: "How do I find a patient on a busy Queue?",
+        a: "Type in the search box above the columns: a patient name, a procedure, a dentist or a clinic. Only the matching cards stay, and each column shows how many matched. Several words narrow it down (\"maria filling\"). Under the box are quick filters: a dentist list, Has balance due, LOA pending and Earlier visits (unpaid visits from a previous day); they work together with the search. Press Esc, Clear or Clear search and filters to see everything again. Each column scrolls on its own, and the Cleared column shows its first 20 visits with a Show more button; a search always looks through all of them.",
+      },
+      {
         q: "How do I remove a visit from the Queue?",
         a: "Use the remove option on the visit in the Queue board. This is for visits entered by mistake or patients who left; the change is recorded in the audit trail.",
       },
@@ -83,7 +91,11 @@ const GROUPS: Group[] = [
       },
       {
         q: "Where do I enter the patient's HMO company and account number?",
-        a: "On the patient's profile (add or edit patient). The HMO company, account number and birthday are saved with the patient and can be used to search for them.",
+        a: "On the patient's profile: the HMO details section lists every HMO the patient has, each with its company name and account number. To change them, press Edit patient: use + Add HMO for another one, Remove to delete one, and Save. The first HMO in the list is the patient's main one. HMO billing and Day end use the account number of the HMO the visit was billed to. The HMOs, account numbers and birthday can all be used to search for the patient.",
+      },
+      {
+        q: "Can a patient have more than one HMO?",
+        a: "Yes, up to 10, each with its own company name and account number. The same company cannot be listed twice. If the patient is merged into another record, the HMOs the kept patient doesn't have yet are added to the list.",
       },
     ],
   },
@@ -139,7 +151,11 @@ const GROUPS: Group[] = [
     items: [
       {
         q: "What are the roles?",
-        a: "Superuser, Owner, Admin, Dentist and Staff. Owners and admins work in every clinic and have the same controls; an owner can also manage admins, and only the superuser can manage owners. Dentists and staff work in the clinics ticked for them.",
+        a: "Superuser, Owner, Admin, Dentist and Staff. Owners and admins work in every clinic and have the same controls. Only an admin, an owner or the superuser can manage users: an admin can manage other admins, dentists and staff; an owner can manage other owners, admins, dentists and staff; the superuser manages everyone. Removing an account is stricter: nobody can remove a person at their own level. Dentists and staff work in the clinics ticked for them.",
+      },
+      {
+        q: "How does the daily check work?",
+        a: "Every visit is checked twice, in order. First the Branch manager: at the end of the day, a person with the privilege \"Check transactions: Branch manager\" (owners and admins by default) opens Transactions, ticks the Branch box on each Cleared visit that is done and correct, and presses Check and lock. The visit then shows a lock and nobody except the superuser can edit it, remove it, change its payments or files, or move its status. Then Headquarters: a person with \"Check transactions: Headquarters\" (owners by default) ticks the HQ box on the visits waiting for them and presses Approve. Headquarters cannot tick a visit the Branch manager has not checked, and cannot be the same person who gave the Branch check. Both privileges are tick boxes under Users, Manage, Access & Permissions, so you can give them to anyone. Use the To check, Waiting for HQ and Approved by HQ buttons above the list to see what is left. Only the superuser can unlock a visit, which removes both checks. Every check and unlock is in the audit trail.",
       },
       {
         q: "How do I change what one person can do?",

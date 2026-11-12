@@ -1,5 +1,6 @@
 "use server";
 
+import { visitLockMessage } from "@/lib/db/transaction-checks";
 import { revalidatePath } from "next/cache";
 import { requirePermission } from "@/lib/auth/guards";
 import {
@@ -40,6 +41,15 @@ export async function addPaymentAction(
     return { ok: false, message: guard.message };
   }
   const session = guard.session;
+
+  const locked = await visitLockMessage(
+    invoiceId,
+    { isSuperuser: session.user.isSuperuser },
+    "record a payment",
+  );
+  if (locked) {
+    return { ok: false, message: locked };
+  }
 
   const summary = (await getInvoiceSummaries([invoiceId]))[invoiceId];
   if (!summary) {
@@ -110,6 +120,14 @@ export async function deletePaymentAction(
   };
 
   const removed = await getPaymentById(paymentId);
+  const locked = await visitLockMessage(
+    removed?.invoiceId,
+    { isSuperuser: session.user.isSuperuser },
+    "remove a payment",
+  );
+  if (locked) {
+    return { ok: false, message: locked };
+  }
   let invoiceId: string | null;
   try {
     invoiceId = await deletePayment(paymentId, actor);

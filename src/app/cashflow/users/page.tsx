@@ -3,8 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth/access";
 import { can } from "@/lib/auth/guards";
-import { assignableRolesFor, worksInEveryClinic } from "@/lib/auth/permissions";
-import type { UserRole } from "@/lib/cashflow/user-schema";
+import { assignableRolesFor, managerRoleOf, worksInEveryClinic } from "@/lib/auth/permissions";
 import { listBranches } from "@/lib/db/branches";
 import { listOpenResetRequests } from "@/lib/db/password-requests";
 import { listBranchIdsByUser, listCustomizedUserIds } from "@/lib/db/user-access";
@@ -18,7 +17,8 @@ export const metadata: Metadata = {
 export default async function UsersPage() {
   const session = await auth();
 
-  if (!session?.user || !can(session, "user.manage")) {
+  const myRole = session?.user ? managerRoleOf(session.user) : null;
+  if (!session?.user || !can(session, "user.manage") || !myRole) {
     redirect("/cashflow");
   }
 
@@ -52,11 +52,6 @@ export default async function UsersPage() {
       browser: request.userAgent.slice(0, 80),
     }));
 
-  const myRole: UserRole = session.user.isSuperuser
-    ? "superuser"
-    : session.user.isOwner
-      ? "owner"
-      : "admin";
   const renderedAt = new Date().getTime();
 
   return (
@@ -81,8 +76,8 @@ export default async function UsersPage() {
           {myRole === "superuser"
             ? "As the superuser you manage everyone, including owners."
             : myRole === "owner"
-              ? "As an owner you can manage admins, dentists and staff."
-              : "You can manage dentists and staff; an owner manages admins."}
+              ? "As an owner you can manage other owners, admins, dentists and staff."
+              : "As an admin you can manage other admins, dentists and staff; owners are managed by an owner or the superuser."}
         </p>
       </div>
       <UsersManager

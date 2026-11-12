@@ -133,38 +133,60 @@ export default async function PatientPage({
               ? ` · PWD / Senior ID on file${profile.lastDiscountId.type ? ` (${profile.lastDiscountId.type})` : ""}: ${canSeeIds ? profile.lastDiscountId.number : maskId(profile.lastDiscountId.number)}`
               : ""}
           </p>
-          {(patient.birthDate || patient.hmoCompany || patient.hmoAccountNumber) && (
+          {patient.birthDate && (
             <dl className="mt-2 flex flex-wrap gap-x-6 gap-y-1 text-sm">
-              {patient.birthDate && (
-                <div className="flex gap-1.5">
-                  <dt className="text-zinc-500 dark:text-zinc-400">Birthday</dt>
-                  <dd className="text-zinc-900 dark:text-zinc-50">
-                    {formatBirthDate(patient.birthDate)}
-                    {ageFromBirthDate(patient.birthDate) !== null &&
-                      ` (${ageFromBirthDate(patient.birthDate)})`}
-                  </dd>
-                </div>
-              )}
-              {patient.hmoCompany && (
-                <div className="flex gap-1.5">
-                  <dt className="text-zinc-500 dark:text-zinc-400">HMO</dt>
-                  <dd className="text-zinc-900 dark:text-zinc-50">
-                    {patient.hmoCompany}
-                  </dd>
-                </div>
-              )}
-              {patient.hmoAccountNumber && (
-                <div className="flex gap-1.5">
-                  <dt className="text-zinc-500 dark:text-zinc-400">
-                    Account no.
-                  </dt>
-                  <dd className="font-mono text-zinc-900 dark:text-zinc-50">
-                    {patient.hmoAccountNumber}
-                  </dd>
-                </div>
-              )}
+              <div className="flex gap-1.5">
+                <dt className="text-zinc-500 dark:text-zinc-400">Birthday</dt>
+                <dd className="text-zinc-900 dark:text-zinc-50">
+                  {formatBirthDate(patient.birthDate)}
+                  {ageFromBirthDate(patient.birthDate) !== null &&
+                    ` (${ageFromBirthDate(patient.birthDate)})`}
+                </dd>
+              </div>
             </dl>
           )}
+          <section
+            aria-labelledby="patient-hmo-heading"
+            className="mt-3 max-w-xl rounded-lg border border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-950"
+          >
+            <h3
+              id="patient-hmo-heading"
+              className="text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400"
+            >
+              HMO details
+            </h3>
+            {patient.hmos.length === 0 ? (
+              <p className="mt-1.5 text-sm text-zinc-500 dark:text-zinc-400">
+                No HMO on file. Use Edit patient to add the company name and
+                the HMO account number.
+              </p>
+            ) : (
+              <table className="mt-1.5 w-full text-left text-sm">
+                <thead className="text-xs text-zinc-500 dark:text-zinc-400">
+                  <tr>
+                    <th className="py-1 pr-4 font-medium">Company name</th>
+                    <th className="py-1 font-medium">HMO account number</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
+                  {patient.hmos.map((entry) => (
+                    <tr key={entry.company}>
+                      <td className="py-1.5 pr-4 font-medium text-zinc-900 dark:text-zinc-50">
+                        {entry.company}
+                      </td>
+                      <td className="py-1.5 font-mono text-zinc-900 dark:text-zinc-50">
+                        {entry.accountNumber || (
+                          <span className="font-sans text-zinc-400">
+                            No account number
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </section>
           {patient.notes && (
             <p className="mt-1 max-w-xl whitespace-pre-line text-sm text-zinc-600 dark:text-zinc-400">
               {patient.notes}
@@ -179,8 +201,8 @@ export default async function PatientPage({
               contactNumber: patient.contactNumber,
               notes: patient.notes,
               birthDate: patient.birthDate,
-              hmoCompany: patient.hmoCompany,
-              hmoAccountNumber: patient.hmoAccountNumber,
+              hmos: patient.hmos,
+              hmoListReady: patient.hmoListReady,
             }}
             buttonLabel="Edit patient"
             buttonClassName="rounded-lg border border-zinc-300 px-3.5 py-2 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"

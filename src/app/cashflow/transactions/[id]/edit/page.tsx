@@ -9,6 +9,7 @@ import { getInvoiceDetail } from "@/lib/db/invoices";
 import { listActiveDiscountTypes } from "@/lib/db/discount-types";
 import { listProcedureOptions } from "@/lib/db/procedures";
 import { getTransactionById } from "@/lib/db/transactions";
+import { visitLockMessage } from "@/lib/db/transaction-checks";
 
 function NotFound({ message }: { message: string }) {
   return (
@@ -51,6 +52,15 @@ export default async function EditTransactionPage({
   const detail = await getInvoiceDetail(transaction.invoiceId);
   if (!detail || detail.lines.length === 0) {
     return <NotFound message="We couldn't find that transaction. It may have been removed." />;
+  }
+
+  const checkedLock = await visitLockMessage(
+    transaction.invoiceId,
+    { isSuperuser: Boolean(session?.user.isSuperuser) },
+    "edit",
+  );
+  if (checkedLock) {
+    return <NotFound message={checkedLock} />;
   }
 
   if (

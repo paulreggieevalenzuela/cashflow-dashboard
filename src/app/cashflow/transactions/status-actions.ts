@@ -5,6 +5,7 @@ import { auth } from "@/lib/auth/access";
 import { can } from "@/lib/auth/guards";
 import { canRemoveFromQueue, isVisitStatus } from "@/lib/cashflow/visit-status";
 import { deleteInvoice } from "@/lib/db/invoices";
+import { visitLockMessage } from "@/lib/db/transaction-checks";
 import { getQueueRemovalFacts, setVisitStatus } from "@/lib/db/visit-status";
 
 type ActionResult = { ok: true } | { ok: false; message: string };
@@ -26,6 +27,15 @@ export async function setVisitStatusAction(
   }
   if (!isVisitStatus(to)) {
     return { ok: false, message: "That is not a valid status." };
+  }
+
+  const locked = await visitLockMessage(
+    invoiceId,
+    { isSuperuser: session.user.isSuperuser },
+    "change its status",
+  );
+  if (locked) {
+    return { ok: false, message: locked };
   }
 
   const result = await setVisitStatus({
@@ -64,6 +74,15 @@ export async function removeFromQueueAction(
   const session = await auth();
   if (!session?.user) {
     return { ok: false, message: "You must be signed in to remove a visit." };
+  }
+
+  const locked = await visitLockMessage(
+    invoiceId,
+    { isSuperuser: session.user.isSuperuser },
+    "remove it",
+  );
+  if (locked) {
+    return { ok: false, message: locked };
   }
 
   const facts = await getQueueRemovalFacts(invoiceId);

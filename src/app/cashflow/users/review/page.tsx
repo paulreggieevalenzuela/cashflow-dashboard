@@ -8,11 +8,12 @@ import {
   PERMISSION_GROUPS,
   SENSITIVE_PERMISSIONS,
   canManageUser,
+  managerRoleOf,
   roleDefaults,
   worksInEveryClinic,
   type Permission,
 } from "@/lib/auth/permissions";
-import { USER_ROLE_LABELS, type UserRole } from "@/lib/cashflow/user-schema";
+import { USER_ROLE_LABELS } from "@/lib/cashflow/user-schema";
 import { lastAccessChanges } from "@/lib/db/audit";
 import { listBranches } from "@/lib/db/branches";
 import { listAllOverrides, listBranchIdsByUser } from "@/lib/db/user-access";
@@ -41,11 +42,10 @@ export default async function AccessReviewPage() {
   if (!session?.user || !can(session, "user.manage")) {
     redirect("/cashflow");
   }
-  const viewerRole: UserRole = session.user.isSuperuser
-    ? "superuser"
-    : session.user.isOwner
-      ? "owner"
-      : "admin";
+  const viewerRole = managerRoleOf(session.user);
+  if (!viewerRole) {
+    redirect("/cashflow");
+  }
 
   const [allUsers, overridesByUser, clinicsByUser, branches, changes] = await Promise.all([
     listUsers(),

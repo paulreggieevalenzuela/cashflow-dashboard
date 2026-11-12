@@ -11,6 +11,9 @@ import { AuditTrail } from "@/components/cashflow/audit-trail";
 import { StatusHistory } from "@/components/cashflow/status-history";
 import { LoaPendingBadge } from "@/components/cashflow/loa-pending-badge";
 import { hasHmoPayment, isLoaMissing, isLoaPending } from "@/lib/cashflow/hmo";
+import { VisitCheckBanner } from "@/components/cashflow/visit-check-banner";
+import { StatusPill } from "@/components/cashflow/status-pill";
+import { isVisitLocked, NO_CHECK, type VisitCheck } from "@/lib/cashflow/transaction-lock";
 import { VisitStatusControl } from "@/components/cashflow/visit-status-control";
 import {
   balanceDueOf,
@@ -54,6 +57,12 @@ export function TransactionDetail({
   attachments,
   statusHistory = [],
   auditEntries,
+  visitCheck = NO_CHECK,
+  canVerify = false,
+  canVerifyHq = false,
+  hqReady = false,
+  currentUserId = null,
+  isSuperuser = false,
 }: {
   detail: InvoiceDetail;
   openedLineId: string;
@@ -72,6 +81,15 @@ export function TransactionDetail({
   statusHistory?: StatusHistoryEntry[];
   /** Admin only: who created and changed this visit. */
   auditEntries?: AuditEntry[];
+  /** The daily check: how many lines are ticked, by whom and when. */
+  visitCheck?: VisitCheck;
+  /** May tick (check) visits. */
+  canVerify?: boolean;
+  canVerifyHq?: boolean;
+  hqReady?: boolean;
+  currentUserId?: string | null;
+  /** The superuser can still edit a checked visit and unlock it. */
+  isSuperuser?: boolean;
 }) {
   const router = useRouter();
   const [isRemoving, setIsRemoving] = useState(false);
@@ -95,7 +113,8 @@ export function TransactionDetail({
   });
   // A Cleared visit is locked for dentists; admins and staff can still edit it
   // (and only an admin can reopen it or remove it).
-  const locked = isLocked(status) && !canDelete && !canEditCleared;
+  const checkedLock = isVisitLocked(visitCheck) && !isSuperuser;
+  const locked = checkedLock || (isLocked(status) && !canDelete && !canEditCleared);
   const dentistNames = [
     ...new Set(lines.map((line) => line.dentist).filter(Boolean)),
   ].join(", ");
@@ -174,6 +193,9 @@ export function TransactionDetail({
             {lines.length > 1 ? `${lines.length} procedures` : first?.procedure}
           </p>
           <div className="mt-2">
+            {checkedLock ? (
+              <StatusPill status={status} />
+            ) : (
             <VisitStatusControl
               invoiceId={invoice.id}
               status={status}
@@ -185,6 +207,7 @@ export function TransactionDetail({
               })}
               visitIssue={visitIssue}
             />
+            )}
             {loaPending && <LoaPendingBadge className="mt-2" />}
           </div>
         </div>
@@ -198,9 +221,13 @@ export function TransactionDetail({
           {locked ? (
             <span
               className="rounded-lg border border-dashed border-zinc-300 px-3.5 py-2 text-sm text-zinc-500 dark:border-zinc-700 dark:text-zinc-400"
-              title="Cleared visits are locked. An admin or staff member can correct it."
+              title={
+                checkedLock
+                  ? "Checked and locked. Only the superuser can change it."
+                  : "Cleared visits are locked. An admin or staff member can correct it."
+              }
             >
-              Cleared · locked
+              {checkedLock ? "Checked · locked" : "Cleared · locked"}
             </span>
           ) : (
             <EditTransactionModal
@@ -214,7 +241,7 @@ export function TransactionDetail({
               totalDue={totalDue}
             />
           )}
-          {canDelete && (
+          {canDelete && !checkedLock && (
             <button
               type="button"
               onClick={handleRemove}
@@ -226,6 +253,18 @@ export function TransactionDetail({
           )}
         </div>
       </div>
+
+      <VisitCheckBanner
+        invoiceId={invoice.id}
+        status={status}
+        procedures={lines.map((line) => line.procedure)}
+        check={visitCheck}
+        canVerify={canVerify}
+        canVerifyHq={canVerifyHq}
+        hqReady={hqReady}
+        currentUserId={currentUserId}
+        isSuperuser={isSuperuser}
+      />
 
       <div className="grid grid-cols-1 gap-6 rounded-xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-950 sm:grid-cols-2">
         <DetailField
@@ -391,6 +430,7 @@ export function TransactionDetail({
         payments={payments}
         readOnly
         attachments={attachments}
+        locked={checkedLock}
       />
 
       <div className="rounded-xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-950">
@@ -424,6 +464,7 @@ export function TransactionDetail({
           )}
           buttonLabel="Attach invoice photo / PDF"
           emptyText="No invoice file attached yet."
+          locked={checkedLock}
         />
         {attachments.some(
           (item) => item.kind === "receipt" && item.paymentId === null,
@@ -439,6 +480,7 @@ export function TransactionDetail({
                 (item) => item.kind === "receipt" && item.paymentId === null,
               )}
               buttonLabel="Attach proof of payment"
+              locked={checkedLock}
             />
           </div>
         )}

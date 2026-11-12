@@ -11,6 +11,8 @@ import { listProcedureOptions } from "@/lib/db/procedures";
 import { getTransactionById } from "@/lib/db/transactions";
 import { listStatusHistory } from "@/lib/db/visit-status";
 import { listAuditForInvoice } from "@/lib/db/audit";
+import { getVisitChecks, hqChecksReady } from "@/lib/db/transaction-checks";
+import { NO_CHECK } from "@/lib/cashflow/transaction-lock";
 
 function NotFound({ message }: { message: string }) {
   return (
@@ -52,11 +54,13 @@ export default async function TransactionDetailPage({
 
   // Any line of a visit opens the whole visit.
   const canAudit = can(session, "audit.view");
-  const [detail, attachments, statusHistory, auditEntries] = await Promise.all([
+  const [detail, attachments, statusHistory, auditEntries, checks, hqReady] = await Promise.all([
     getInvoiceDetail(transaction.invoiceId),
     listAttachmentsForInvoice(transaction.invoiceId),
     listStatusHistory(transaction.invoiceId),
     canAudit ? listAuditForInvoice(transaction.invoiceId) : Promise.resolve(undefined),
+    getVisitChecks([transaction.invoiceId]),
+    hqChecksReady(),
   ]);
   if (!detail || detail.lines.length === 0) {
     return <NotFound message="We couldn't find that transaction. It may have been removed." />;
@@ -76,6 +80,12 @@ export default async function TransactionDetailPage({
       attachments={attachments}
       statusHistory={statusHistory}
       auditEntries={auditEntries}
+      visitCheck={checks[transaction.invoiceId] ?? NO_CHECK}
+      canVerify={can(session, "transaction.verify")}
+      canVerifyHq={can(session, "transaction.verify_hq")}
+      hqReady={hqReady}
+      currentUserId={session?.user.id ?? null}
+      isSuperuser={Boolean(session?.user.isSuperuser)}
     />
   );
 }

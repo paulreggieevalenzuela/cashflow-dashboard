@@ -18,6 +18,7 @@ import { listExpenses } from "@/lib/db/expenses";
 import { listSuppliers } from "@/lib/db/suppliers";
 import { listDentistUsers } from "@/lib/db/dentists";
 import { getInvoiceSummaries } from "@/lib/db/invoices";
+import { getVisitChecks, hqChecksReady, transactionChecksReady } from "@/lib/db/transaction-checks";
 import { listProcedureAdminRows } from "@/lib/db/procedure-admin";
 import { listActiveDiscountTypes } from "@/lib/db/discount-types";
 import { listProcedureOptions } from "@/lib/db/procedures";
@@ -46,6 +47,7 @@ export default async function TransactionsPage({
     group?: string;
     from?: string;
     to?: string;
+    checked?: string;
     sort?: string;
     dir?: string;
   }>;
@@ -223,6 +225,7 @@ export default async function TransactionsPage({
       branch: query.branch === ALL_BRANCHES ? undefined : query.branch,
       from: query.from,
       to: query.to,
+      checked: query.checked,
       sort: query.sort,
       dir: query.dir,
     }),
@@ -231,9 +234,13 @@ export default async function TransactionsPage({
     listProcedureOptions(),
     listActiveDiscountTypes(),
   ]);
-  const invoiceSummaries = await getInvoiceSummaries(
-    rows.flatMap((row) => (row.invoiceId ? [row.invoiceId] : [])),
-  );
+  const pageInvoiceIds = rows.flatMap((row) => (row.invoiceId ? [row.invoiceId] : []));
+  const [invoiceSummaries, visitChecks, checksReady, hqReady] = await Promise.all([
+    getInvoiceSummaries(pageInvoiceIds),
+    getVisitChecks(pageInvoiceIds),
+    transactionChecksReady(),
+    hqChecksReady(),
+  ]);
 
   const totalPages = Math.max(1, Math.ceil(total / query.pageSize));
 
@@ -264,6 +271,13 @@ export default async function TransactionsPage({
         procedures={procedures}
         discountTypes={discountTypes}
         invoiceSummaries={invoiceSummaries}
+        visitChecks={visitChecks}
+        checksReady={checksReady}
+        canVerify={can(session, "transaction.verify")}
+        canVerifyHq={can(session, "transaction.verify_hq")}
+        hqReady={hqReady}
+        currentUserId={session?.user.id ?? null}
+        isSuperuser={Boolean(session?.user.isSuperuser)}
       />
     </div>
   );

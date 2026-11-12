@@ -3,14 +3,17 @@
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth/access";
 import { can } from "@/lib/auth/guards";
+import { patientHasCheckedLines } from "@/lib/db/transaction-checks";
 import { logAudit } from "@/lib/db/audit";
 import {
   BIRTH_DATE_INVALID_MESSAGE,
   MAX_HMO_ACCOUNT_LENGTH,
   MAX_HMO_COMPANY_LENGTH,
+  cleanHmoList,
   cleanHmoText,
   isValidBirthDate,
 } from "@/lib/cashflow/patient-hmo";
+import { PATIENT_HMOS_NOT_READY, patientHmosReady } from "@/lib/db/patient-hmos";
 import {
   createPatient,
   mergePatients,
@@ -22,17 +25,42 @@ type Result =
   | { ok: true; id: string }
   | { ok: false; message: string; existingId?: string };
 
-function clean(input: PatientInput): PatientInput {
+/**
+ * Tidies what the form sent. The HMO list wins when it was sent: the first
+ * entry also fills the older single fields, so the rest of the app (Day end,
+ * HMO billing, search) keeps reading a sensible first HMO.
+ */
+async function clean(
+  input: PatientInput,
+): Promise<{ ok: true; data: PatientInput } | { ok: false; message: string }> {
+  let hmos: PatientInput["hmos"];
+  let company = cleanHmoText(input.hmoCompany, MAX_HMO_COMPANY_LENGTH);
+  let account = cleanHmoText(input.hmoAccountNumber, MAX_HMO_ACCOUNT_LENGTH);
+  if (input.hmos !== undefined) {
+    const cleaned = cleanHmoList(input.hmos);
+    if (!cleaned.ok) return cleaned;
+    hmos = cleaned.list;
+    company = hmos[0]?.company ?? "";
+    account = hmos[0]?.accountNumber ?? "";
+    if (!(await patientHmosReady())) {
+      // Without the list table only one HMO fits (the older single fields).
+      if (hmos.length > 1) {
+        return { ok: false, message: PATIENT_HMOS_NOT_READY };
+      }
+      hmos = undefined;
+    }
+  }
   return {
-    fullName: String(input.fullName ?? "").slice(0, 200),
-    contactNumber: String(input.contactNumber ?? "").slice(0, 60),
-    notes: String(input.notes ?? "").slice(0, 2000),
-    birthDate: String(input.birthDate ?? "").trim(),
-    hmoCompany: cleanHmoText(input.hmoCompany, MAX_HMO_COMPANY_LENGTH),
-    hmoAccountNumber: cleanHmoText(
-      input.hmoAccountNumber,
-      MAX_HMO_ACCOUNT_LENGTH,
-    ),
+    ok: true,
+    data: {
+      fullName: String(input.fullName ?? "").slice(0, 200),
+      contactNumber: String(input.contactNumber ?? "").slice(0, 60),
+      notes: String(input.notes ?? "").slice(0, 2000),
+      birthDate: String(input.birthDate ?? "").trim(),
+      hmoCompany: company,
+      hmoAccountNumber: account,
+      hmos,
+    },
   };
 }
 
@@ -61,7 +89,9 @@ export async function createPatientAction(
   if (!who) {
     return { ok: false, message: "You must be signed in." };
   }
-  const data = clean(input);
+  const cleaned = await clean(input);
+  if (!cleaned.ok) return cleaned;
+  const data = cleaned.data;
   if (data.birthDate && !isValidBirthDate(data.birthDate)) {
     return { ok: false, message: BIRTH_DATE_INVALID_MESSAGE };
   }
@@ -89,7 +119,9 @@ export async function updatePatientAction(
   if (!who) {
     return { ok: false, message: "You must be signed in." };
   }
-  const data = clean(input);
+  const cleaned = await clean(input);
+  if (!cleaned.ok) return cleaned;
+  const data = cleaned.data;
   if (data.birthDate && !isValidBirthDate(data.birthDate)) {
     return { ok: false, message: BIRTH_DATE_INVALID_MESSAGE };
   }
@@ -102,7 +134,7 @@ export async function updatePatientAction(
     entityType: "patient",
     entityId: id,
     patientId: id,
-    summary: `${data.fullName}${data.contactNumber ? ` · ${data.contactNumber}` : ""}${data.hmoCompany ? ` · ${data.hmoCompany}` : ""}`,
+    summary: `${data.fullName}${data.contactNumber ? ` · ${data.contactNumber}` : ""}${data.hmos && data.hmos.length > 0 ? ` · HMO: ${data.hmos.map((entry) => entry.company).join(", ")}` : data.hmoCompany ? ` · ${data.hmoCompany}` : ""}`,
     actor: who.actor,
   });
   revalidate();
@@ -120,6 +152,15 @@ export async function mergePatientsAction(
   }
   if (!can(who.session, "patient.merge")) {
     return { ok: false, message: "You don't have permission to merge patients." };
+  }
+  // Merging renames the duplicate's visits, which would change checked
+  // (locked) visits: only the superuser may.
+  if (!who.session.user.isSuperuser && (await patientHasCheckedLines(sourceId))) {
+    return {
+      ok: false,
+      message:
+        "This patient has checked (locked) visits, so only the superuser can merge the record.",
+    };
   }
   const result = await mergePatients(sourceId, targetId);
   if (!result.ok) {

@@ -1,3 +1,5 @@
+import { accountNumberFor } from "@/lib/cashflow/patient-hmo";
+import { listPatientHmos } from "@/lib/db/patient-hmos";
 import { and, asc, eq, gte, inArray, lt, notInArray } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import {
@@ -113,6 +115,9 @@ async function getHmoInfoByInvoice(
       console.warn("Day end: patients.hmo_account_number is missing.");
     }
   }
+  // A patient can have several HMOs: show the account number of each HMO the
+  // visit is billed to.
+  const hmosByPatient = await listPatientHmos(patientIds);
 
   for (const visit of visits) {
     const hmoLines = (linesByInvoice.get(visit.id) ?? []).filter(
@@ -128,7 +133,20 @@ async function getHmoInfoByInvoice(
       billedByHmo: [...byHmo].map(([name, amount]) => ({ name, amount })),
       hmo: distinct(hmoLines.map((line) => hmoNameFor(line.paymentType))).join(" / "),
       hmoAccountNumber: visit.patientId
-        ? (accountByPatient.get(visit.patientId) ?? "")
+        ? byHmo.size > 0
+          ? distinct(
+              [...byHmo.keys()].map((name) =>
+                accountNumberFor(
+                  hmosByPatient.get(visit.patientId as string) ?? [],
+                  name,
+                  accountByPatient.get(visit.patientId as string) ?? "",
+                ),
+              ),
+            ).join(", ")
+          : // HMO payments only (no HMO line): the patient's first account number, as before.
+            (hmosByPatient.get(visit.patientId)?.[0]?.accountNumber ??
+            accountByPatient.get(visit.patientId) ??
+            "")
         : "",
       loaNumber: distinct(
         hmoLines.map((line) => line.loaNumber || visit.loaNumber || ""),

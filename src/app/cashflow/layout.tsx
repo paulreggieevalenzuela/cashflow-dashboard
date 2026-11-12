@@ -7,6 +7,7 @@ import { LegalLinks } from "@/components/legal/legal-shell";
 import { CashflowNav } from "@/components/cashflow/cashflow-nav";
 import { getBranchPolicy } from "@/lib/auth/branch-policy";
 import { can } from "@/lib/auth/guards";
+import { managerRoleOf } from "@/lib/auth/permissions";
 import type { UserRole } from "@/lib/cashflow/user-schema";
 import { BranchPolicyProvider } from "@/components/cashflow/branch-policy-context";
 import { CapabilitiesProvider } from "@/components/cashflow/capabilities-context";
@@ -48,10 +49,8 @@ export default async function CashflowLayout({ children }: { children: ReactNode
     session
       ? countOpenVisits(branchPolicy.branchId)
       : Promise.resolve(null),
-    can(session, "user.manage")
-      ? countActionableResetRequests(
-          session?.user.isSuperuser ? "superuser" : session?.user.isOwner ? "owner" : "admin",
-        )
+    can(session, "user.manage") && session && managerRoleOf(session.user)
+      ? countActionableResetRequests(managerRoleOf(session.user) ?? "admin")
       : Promise.resolve(0),
     // Only the superuser sees Deleted items, so only they pay for the count.
     session?.user.isSuperuser ? countDeletedItems() : Promise.resolve(null),

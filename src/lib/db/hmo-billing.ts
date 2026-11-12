@@ -1,3 +1,5 @@
+import { accountNumberFor } from "@/lib/cashflow/patient-hmo";
+import { listPatientHmos } from "@/lib/db/patient-hmos";
 import { and, asc, desc, eq, gte, inArray, lte, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import {
@@ -113,6 +115,9 @@ export async function getHmoBillingLines(input: {
       break;
     }
   }
+  // A patient can have several HMOs: use the account number of the HMO the
+  // line is billed to.
+  const hmosByPatient = await listPatientHmos(patientIds);
 
   // Which lines are already on an active billing.
   const billedBy = new Map<string, string>();
@@ -149,7 +154,11 @@ export async function getHmoBillingLines(input: {
       hmo: hmoNameFor(row.paymentType),
       patientName: row.patientName,
       hmoAccountNumber: row.patientId
-        ? (accountByPatient.get(row.patientId) ?? "")
+        ? accountNumberFor(
+            hmosByPatient.get(row.patientId) ?? [],
+            hmoNameFor(row.paymentType),
+            accountByPatient.get(row.patientId) ?? "",
+          )
         : "",
       loaNumber: (row.lineLoa || row.visitLoa || "").trim(),
       loeNumber: (row.loeNumber ?? "").trim(),

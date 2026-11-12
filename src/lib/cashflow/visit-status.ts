@@ -329,3 +329,22 @@ export function formatMinutes(minutes: number): string {
   const rest = minutes % 60;
   return `${hours} h ${String(rest).padStart(2, "0")} min`;
 }
+
+/** A date as the clinic's calendar day (Manila time), YYYY-MM-DD. */
+export function clinicDay(iso: string): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila" }).format(new Date(iso));
+}
+
+/**
+ * Does a visit show on the Queue board? Visits still open (Arrived, On-going,
+ * For Payment) always do, so an unpaid visit from yesterday is not forgotten.
+ * A Cleared visit shows only on the day it was finished, and is gone from the
+ * Queue when the day ends (it stays in Transactions).
+ */
+export function isOnQueueBoard(
+  visit: { status: string; visitDate: string; statusChangedAt: string },
+  today: string,
+): boolean {
+  if (visit.status !== "Cleared") return true;
+  return visit.visitDate === today || clinicDay(visit.statusChangedAt) === today;
+}

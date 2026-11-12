@@ -8,6 +8,8 @@ import {
   ALL_PERMISSIONS,
   assignableRolesFor,
   canManageUser,
+  canRemoveUser,
+  managerRoleOf,
   effectivePermissions,
   worksInEveryClinic,
   type Permission,
@@ -60,7 +62,7 @@ type Session = NonNullable<Awaited<ReturnType<typeof auth>>>;
 /** The signed-in person, when they may manage users. */
 async function requireUserManager(): Promise<Session | null> {
   const session = await auth();
-  if (!session?.user || !can(session, "user.manage")) {
+  if (!session?.user || !can(session, "user.manage") || !managerRoleOf(session.user)) {
     return null;
   }
   return session;
@@ -68,9 +70,8 @@ async function requireUserManager(): Promise<Session | null> {
 
 /** The stored role of the signed-in person (owner / superuser count as "admin" in the session). */
 function actorRole(session: Session): UserRole {
-  if (session.user.isSuperuser) return "superuser";
-  if (session.user.isOwner) return "owner";
-  return "admin";
+  // requireUserManager has already refused anyone who is not an admin level.
+  return managerRoleOf(session.user) ?? "admin";
 }
 
 function actorOf(session: Session) {
@@ -422,7 +423,7 @@ export async function deleteUserAction(userId: string): Promise<ActionResult<nul
   if (session.user.id === userId) {
     return { ok: false, message: "You can't remove your own account." };
   }
-  const decision = canManageUser(
+  const decision = canRemoveUser(
     { id: session.user.id, role: actorRole(session) },
     { id: target.id, role: target.role },
   );

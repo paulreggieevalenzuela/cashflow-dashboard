@@ -43,6 +43,16 @@ export const PERMISSION_GROUPS = [
         hint: "Deleted items are kept for 30 days: only the superuser can restore them.",
       },
       { key: "import.csv", label: "Import transactions from a CSV file" },
+      {
+        key: "transaction.verify",
+        label: "Check transactions: Branch manager (first check)",
+        hint: "Ticks a Cleared visit as reviewed and locks it: only the superuser can edit, remove or unlock it.",
+      },
+      {
+        key: "transaction.verify_hq",
+        label: "Check transactions: Headquarters (second check)",
+        hint: "Approves a visit the Branch manager has already checked. It must be a different person from the one who gave the Branch check.",
+      },
     ],
   },
   {
@@ -121,6 +131,8 @@ export const SENSITIVE_PERMISSIONS: readonly Permission[] = [
   "attachment.delete",
   "visit.status_override",
   "visit.edit_cleared",
+  "transaction.verify",
+  "transaction.verify_hq",
   "import.csv",
   "patient.merge",
   "patient.ids_reveal",
@@ -141,6 +153,9 @@ const DEFAULT_ROLES: Record<Permission, readonly UserRole[]> = {
   "visit.status_override": OWNER_ADMIN,
   "visit.delete": OWNER_ADMIN,
   "import.csv": OWNER_ADMIN,
+  "transaction.verify": OWNER_ADMIN,
+  // Headquarters is a separate hat: owners by default, anyone else by ticking it.
+  "transaction.verify_hq": ["owner"],
   "payment.add": EVERYONE,
   "payment.delete": OWNER_ADMIN,
   "attachment.upload": EVERYONE,
@@ -237,6 +252,22 @@ const LEVEL: Record<UserRole, number> = {
   staff: 1,
 };
 
+/**
+ * The level a signed-in person manages users at: superuser, owner or admin,
+ * and null for anyone else. Having the "Manage users" privilege ticked is not
+ * enough on its own: only an admin, an owner or the superuser may manage users,
+ * so a dentist or staff member given that tick still gets nothing.
+ */
+export function managerRoleOf(user: {
+  role?: string;
+  isSuperuser?: boolean;
+  isOwner?: boolean;
+}): UserRole | null {
+  if (user.isSuperuser) return "superuser";
+  if (user.isOwner) return "owner";
+  return user.role === "admin" ? "admin" : null;
+}
+
 /** The roles a person may give to somebody else. */
 export function assignableRolesFor(actorRole: UserRole): UserRole[] {
   if (actorRole === "superuser") return ["owner", "admin", "dentist", "staff"];
@@ -248,10 +279,12 @@ export function assignableRolesFor(actorRole: UserRole): UserRole[] {
 export type ManageDecision = { ok: true } | { ok: false; reason: string };
 
 /**
- * May `actor` change the role, clinics, privileges or password of `target`?
- * Nobody manages their own access (so nobody locks themselves out), nobody
- * manages the superuser, and nobody manages somebody at their own level or
- * above — except the superuser, who manages everyone.
+ * May `actor` change the details, role, clinics and privileges of `target`?
+ * Only an admin, an owner or the superuser may manage users at all. An admin
+ * manages other admins and below, an owner manages other owners and below, the
+ * superuser manages everyone. Nobody manages their own access (so nobody locks
+ * themselves out), nobody manages the superuser, and nobody manages somebody
+ * ABOVE their level (an admin can't manage an owner).
  */
 export function canManageUser(
   actor: { id: string; role: UserRole },
@@ -264,17 +297,36 @@ export function canManageUser(
     return { ok: false, reason: "You can't change your own access." };
   }
   if (actor.role === "superuser") return { ok: true };
-  if (actor.role === "owner") {
-    return target.role === "owner"
-      ? { ok: false, reason: "Only the superuser can manage an owner." }
-      : { ok: true };
-  }
+  if (actor.role === "owner") return { ok: true };
   if (actor.role === "admin") {
-    return LEVEL[target.role] >= LEVEL.admin
-      ? { ok: false, reason: "Only an owner or the superuser can manage an admin." }
+    return LEVEL[target.role] > LEVEL.admin
+      ? { ok: false, reason: "Only an owner or the superuser can manage an owner." }
       : { ok: true };
   }
-  return { ok: false, reason: "You can't manage users." };
+  return { ok: false, reason: "Only an admin, an owner or the superuser can manage users." };
+}
+
+/**
+ * May `actor` remove the account of `target`? Stricter than managing: someone
+ * at the same level can be edited but not removed (an owner can't remove
+ * another owner, an admin can't remove another admin).
+ */
+export function canRemoveUser(
+  actor: { id: string; role: UserRole },
+  target: { id: string; role: UserRole },
+): ManageDecision {
+  const manage = canManageUser(actor, target);
+  if (!manage.ok) return manage;
+  if (actor.role !== "superuser" && LEVEL[target.role] >= LEVEL[actor.role]) {
+    return {
+      ok: false,
+      reason:
+        target.role === "owner"
+          ? "Only the superuser can remove an owner."
+          : "Only an owner or the superuser can remove an admin.",
+    };
+  }
+  return { ok: true };
 }
 
 /** Roles that work in every clinic and are not tied to ticked clinics. */

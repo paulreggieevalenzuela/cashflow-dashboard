@@ -4,6 +4,173 @@ All notable changes to the ADT Dental Clinic Cashflow app. The version is in
 `package.json` and `src/lib/cashflow/version.ts` (shown at the foot of the Help
 page). Newest first.
 
+## 0.7.0 — 2026-11-12
+
+Patients can have several HMOs, shown as a list on the profile.
+
+### Added
+
+- **HMO details on the patient profile:** a section listing every HMO the patient
+  has, with the company name and the HMO account number. It is always shown; a
+  patient with none reads "No HMO on file".
+- **A list of HMOs per patient** (up to 10, each with its own account number).
+  Edit patient has an HMO list with + Add HMO and Remove. The same company
+  cannot be listed twice, and an account number needs its company.
+- Search finds a patient by any of their HMOs' company or account number.
+- Merging patients keeps the kept patient's HMOs and adds the ones they didn't have.
+
+### Changed
+
+- **HMO billing and Day end use the account number of the HMO on the visit**, not
+  just the patient's first HMO. If the patient has no entry for that company the
+  number is left blank rather than showing another HMO's number.
+- The first HMO of the list is also kept in the patient's older single HMO fields,
+  so everything that read them keeps working.
+
+### Needs one step
+
+- Run `scripts/sql/2026-11-patient-hmos.sql` once in the Neon SQL Editor (new table
+  `patient_hmos`; current HMOs are copied into it). Until then each patient keeps
+  one HMO and the edit form says so.
+
+## 0.6.1 — 2026-11-12
+
+Users: peers can edit peers, and only admins and above manage users.
+
+### Changed
+
+- **An owner can now manage other owners, and an admin can manage other admins**
+  (Users -> Manage: details, role, clinics and privileges), as well as everyone
+  below them. An admin still cannot manage an owner; the superuser manages
+  everyone. Nobody manages their own access, and the privilege rule stays: you
+  can only give a privilege you hold yourself.
+- **Removing an account and resetting a password stay stricter:** a person at your
+  own level can be edited but not removed, and their password is not reset from
+  here (an owner cannot remove or reset another owner, an admin cannot remove or
+  reset another admin). The Remove button is hidden in those cases.
+- **Only an admin, an owner or the superuser can manage users.** Before, a
+  dentist or staff member who had "Manage users" ticked was treated as an admin on
+  the Users and Manage screens. Now the Users menu entry is hidden for them, the
+  pages send them away, and every user action refuses them.
+- Help and the Users page text describe the new rules.
+
+## 0.6.0 — 2026-11-12
+
+Two approvers for the daily check: Branch manager, then Headquarters.
+
+### Added
+
+- **Two checks per visit, always in this order.** First the **Branch manager**
+  ticks a Cleared visit (as in 0.5.0: it is locked from that moment). Then
+  **Headquarters** ticks it, and that is the last check. Headquarters cannot tick
+  a visit the Branch manager has not checked, and cannot be the person who gave
+  the Branch check on that visit (the superuser is exempt). Both are enforced on
+  the server, not only on screen.
+- **Two columns in Transactions: Branch and HQ.** Branch shows the tick box or
+  the lock; HQ shows a dash (waiting for the branch), "Waiting" (checked by the
+  branch), a tick box (for people who may give the HQ check) or a blue tick
+  (approved). Each has its own select-all and its own confirm bar, and the
+  tooltip says who checked and when.
+- **Two privileges, plain tick boxes** under Users -> Manage -> Access &
+  Permissions: **Check transactions: Branch manager (first check)** (the old
+  "Check transactions", same key, so nobody's ticks change; owners and admins by
+  default) and **Check transactions: Headquarters (second check)** (owners by
+  default; give it to anyone, or take it from an owner). Both are marked
+  sensitive in the access review.
+- **Filters:** To check (Branch), Waiting for HQ, Approved by HQ.
+- **Visit page banner** shows both approvals with who and when, and an
+  **Approve as Headquarters** button for people who may.
+- Audit trail entry "Visit approved by Headquarters"; "Visit checked and locked"
+  is now labelled (Branch manager).
+- Run `scripts/sql/2026-11-transaction-hq-checks.sql` in Neon (one new table,
+  nothing existing changes; safe to run twice). Until it is run the Branch manager
+  check works as before and the HQ column says it isn't set up.
+
+### Changed
+
+- **Unlocking (superuser only) removes both checks.**
+- Existing checks from 0.5.0 stay as Branch manager checks and now wait for
+  Headquarters.
+- The owner role is no longer exactly the admin's defaults: it also has the
+  Headquarters check.
+- The role is still called Admin on screen (no rename).
+
+## 0.5.2 — 2026-11-12
+
+Queue: quick filters next to the search bar.
+
+### Added
+
+- **Quick filters on the Queue**, under the search box: a **Dentist** list
+  (everyone on the board, plus "No dentist yet"), and three buttons with a count
+  each: **Has balance due**, **LOA pending** and **Earlier visits** (unpaid visits
+  carried over from a previous day). They combine with each other and with the
+  search; **Clear search and filters** puts everything back. Like the search, they
+  stay when the board refreshes itself, and they look through the whole Cleared
+  column, not only its first 20 cards.
+
+### Notes
+
+- No database change and no SQL to run.
+
+## 0.5.1 — 2026-11-12
+
+Queue: easier to find a visit on a busy day.
+
+### Added
+
+- **Search bar on the Queue.** Type a patient, a procedure, a dentist or a clinic
+  and the cards that do not match hide at once, with no reload. Several words
+  work together in any order ("maria filling"); capitals and accents do not
+  matter. Each column shows how many matched ("3 of 48"). **Clear** or the Esc key
+  empties the search. What you typed stays when the board refreshes itself.
+- **Scrolling columns.** Each column has a fixed height and scrolls on its own,
+  so a day with 100 to 200 visits no longer makes one endless page.
+- **Cleared column starts with 20 cards** and a **Show more** button for the
+  rest. A search always looks through all of them.
+
+### Notes
+
+- No database change and no SQL to run.
+
+## 0.5.0 — 2026-11-11
+
+Daily check of transactions, with a lock.
+
+### Added
+
+- **Daily check (tick box).** In Transactions, an owner or admin (or anyone given
+  the new privilege **Check transactions**) ticks the visits that are done and
+  correct, then presses **Check and lock**. Only a Cleared visit can be ticked,
+  and only in the person's own clinics. Select-all on the page is there for a
+  busy day; one confirmation covers the whole selection.
+- **A checked visit is locked.** Nobody except the superuser can edit it, remove
+  it or its lines, record or remove a payment, attach or remove a file, or move
+  its status. The superuser can still do all of that, and can **unlock** a visit
+  (lock icon in the list, or Unlock on the visit page). Unlocking is the only way
+  back; admins and owners cannot. Enforced on the server, not only on screen.
+- **Each procedure line has its own check** (stored per line), the list shows a
+  visit as one row, so ticking a row checks all of its lines. Any checked line
+  locks the whole visit, because its header, payments and files are shared.
+- **To check / Checked buttons** above the list, a lock icon with who checked and
+  when (hover), a banner on the visit page, and audit-trail entries "Visit
+  checked and locked" and "Visit unlocked".
+- New privilege **Check transactions** (Visits & Queue). Owners, admins and the
+  superuser have it; give it to another person (for example a branch manager)
+  under Users -> Manage. It is marked as sensitive in the access review.
+- Run `scripts/sql/2026-11-transaction-checks.sql` in Neon (one new table, nothing
+  existing changes). Until it is run the app works as before and the list says
+  checking isn't set up.
+
+### Changed
+
+- **Queue:** the Cleared column's note says Cleared visits are gone at the end of
+  the day (Manila time). Open visits stay until Cleared. The rule is now one
+  tested function.
+- Renaming a patient no longer changes the name on checked visits; merging a patient
+  that has checked visits needs the superuser. The old backfill and merchant-fee
+  scripts skip checked visits.
+
 ## 0.4.3 — 2026-11-11
 
 Day end report: the HMO amount now has a value.

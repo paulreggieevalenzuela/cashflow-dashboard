@@ -2,6 +2,12 @@ import { softDeleteLine } from "@/lib/db/deleted-items";
 import { randomInt } from "node:crypto";
 import { and, asc, desc, eq, gte, ilike, inArray, isNull, lte, ne, or, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
+import {
+  hqChecksReady,
+  transactionChecksReady,
+  visitHasCheckSql,
+  visitHasHqCheckSql,
+} from "@/lib/db/transaction-checks";
 import { resolveRateSetting } from "@/lib/cashflow/commission-tiers";
 import { splitCommission } from "@/lib/cashflow/commission-split";
 import { getBranchById } from "@/lib/db/branches";
@@ -116,7 +122,7 @@ export type TransactionsPage = {
  */
 export type TransactionsPageQuery = Pick<
   TransactionsQueryParams,
-  "q" | "type" | "payment" | "dentist" | "branch" | "from" | "to" | "sort" | "dir"
+  "q" | "type" | "payment" | "dentist" | "branch" | "from" | "to" | "checked" | "sort" | "dir"
 > & {
   limit: number;
   offset: number;
@@ -135,6 +141,7 @@ export async function listTransactionsPage({
   branch,
   from,
   to,
+  checked,
   sort = "date",
   dir = "desc",
 }: TransactionsPageQuery): Promise<TransactionsPage> {
@@ -166,6 +173,22 @@ export async function listTransactionsPage({
   }
   if (from) conditions.push(gte(transactions.date, from));
   if (to) conditions.push(lte(transactions.date, to));
+  // The daily check: visits with a ticked line, or without. Skipped while the
+  // checks table is missing (the SQL script wasn't run yet).
+  if (checked && (await transactionChecksReady())) {
+    const ticked = visitHasCheckSql();
+    if (checked === "yes") {
+      conditions.push(ticked);
+    } else if (checked === "no") {
+      conditions.push(sql`not ${ticked}`);
+    } else if (await hqChecksReady()) {
+      // Headquarters: waiting for it ("hq") or already given ("approved").
+      const approved = visitHasHqCheckSql();
+      conditions.push(
+        checked === "approved" ? approved : sql`${ticked} and not ${approved}`,
+      );
+    }
+  }
 
   const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 

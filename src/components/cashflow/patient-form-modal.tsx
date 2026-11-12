@@ -10,6 +10,8 @@ import { Modal } from "@/components/ui/modal";
 import {
   MAX_HMO_ACCOUNT_LENGTH,
   MAX_HMO_COMPANY_LENGTH,
+  MAX_PATIENT_HMOS,
+  type PatientHmoEntry,
 } from "@/lib/cashflow/patient-hmo";
 import { todayInManila } from "@/lib/cashflow/visit-status";
 import { useHmoNames } from "@/components/cashflow/payment-methods-context";
@@ -23,9 +25,14 @@ type Initial = {
   contactNumber: string;
   notes: string;
   birthDate: string;
-  hmoCompany: string;
-  hmoAccountNumber: string;
+  /** The patient's HMOs (company + account number), first one first. */
+  hmos: PatientHmoEntry[];
+  /** False until scripts/sql/2026-11-patient-hmos.sql is run: one HMO only. */
+  hmoListReady: boolean;
 };
+
+/** One row of the HMO list on screen (`key` only keeps rows apart while editing). */
+type HmoRow = PatientHmoEntry & { key: number };
 
 /** Add a patient, or edit one's name, contact number, birthday, HMO details and notes. */
 export function PatientFormModal({
@@ -47,10 +54,24 @@ export function PatientFormModal({
   );
   const [notes, setNotes] = useState(initial?.notes ?? "");
   const [birthDate, setBirthDate] = useState(initial?.birthDate ?? "");
-  const [hmoCompany, setHmoCompany] = useState(initial?.hmoCompany ?? "");
-  const [hmoAccountNumber, setHmoAccountNumber] = useState(
-    initial?.hmoAccountNumber ?? "",
+  const [nextKey, setNextKey] = useState(initial?.hmos.length ?? 0);
+  const [hmoRows, setHmoRows] = useState<HmoRow[]>(
+    (initial?.hmos ?? []).map((entry, index) => ({ ...entry, key: index })),
   );
+  // Without the list table only one HMO fits.
+  const listReady = initial?.hmoListReady ?? true;
+  const maxRows = listReady ? MAX_PATIENT_HMOS : 1;
+
+  function addHmoRow() {
+    setHmoRows((rows) => [...rows, { company: "", accountNumber: "", key: nextKey }]);
+    setNextKey((key) => key + 1);
+  }
+  function changeHmoRow(key: number, change: Partial<PatientHmoEntry>) {
+    setHmoRows((rows) => rows.map((row) => (row.key === key ? { ...row, ...change } : row)));
+  }
+  function removeHmoRow(key: number) {
+    setHmoRows((rows) => rows.filter((row) => row.key !== key));
+  }
   const [error, setError] = useState<string | null>(null);
   const [existingId, setExistingId] = useState<string | null>(null);
 
@@ -63,8 +84,11 @@ export function PatientFormModal({
         contactNumber,
         notes,
         birthDate,
-        hmoCompany,
-        hmoAccountNumber,
+        // The first HMO also fills the older single fields (the server does
+        // this too; sent here so the type is complete).
+        hmoCompany: hmoRows[0]?.company ?? "",
+        hmoAccountNumber: hmoRows[0]?.accountNumber ?? "",
+        hmos: hmoRows.map(({ company, accountNumber }) => ({ company, accountNumber })),
       };
       const result = initial
         ? await updatePatientAction(initial.id, input)
@@ -136,35 +160,76 @@ export function PatientFormModal({
               className={FIELD}
             />
           </label>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
-              HMO company
-              <input
-                value={hmoCompany}
-                onChange={(event) => setHmoCompany(event.target.value)}
-                list="patient-hmo-companies"
-                maxLength={MAX_HMO_COMPANY_LENGTH}
-                placeholder="e.g. Maxicare"
-                className={FIELD}
-                autoComplete="off"
-              />
-              <datalist id="patient-hmo-companies">
-                {hmoNames.map((name) => (
-                  <option key={name} value={name} />
-                ))}
-              </datalist>
-            </label>
-            <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
-              HMO account number
-              <input
-                value={hmoAccountNumber}
-                onChange={(event) => setHmoAccountNumber(event.target.value)}
-                maxLength={MAX_HMO_ACCOUNT_LENGTH}
-                className={FIELD}
-                autoComplete="off"
-              />
-            </label>
-          </div>
+          <fieldset className="space-y-2">
+            <legend className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+              HMO list
+            </legend>
+            {hmoRows.length === 0 && (
+              <p className="text-sm text-zinc-500 dark:text-zinc-400">
+                No HMO yet. Add one if the patient has an HMO card.
+              </p>
+            )}
+            {hmoRows.map((row, index) => (
+              <div
+                key={row.key}
+                className="grid grid-cols-1 gap-2 rounded-lg border border-zinc-200 p-3 dark:border-zinc-800 sm:grid-cols-[1fr_1fr_auto] sm:items-end"
+              >
+                <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                  Company name
+                  <input
+                    value={row.company}
+                    onChange={(event) => changeHmoRow(row.key, { company: event.target.value })}
+                    list="patient-hmo-companies"
+                    maxLength={MAX_HMO_COMPANY_LENGTH}
+                    placeholder="e.g. Maxicare"
+                    className={FIELD}
+                    autoComplete="off"
+                    aria-label={`HMO ${index + 1} company name`}
+                  />
+                </label>
+                <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-400">
+                  HMO account number
+                  <input
+                    value={row.accountNumber}
+                    onChange={(event) => changeHmoRow(row.key, { accountNumber: event.target.value })}
+                    maxLength={MAX_HMO_ACCOUNT_LENGTH}
+                    className={FIELD}
+                    autoComplete="off"
+                    aria-label={`HMO ${index + 1} account number`}
+                  />
+                </label>
+                <button
+                  type="button"
+                  onClick={() => removeHmoRow(row.key)}
+                  className="rounded-lg px-2.5 py-2 text-xs font-medium text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40"
+                  aria-label={`Remove HMO ${index + 1}`}
+                >
+                  Remove
+                </button>
+              </div>
+            ))}
+            <datalist id="patient-hmo-companies">
+              {hmoNames.map((name) => (
+                <option key={name} value={name} />
+              ))}
+            </datalist>
+            {hmoRows.length < maxRows ? (
+              <button
+                type="button"
+                onClick={addHmoRow}
+                className="rounded-lg border border-zinc-300 px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+              >
+                + Add HMO
+              </button>
+            ) : (
+              !listReady && (
+                <p className="text-xs text-amber-700 dark:text-amber-300">
+                  Only one HMO fits for now. To keep several per patient, run{" "}
+                  <code>scripts/sql/2026-11-patient-hmos.sql</code> in Neon.
+                </p>
+              )
+            )}
+          </fieldset>
           <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
             Notes
             <textarea

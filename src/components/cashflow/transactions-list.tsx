@@ -11,6 +11,9 @@ import {
   type TransactionsQueryParams,
 } from "@/lib/cashflow/transactions-query";
 import type { CashflowTransaction } from "@/lib/cashflow/schema";
+import Link from "next/link";
+import type { VisitCheck } from "@/lib/cashflow/transaction-lock";
+import { buildTransactionsSearch } from "@/lib/cashflow/transactions-query";
 import type { Branch } from "@/lib/db/branches";
 import type { DiscountTypeOption } from "@/lib/db/discount-types";
 import type { ProcedureOption } from "@/lib/db/procedures";
@@ -28,6 +31,13 @@ export function TransactionsList({
   procedures,
   discountTypes,
   invoiceSummaries,
+  visitChecks,
+  checksReady,
+  canVerify,
+  canVerifyHq,
+  hqReady,
+  currentUserId,
+  isSuperuser,
 }: {
   transactions: CashflowTransaction[];
   canDelete?: boolean;
@@ -42,6 +52,16 @@ export function TransactionsList({
   procedures: ProcedureOption[];
   discountTypes: DiscountTypeOption[];
   invoiceSummaries: InvoiceSummaries;
+  visitChecks: Record<string, VisitCheck>;
+  /** False until scripts/sql/2026-11-transaction-checks.sql has been run. */
+  checksReady: boolean;
+  canVerify: boolean;
+  /** May give the Headquarters check (the second one). */
+  canVerifyHq: boolean;
+  /** False until scripts/sql/2026-11-transaction-hq-checks.sql has been run. */
+  hqReady: boolean;
+  currentUserId: string | null;
+  isSuperuser: boolean;
 }) {
   const filtered = hasActiveTransactionFilters(query);
 
@@ -70,8 +90,55 @@ export function TransactionsList({
         branches={branches}
         defaultBranchId={defaultBranchId}
       />
+      {(canVerify || canVerifyHq || isSuperuser) && (
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          <span className="text-zinc-500 dark:text-zinc-400">Daily check:</span>
+          {(
+            [
+              { value: undefined, label: "All" },
+              { value: "no", label: "To check (Branch)" },
+              { value: "hq", label: "Waiting for HQ" },
+              { value: "approved", label: "Approved by HQ" },
+            ] as const
+          ).map((option) => (
+            <Link
+              key={option.label}
+              href={`/cashflow/transactions${buildTransactionsSearch(query, { checked: option.value, page: 1 })}`}
+              aria-current={query.checked === option.value ? "true" : undefined}
+              className={`rounded-full border px-3 py-1 font-medium transition-colors ${
+                query.checked === option.value
+                  ? "border-amber-600 bg-amber-50 text-amber-800 dark:bg-amber-950 dark:text-amber-300"
+                  : "border-zinc-300 text-zinc-600 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-900"
+              }`}
+            >
+              {option.label}
+            </Link>
+          ))}
+        </div>
+      )}
+      {checksReady && !hqReady && (canVerifyHq || isSuperuser) && (
+        <p className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
+          The Headquarters check isn&apos;t set up in the database yet. Run{" "}
+          <code>scripts/sql/2026-11-transaction-hq-checks.sql</code> in Neon. Until
+          then the Branch manager check works as before and Headquarters can&apos;t approve.
+        </p>
+      )}
+      {!checksReady && (canVerify || isSuperuser) && (
+        <p className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
+          Checking transactions isn&apos;t set up in the database yet. Run{" "}
+          <code>scripts/sql/2026-11-transaction-checks.sql</code> in Neon. Until
+          then nothing can be checked or locked.
+        </p>
+      )}
       <TransactionsTable
         transactions={transactions}
+        visitChecks={visitChecks}
+        checksReady={checksReady}
+        canVerify={canVerify}
+        canVerifyHq={canVerifyHq}
+        hqReady={hqReady}
+        currentUserId={currentUserId}
+        isSuperuser={isSuperuser}
         canDelete={canDelete}
         canEditCleared={canEditCleared}
         invoiceSummaries={invoiceSummaries}

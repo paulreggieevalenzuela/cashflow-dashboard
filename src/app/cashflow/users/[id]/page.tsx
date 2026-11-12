@@ -6,7 +6,9 @@ import {
   ALL_PERMISSIONS,
   assignableRolesFor,
   canManageUser,
+  canRemoveUser,
   effectivePermissions,
+  managerRoleOf,
   worksInEveryClinic,
 } from "@/lib/auth/permissions";
 import { canResetPassword } from "@/lib/auth/reset-rules";
@@ -26,7 +28,8 @@ export default async function ManageUserPage({
   params: Promise<{ id: string }>;
 }) {
   const session = await auth();
-  if (!session?.user || !can(session, "user.manage")) {
+  const myRole = session?.user ? managerRoleOf(session.user) : null;
+  if (!session?.user || !can(session, "user.manage") || !myRole) {
     redirect("/cashflow");
   }
   const { id } = await params;
@@ -38,11 +41,6 @@ export default async function ManageUserPage({
     notFound();
   }
 
-  const myRole: UserRole = session.user.isSuperuser
-    ? "superuser"
-    : session.user.isOwner
-      ? "owner"
-      : "admin";
   const me = { id: session.user.id, role: myRole };
   const decision = canManageUser(me, { id: user.id, role: user.role });
   if (!decision.ok) {
@@ -80,7 +78,7 @@ export default async function ManageUserPage({
       roleChoices={roleChoices}
       grantable={grantable}
       canReset={canResetPassword(me, { id: user.id, role: user.role }).ok}
-      canRemove={user.id !== session.user.id}
+      canRemove={canRemoveUser(me, { id: user.id, role: user.role }).ok}
     />
   );
 }

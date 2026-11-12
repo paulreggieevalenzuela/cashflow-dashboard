@@ -29,6 +29,7 @@ export function AttachmentsPanel({
   items,
   buttonLabel,
   emptyText,
+  locked = false,
 }: {
   /** The visit the files belong to... */
   invoiceId?: string;
@@ -39,9 +40,11 @@ export function AttachmentsPanel({
   items: AttachmentInfo[];
   buttonLabel: string;
   emptyText?: string;
+  /** The visit is checked and locked: no attaching or removing. */
+  locked?: boolean;
 }) {
-  const canDelete = useCan("attachment.delete");
-  const canUpload = useCan("attachment.upload");
+  const canDelete = useCan("attachment.delete") && !locked;
+  const canUpload = useCan("attachment.upload") && !locked;
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);

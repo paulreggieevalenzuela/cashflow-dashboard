@@ -1,3 +1,4 @@
+import { visitLockMessage } from "@/lib/db/transaction-checks";
 import { auth } from "@/lib/auth/access";
 import { can } from "@/lib/auth/guards";
 import { ARCHIVE_NOT_READY } from "@/lib/db/deleted-items";
@@ -56,6 +57,15 @@ export async function DELETE(
   }
 
   const { id } = await params;
+  const file = await getAttachmentFile(id);
+  const locked = await visitLockMessage(
+    file?.invoiceId,
+    { isSuperuser: session.user.isSuperuser },
+    "remove a file",
+  );
+  if (locked) {
+    return Response.json({ message: locked }, { status: 403 });
+  }
   try {
     await deleteAttachment(id, {
       userId: session.user.id,

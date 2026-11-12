@@ -25,6 +25,12 @@ export type TransactionsQueryParams = {
   branch?: string;
   from?: string;
   to?: string;
+  /**
+   * The daily check. "no" = not checked by the Branch manager yet; "yes" = checked
+   * and locked (any stage); "hq" = checked by the branch, waiting for
+   * Headquarters; "approved" = approved by Headquarters too.
+   */
+  checked?: "yes" | "no" | "hq" | "approved";
   sort: TransactionSortKey;
   dir: "asc" | "desc";
 };
@@ -51,6 +57,7 @@ export function parseTransactionsQuery(raw: {
   branch?: string;
   from?: string;
   to?: string;
+  checked?: string;
   sort?: string;
   dir?: string;
 }): TransactionsQueryParams {
@@ -69,6 +76,13 @@ export function parseTransactionsQuery(raw: {
     branch: cleanString(raw.branch),
     from: cleanString(raw.from),
     to: cleanString(raw.to),
+    checked:
+      raw.checked === "yes" ||
+      raw.checked === "no" ||
+      raw.checked === "hq" ||
+      raw.checked === "approved"
+        ? raw.checked
+        : undefined,
     sort: isSortKey(raw.sort) ? raw.sort : "date",
     // Latest transactions first by default — an explicit `dir=asc` in the
     // URL (from clicking a column header) is the only way to flip it.
@@ -79,7 +93,7 @@ export function parseTransactionsQuery(raw: {
 /** True when any search/filter (not sort/pagination) is active — used to
  * tell "no transactions yet" apart from "no matches for these filters". */
 export function hasActiveTransactionFilters(query: TransactionsQueryParams): boolean {
-  return Boolean(query.q || query.type || query.payment || query.dentist || (query.branch && query.branch !== ALL_BRANCHES) || query.from || query.to);
+  return Boolean(query.q || query.type || query.payment || query.dentist || (query.branch && query.branch !== ALL_BRANCHES) || query.from || query.to || query.checked);
 }
 
 /** Builds the `?...` query string for the transactions page from the
@@ -101,6 +115,7 @@ export function buildTransactionsSearch(
   if (merged.branch) params.set("branch", merged.branch);
   if (merged.from) params.set("from", merged.from);
   if (merged.to) params.set("to", merged.to);
+  if (merged.checked) params.set("checked", merged.checked);
   if (merged.sort !== "date") params.set("sort", merged.sort);
   if (merged.dir !== "desc") params.set("dir", merged.dir);
 
