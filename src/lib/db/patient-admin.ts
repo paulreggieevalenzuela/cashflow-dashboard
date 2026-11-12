@@ -143,10 +143,10 @@ export async function listPatientsPage(input: {
         ilike(patients.fullName, term),
         ilike(patients.contactNumber, term),
         ilike(patients.hmoAccountNumber, term),
-        // Any of the patient's HMOs (company or account number), once the list exists.
+        // Any of the patient's HMOs (HMO name, their company or account number), once the list exists.
         ...((await patientHmosReady())
           ? [
-              sql`exists (select 1 from ${patientHmos} ph where ph.patient_id = ${patients.id} and (ph.account_number ilike ${term} or ph.company ilike ${term}))`,
+              sql`exists (select 1 from ${patientHmos} ph where ph.patient_id = ${patients.id} and (ph.account_number ilike ${term} or ph.company ilike ${term} or ph.employer ilike ${term}))`,
             ]
           : []),
       ),

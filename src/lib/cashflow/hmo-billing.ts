@@ -24,6 +24,8 @@ export type HmoBillingLine = {
   /** The HMO's name as used for the payment method, e.g. "Maxicare". */
   hmo: string;
   patientName: string;
+  /** The patient's own company (employer), for that HMO. */
+  hmoEmployer: string;
   /** The patient's account (member) number with the HMO. */
   hmoAccountNumber: string;
   /** The procedure line's own LOA; blank = "LOA pending". */
@@ -193,6 +195,7 @@ export const HMO_BILLING_HEADERS = [
   "No.",
   "Visit date",
   "Patient",
+  "Patient's company",
   "HMO account #",
   "LOA #",
   "LOE #",
@@ -241,6 +244,7 @@ export function buildHmoBillingSheet(
       String(index + 1),
       formatSheetDate(line.visitDate),
       line.patientName,
+      line.hmoEmployer,
       line.hmoAccountNumber,
       line.loaNumber.trim() || LOA_PENDING_TEXT,
       line.loeNumber,
@@ -249,12 +253,12 @@ export function buildHmoBillingSheet(
       line.amount,
     ]);
   });
-  push(["", "", "", "", "", "", "", "Total", billing.totalAmount], true);
+  push(["", "", "", "", "", "", "", "", "Total", billing.totalAmount], true);
 
   return {
     name: "HMO Billing",
     rows,
     boldRows,
-    columnWidths: [16, 16, 28, 18, 18, 14, 40, 14, 14],
+    columnWidths: [8, 16, 28, 26, 18, 18, 14, 40, 14, 14],
   };
 }

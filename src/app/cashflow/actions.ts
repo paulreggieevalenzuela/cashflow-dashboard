@@ -10,7 +10,9 @@ import {
 import { can, requirePermission } from "@/lib/auth/guards";
 import { InvoiceInputSchema, type InvoiceInput } from "@/lib/cashflow/invoice-schema";
 import { parseCashflowCsv, type CsvRowError } from "@/lib/cashflow/parse-csv";
+import { isHmoPayment, canonicalPaymentName } from "@/lib/cashflow/payment-methods";
 import { logAudit } from "@/lib/db/audit";
+import { learnPatientHmo, saveVisitHmoDetails } from "@/lib/db/visit-hmo";
 import { listBranches } from "@/lib/db/branches";
 import {
   createInvoice,
@@ -75,6 +77,34 @@ function parseInvoiceInput(
 
 type SavedInvoice = { invoiceId: string; firstLineId: string };
 
+/**
+ * Keeps what was typed for the visit's HMO (the patient's company and account
+ * number) with the visit, and lets the patient's profile learn an HMO it did
+ * not have. A visit that is not paid through an HMO keeps nothing. Never
+ * fails the save: the details are a convenience on top of the visit.
+ */
+async function saveHmoDetailsForVisit(invoiceId: string, input: InvoiceInput) {
+  try {
+    const method = input.payment?.paymentType ?? "";
+    if (!isHmoPayment(method)) {
+      await saveVisitHmoDetails(invoiceId, null);
+      return;
+    }
+    const details = {
+      hmoName: canonicalPaymentName(method) ?? method.trim(),
+      employer: input.hmoEmployer ?? "",
+      accountNumber: input.hmoAccountNumber ?? "",
+    };
+    // Nothing typed and nothing offered: leave whatever the visit already
+    // has (a form saved before the details loaded must not wipe them).
+    if (details.employer.trim() === "" && details.accountNumber.trim() === "") return;
+    await saveVisitHmoDetails(invoiceId, details);
+    await learnPatientHmo(invoiceId, details);
+  } catch (error) {
+    console.error("Could not save the visit's HMO details", error);
+  }
+}
+
 export async function createInvoiceAction(
   input: InvoiceInput,
 ): Promise<ActionResult<SavedInvoice>> {
@@ -118,6 +148,7 @@ export async function createInvoiceAction(
   if (!result.ok) {
     return result;
   }
+  await saveHmoDetailsForVisit(result.invoiceId, parsed.data);
   revalidateCashflowPaths();
   return { ok: true, data: { invoiceId: result.invoiceId, firstLineId: result.firstLineId } };
 }
@@ -174,6 +205,7 @@ export async function updateInvoiceAction(
   if (!result.ok) {
     return result;
   }
+  await saveHmoDetailsForVisit(result.invoiceId, parsed.data);
   revalidateCashflowPaths();
   return { ok: true, data: { invoiceId: result.invoiceId, firstLineId: result.firstLineId } };
 }

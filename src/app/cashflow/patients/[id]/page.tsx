@@ -147,7 +147,7 @@ export default async function PatientPage({
           )}
           <section
             aria-labelledby="patient-hmo-heading"
-            className="mt-3 max-w-xl rounded-lg border border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-950"
+            className="mt-3 max-w-2xl rounded-lg border border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-950"
           >
             <h3
               id="patient-hmo-heading"
@@ -157,14 +157,15 @@ export default async function PatientPage({
             </h3>
             {patient.hmos.length === 0 ? (
               <p className="mt-1.5 text-sm text-zinc-500 dark:text-zinc-400">
-                No HMO on file. Use Edit patient to add the company name and
-                the HMO account number.
+                No HMO on file. Use Edit patient to add the HMO name, the
+                patient&rsquo;s company and the HMO account number.
               </p>
             ) : (
               <table className="mt-1.5 w-full text-left text-sm">
                 <thead className="text-xs text-zinc-500 dark:text-zinc-400">
                   <tr>
-                    <th className="py-1 pr-4 font-medium">Company name</th>
+                    <th className="py-1 pr-4 font-medium">HMO name</th>
+                    <th className="py-1 pr-4 font-medium">Patient&rsquo;s company</th>
                     <th className="py-1 font-medium">HMO account number</th>
                   </tr>
                 </thead>
@@ -173,6 +174,11 @@ export default async function PatientPage({
                     <tr key={entry.company}>
                       <td className="py-1.5 pr-4 font-medium text-zinc-900 dark:text-zinc-50">
                         {entry.company}
+                      </td>
+                      <td className="py-1.5 pr-4 text-zinc-900 dark:text-zinc-50">
+                        {entry.employer || (
+                          <span className="text-zinc-400">Not given</span>
+                        )}
                       </td>
                       <td className="py-1.5 font-mono text-zinc-900 dark:text-zinc-50">
                         {entry.accountNumber || (

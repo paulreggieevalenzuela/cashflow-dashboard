@@ -1,6 +1,7 @@
 "use server";
 
 import { auth } from "@/lib/auth/access";
+import { resolveVisitHmoDetails } from "@/lib/db/visit-hmo";
 import {
   computeVisitType,
   findOtherPatientsUsingId,
@@ -76,4 +77,26 @@ export async function checkDiscountIdAction(
   }
   const patient = patientName.trim() ? await lookupPatientByName(patientName) : undefined;
   return { others: await findOtherPatientsUsingId(idNumber, patient?.id ?? null) };
+}
+
+/**
+ * The patient's company and HMO account number to fill into the visit form
+ * when the payment method is an HMO: what was saved on this visit for that
+ * HMO (when editing), otherwise the patient's entry for it.
+ */
+export async function getHmoDetailsAction(
+  patientName: string,
+  hmoName: string,
+  invoiceId?: string,
+): Promise<{ employer: string; accountNumber: string }> {
+  const session = await auth();
+  if (!session?.user || !hmoName.trim()) {
+    return { employer: "", accountNumber: "" };
+  }
+  const patient = patientName.trim() ? await lookupPatientByName(patientName) : undefined;
+  return resolveVisitHmoDetails({
+    invoiceId,
+    patientId: patient?.id ?? null,
+    hmoName,
+  });
 }

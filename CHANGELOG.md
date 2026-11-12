@@ -4,6 +4,66 @@ All notable changes to the ADT Dental Clinic Cashflow app. The version is in
 `package.json` and `src/lib/cashflow/version.ts` (shown at the foot of the Help
 page). Newest first.
 
+## 0.9.0 — 2026-11-12
+
+HMO details: the patient's company, the HMO name and the account number, on the patient and on each visit.
+
+### Added
+
+- **Patient's company** on every HMO a patient has (the company the patient works
+  for, not the HMO). Edit patient has three fields per HMO: HMO name, HMO account
+  number and Patient's company; the profile lists the three; patient search also
+  finds the patient by company.
+- **Visit form:** choosing an HMO as the payment method shows an "HMO details" box
+  (HMO name, Patient's company, HMO account number) filled in from the patient.
+  What is left there is saved with the visit and shown again when the visit is
+  edited. An HMO the patient's profile does not have yet is added to the profile;
+  nothing the profile already has is overwritten.
+- **Day end** (screen, Excel and CSV) and the **HMO billing sheet** (screen, print,
+  Excel and CSV) have a "Patient's company" column next to the account number. A
+  saved billing keeps the company as it was when the billing was made.
+- Help explains the new details.
+
+### Needs
+
+- Run `scripts/sql/2026-11-patient-hmos.sql` again (safe to repeat): adds the
+  company to the patient's HMOs and creates `invoice_hmo_details` and
+  `hmo_billing_employers`. Until then everything keeps working and the screens
+  say which script to run; the company simply cannot be saved yet.
+
+## 0.8.0 — 2026-11-12
+
+Overview: four "Right now" cards for the front desk, the Branch manager and Headquarters.
+
+### Added
+
+- **Waiting times:** who is waiting at Arrived, On-going and For Payment right now,
+  with the longest wait in each step; the average time in each step for today and
+  the last 30 days (the same figures as the Queue page); open visits left over from
+  an earlier day are counted apart so they don't distort "longest". Links to the Queue.
+- **Outstanding balances:** what patients still owe on visits at For Payment or
+  Cleared, with the number of visits, the age of the oldest unpaid visit and a split
+  by age (up to 7 days, 8 to 30 days, over 30 days). The HMO's share is not counted.
+  Never more than the visit's own balance on the Transactions page.
+- **Approval progress** (only for people with the Branch manager or Headquarters
+  check): finished visits to check, waiting for Headquarters, and approved, for the
+  period picked in "Viewing by", with the count waiting more than 2 days. Each
+  number opens the Transactions list already filtered. Explains itself when the
+  check SQL scripts have not been run.
+- **HMO receivables:** what the HMOs still owe for the period, as "not billed yet"
+  and "billed, waiting for payment", per HMO, plus the open visits waiting for an
+  LOA number. Explains itself when the HMO billing SQL script has not been run.
+- Everything is limited to the person's own clinics, like the rest of the Overview.
+- Help explains the four cards.
+
+### Notes
+
+- Waiting times and balances are always "right now". Approval progress and HMO
+  receivables follow the "Viewing by" picker (month, quarter, half-year, year).
+- Visits from before checking was introduced count as "To check" until ticked.
+- No new SQL to run; the cards use the tables from earlier updates and say so when
+  one is missing.
+
 ## 0.7.0 — 2026-11-12
 
 Patients can have several HMOs, shown as a list on the profile.

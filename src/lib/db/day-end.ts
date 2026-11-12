@@ -1,4 +1,5 @@
-import { accountNumberFor } from "@/lib/cashflow/patient-hmo";
+import { resolveHmoDetails } from "@/lib/cashflow/patient-hmo";
+import { getVisitHmoDetails } from "@/lib/db/visit-hmo";
 import { listPatientHmos } from "@/lib/db/patient-hmos";
 import { and, asc, eq, gte, inArray, lt, notInArray } from "drizzle-orm";
 import { db } from "@/lib/db/client";
@@ -54,11 +55,12 @@ function distinct(values: string[]): string[] {
 
 type HmoInfo = Pick<
   DayEndRow,
-  "hmo" | "hmoAccountNumber" | "loaNumber" | "loeNumber" | "teeth"
+  "hmo" | "hmoEmployer" | "hmoAccountNumber" | "loaNumber" | "loeNumber" | "teeth"
 > & { billed: number; billedByHmo: Array<{ name: string; amount: number }> };
 
 const NO_HMO: HmoInfo = {
   hmo: "",
+  hmoEmployer: "",
   hmoAccountNumber: "",
   loaNumber: "",
   loeNumber: "",
@@ -118,6 +120,35 @@ async function getHmoInfoByInvoice(
   // A patient can have several HMOs: show the account number of each HMO the
   // visit is billed to.
   const hmosByPatient = await listPatientHmos(patientIds);
+  // What was typed on each visit for its HMO wins over the patient's profile.
+  const visitDetails = await getVisitHmoDetails(visits.map((visit) => visit.id));
+
+  /** The patient's company and account number for each HMO the visit is billed to. */
+  const detailsFor = (visit: (typeof visits)[number], hmoNames: string[]) => {
+    const patientId = visit.patientId;
+    const entries = patientId ? (hmosByPatient.get(patientId) ?? []) : [];
+    const legacy = patientId ? (accountByPatient.get(patientId) ?? "") : "";
+    const typed = visitDetails.get(visit.id);
+    const found = (hmoNames.length > 0 ? hmoNames : [typed?.hmoName || entries[0]?.company || ""]).map(
+      (name) => {
+        const details = resolveHmoDetails({
+          visit: typed,
+          entries,
+          hmoName: name,
+          legacyAccountNumber: legacy,
+        });
+        // HMO payments only (no HMO line, no typed HMO): the patient's first HMO, as before.
+        if (hmoNames.length === 0 && !typed && entries[0]) {
+          return { employer: entries[0].employer, accountNumber: entries[0].accountNumber };
+        }
+        return details;
+      },
+    );
+    return {
+      hmoEmployer: distinct(found.map((item) => item.employer)).join(", "),
+      hmoAccountNumber: distinct(found.map((item) => item.accountNumber)).join(", "),
+    };
+  };
 
   for (const visit of visits) {
     const hmoLines = (linesByInvoice.get(visit.id) ?? []).filter(
@@ -132,22 +163,7 @@ async function getHmoInfoByInvoice(
     result.set(visit.id, {
       billedByHmo: [...byHmo].map(([name, amount]) => ({ name, amount })),
       hmo: distinct(hmoLines.map((line) => hmoNameFor(line.paymentType))).join(" / "),
-      hmoAccountNumber: visit.patientId
-        ? byHmo.size > 0
-          ? distinct(
-              [...byHmo.keys()].map((name) =>
-                accountNumberFor(
-                  hmosByPatient.get(visit.patientId as string) ?? [],
-                  name,
-                  accountByPatient.get(visit.patientId as string) ?? "",
-                ),
-              ),
-            ).join(", ")
-          : // HMO payments only (no HMO line): the patient's first account number, as before.
-            (hmosByPatient.get(visit.patientId)?.[0]?.accountNumber ??
-            accountByPatient.get(visit.patientId) ??
-            "")
-        : "",
+      ...detailsFor(visit, [...byHmo.keys()]),
       loaNumber: distinct(
         hmoLines.map((line) => line.loaNumber || visit.loaNumber || ""),
       ).join(", "),
@@ -296,6 +312,7 @@ export async function getDayEndReport(input: {
     }
     return {
       hmo: info.hmo,
+      hmoEmployer: info.hmoEmployer,
       hmoAccountNumber: info.hmoAccountNumber,
       loaNumber: info.loaNumber,
       loeNumber: info.loeNumber,

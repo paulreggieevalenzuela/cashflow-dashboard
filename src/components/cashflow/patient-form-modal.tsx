@@ -10,6 +10,7 @@ import { Modal } from "@/components/ui/modal";
 import {
   MAX_HMO_ACCOUNT_LENGTH,
   MAX_HMO_COMPANY_LENGTH,
+  MAX_HMO_EMPLOYER_LENGTH,
   MAX_PATIENT_HMOS,
   type PatientHmoEntry,
 } from "@/lib/cashflow/patient-hmo";
@@ -25,7 +26,7 @@ type Initial = {
   contactNumber: string;
   notes: string;
   birthDate: string;
-  /** The patient's HMOs (company + account number), first one first. */
+  /** The patient's HMOs (HMO name, their company, account number), first one first. */
   hmos: PatientHmoEntry[];
   /** False until scripts/sql/2026-11-patient-hmos.sql is run: one HMO only. */
   hmoListReady: boolean;
@@ -63,7 +64,7 @@ export function PatientFormModal({
   const maxRows = listReady ? MAX_PATIENT_HMOS : 1;
 
   function addHmoRow() {
-    setHmoRows((rows) => [...rows, { company: "", accountNumber: "", key: nextKey }]);
+    setHmoRows((rows) => [...rows, { company: "", employer: "", accountNumber: "", key: nextKey }]);
     setNextKey((key) => key + 1);
   }
   function changeHmoRow(key: number, change: Partial<PatientHmoEntry>) {
@@ -88,7 +89,11 @@ export function PatientFormModal({
         // this too; sent here so the type is complete).
         hmoCompany: hmoRows[0]?.company ?? "",
         hmoAccountNumber: hmoRows[0]?.accountNumber ?? "",
-        hmos: hmoRows.map(({ company, accountNumber }) => ({ company, accountNumber })),
+        hmos: hmoRows.map(({ company, employer, accountNumber }) => ({
+          company,
+          employer,
+          accountNumber,
+        })),
       };
       const result = initial
         ? await updatePatientAction(initial.id, input)
@@ -172,10 +177,10 @@ export function PatientFormModal({
             {hmoRows.map((row, index) => (
               <div
                 key={row.key}
-                className="grid grid-cols-1 gap-2 rounded-lg border border-zinc-200 p-3 dark:border-zinc-800 sm:grid-cols-[1fr_1fr_auto] sm:items-end"
+                className="grid grid-cols-1 gap-2 rounded-lg border border-zinc-200 p-3 dark:border-zinc-800 sm:grid-cols-2"
               >
                 <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-400">
-                  Company name
+                  HMO name
                   <input
                     value={row.company}
                     onChange={(event) => changeHmoRow(row.key, { company: event.target.value })}
@@ -184,7 +189,7 @@ export function PatientFormModal({
                     placeholder="e.g. Maxicare"
                     className={FIELD}
                     autoComplete="off"
-                    aria-label={`HMO ${index + 1} company name`}
+                    aria-label={`HMO ${index + 1} name`}
                   />
                 </label>
                 <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-400">
@@ -198,14 +203,34 @@ export function PatientFormModal({
                     aria-label={`HMO ${index + 1} account number`}
                   />
                 </label>
-                <button
-                  type="button"
-                  onClick={() => removeHmoRow(row.key)}
-                  className="rounded-lg px-2.5 py-2 text-xs font-medium text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40"
-                  aria-label={`Remove HMO ${index + 1}`}
-                >
-                  Remove
-                </button>
+                <label className="block text-xs font-medium text-zinc-600 dark:text-zinc-400 sm:col-span-2">
+                  Patient&rsquo;s company
+                  <input
+                    value={row.employer}
+                    onChange={(event) => changeHmoRow(row.key, { employer: event.target.value })}
+                    maxLength={MAX_HMO_EMPLOYER_LENGTH}
+                    placeholder="The company the patient works for (optional)"
+                    disabled={!listReady}
+                    title={
+                      listReady
+                        ? undefined
+                        : "Run scripts/sql/2026-11-patient-hmos.sql in Neon to keep the patient's company."
+                    }
+                    className={`${FIELD} disabled:cursor-not-allowed disabled:opacity-60`}
+                    autoComplete="off"
+                    aria-label={`HMO ${index + 1} patient's company`}
+                  />
+                </label>
+                <div className="flex justify-end sm:col-span-2">
+                  <button
+                    type="button"
+                    onClick={() => removeHmoRow(row.key)}
+                    className="rounded-lg px-2.5 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40"
+                    aria-label={`Remove HMO ${index + 1}`}
+                  >
+                    Remove
+                  </button>
+                </div>
               </div>
             ))}
             <datalist id="patient-hmo-companies">
@@ -224,7 +249,7 @@ export function PatientFormModal({
             ) : (
               !listReady && (
                 <p className="text-xs text-amber-700 dark:text-amber-300">
-                  Only one HMO fits for now. To keep several per patient, run{" "}
+                  Only one HMO fits for now, and the patient&rsquo;s company can&rsquo;t be kept. To keep several per patient, run{" "}
                   <code>scripts/sql/2026-11-patient-hmos.sql</code> in Neon.
                 </p>
               )

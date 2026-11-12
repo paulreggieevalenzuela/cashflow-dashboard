@@ -7,14 +7,15 @@ import {
 } from "@/lib/cashflow/patient-hmo";
 
 export const PATIENT_HMOS_NOT_READY =
-  "Keeping more than one HMO per patient needs one more step first: run scripts/sql/2026-11-patient-hmos.sql in Neon, then try again.";
+  "Keeping more than one HMO per patient, and the patient's company, needs one more step first: run scripts/sql/2026-11-patient-hmos.sql in Neon, then try again.";
 
 let warned = false;
 
 /** The `patient_hmos` table doesn't exist yet (the SQL script wasn't run). */
 export function patientHmosMissing(error: unknown): boolean {
   const text = String(error) + String((error as { cause?: unknown })?.cause ?? "");
-  const missing = /patient_hmos/.test(text) && /does not exist|relation/.test(text);
+  // Also true when the table is there but lacks the newer "employer" column.
+  const missing = /patient_hmos|employer/.test(text) && /does not exist|relation/.test(text);
   if (missing && !warned) {
     warned = true;
     console.warn("Patient HMO lists are off: run scripts/sql/2026-11-patient-hmos.sql.");
@@ -25,7 +26,10 @@ export function patientHmosMissing(error: unknown): boolean {
 /** Is the list table there? (False until the SQL script has been run.) */
 export async function patientHmosReady(): Promise<boolean> {
   try {
-    await db.select({ id: patientHmos.id }).from(patientHmos).limit(1);
+    await db
+      .select({ id: patientHmos.id, employer: patientHmos.employer })
+      .from(patientHmos)
+      .limit(1);
     return true;
   } catch (error) {
     if (patientHmosMissing(error)) return false;
@@ -49,6 +53,7 @@ export async function listPatientHmos(
         .select({
           patientId: patientHmos.patientId,
           company: patientHmos.company,
+          employer: patientHmos.employer,
           accountNumber: patientHmos.accountNumber,
         })
         .from(patientHmos)
@@ -56,7 +61,11 @@ export async function listPatientHmos(
         .orderBy(asc(patientHmos.position), asc(patientHmos.createdAt));
       for (const row of rows) {
         const list = result.get(row.patientId) ?? [];
-        list.push({ company: row.company, accountNumber: row.accountNumber });
+        list.push({
+          company: row.company,
+          employer: row.employer,
+          accountNumber: row.accountNumber,
+        });
         result.set(row.patientId, list);
       }
     }
@@ -92,6 +101,7 @@ export async function savePatientHmos(
             patientId,
             company: entry.company,
             companyKey: hmoKey(entry.company),
+            employer: entry.employer,
             accountNumber: entry.accountNumber,
             position: index,
           })),
@@ -100,6 +110,7 @@ export async function savePatientHmos(
           target: [patientHmos.patientId, patientHmos.companyKey],
           set: {
             company: sql`excluded.company`,
+            employer: sql`excluded.employer`,
             accountNumber: sql`excluded.account_number`,
             position: sql`excluded.position`,
           },
@@ -139,6 +150,7 @@ export async function mergePatientHmos(sourceId: string, targetId: string): Prom
           patientId: targetId,
           company: row.company,
           companyKey: row.companyKey,
+          employer: row.employer,
           accountNumber: row.accountNumber,
           position: position++,
         })

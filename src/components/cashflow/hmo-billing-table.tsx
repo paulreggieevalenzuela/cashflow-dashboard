@@ -20,7 +20,7 @@ export function shortDate(iso: string): string {
 }
 
 /**
- * The rows of an HMO billing: visit date, patient, HMO account #, LOA #,
+ * The rows of an HMO billing: visit date, patient, patient's company, HMO account #, LOA #,
  * LOE #, procedure, tooth # and amount, with the total at the foot. Used by
  * the HMO billing tab (preview), a saved billing, and Day end.
  */
@@ -29,7 +29,7 @@ export function HmoBillingTable({
   total,
   showHmo = false,
   emptyText = "No HMO lines for this range.",
-  minWidth = 860,
+  minWidth = 980,
 }: {
   lines: HmoBillingLine[];
   total: number;
@@ -37,7 +37,7 @@ export function HmoBillingTable({
   emptyText?: string;
   minWidth?: number;
 }) {
-  const columns = showHmo ? 10 : 9;
+  const columns = showHmo ? 11 : 10;
   return (
     <div className="overflow-x-auto rounded-lg border border-zinc-200 dark:border-zinc-800">
       <table
@@ -50,6 +50,7 @@ export function HmoBillingTable({
             <th className="px-3 py-3 font-medium">Visit date</th>
             <th className="px-3 py-3 font-medium">Patient</th>
             {showHmo && <th className="px-3 py-3 font-medium">HMO</th>}
+            <th className="px-3 py-3 font-medium">Patient&rsquo;s company</th>
             <th className="px-3 py-3 font-medium">HMO account #</th>
             <th className="px-3 py-3 font-medium">LOA #</th>
             <th className="px-3 py-3 font-medium">LOE #</th>
@@ -81,6 +82,11 @@ export function HmoBillingTable({
                 {showHmo && (
                   <td className="whitespace-nowrap px-3 py-2.5">{line.hmo}</td>
                 )}
+                <td className="px-3 py-2.5">
+                  {line.hmoEmployer || (
+                    <span className="text-zinc-400">Not given</span>
+                  )}
+                </td>
                 <td className="px-3 py-2.5 font-mono text-xs">
                   {line.hmoAccountNumber || (
                     <span className="font-sans text-zinc-400">Not on file</span>

@@ -10,6 +10,7 @@ import {
 } from "@/app/cashflow/actions";
 import {
   checkDiscountIdAction,
+  getHmoDetailsAction,
   getSavedDiscountIdAction,
   lookupPatientAction,
 } from "@/app/cashflow/patient-actions";
@@ -130,6 +131,9 @@ type FormState = {
   /** HMO: optional LOE. The LOA (which can arrive the next day) is typed on
    * each procedure. */
   loeNumber: string;
+  /** HMO: the patient's company and the HMO account number for this visit. */
+  hmoEmployer: string;
+  hmoAccountNumber: string;
   /** Every procedure uses the first procedure's LOA (HMOs other than
    * Maxicare). Unticked, each procedure gets its own LOA field. */
   sameLoa: boolean;
@@ -178,6 +182,8 @@ function blankFormState(branchId = ""): FormState {
     recallDate: "",
     recallReason: "",
     loeNumber: "",
+    hmoEmployer: "",
+    hmoAccountNumber: "",
     sameLoa: true,
     paymentAmount: "",
     paymentType: "",
@@ -255,6 +261,9 @@ function formStateFromInvoice(
     recallDate: invoice.recallDate ?? "",
     recallReason: invoice.recallReason,
     loeNumber: invoice.loeNumber,
+    // Filled in from the visit's saved details (or the patient's) on load.
+    hmoEmployer: "",
+    hmoAccountNumber: "",
     // One LOA on all procedures (or none yet) = "same for all".
     sameLoa:
       new Set(
@@ -704,6 +713,42 @@ export function TransactionForm(props: TransactionFormProps) {
     };
   }, [form.patientName, form.date, editingInvoiceId, lookupKey]);
 
+  // HMO visit: offer the patient's company and HMO account number for the
+  // chosen HMO (the ones saved on this visit when editing, otherwise the
+  // patient's own entry). Typing in either field stops the automatic fill.
+  const hmoEdited = useRef(false);
+  const hmoFillKey = `${form.paymentType.trim().toLowerCase()}|${form.patientName.trim()}`;
+  useEffect(() => {
+    const method = form.paymentType.trim();
+    if (!isHmoPayment(method) || hmoEdited.current) {
+      return;
+    }
+    let cancelled = false;
+    const timer = window.setTimeout(async () => {
+      try {
+        const details = await getHmoDetailsAction(
+          form.patientName,
+          method,
+          editingInvoiceId,
+        );
+        if (!cancelled && !hmoEdited.current) {
+          setForm((prev) => ({
+            ...prev,
+            hmoEmployer: details.employer,
+            hmoAccountNumber: details.accountNumber,
+          }));
+        }
+      } catch {
+        // A convenience: the fields can be typed by hand.
+      }
+    }, 400);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hmoFillKey, editingInvoiceId]);
+
   const activeLookup =
     lookup && lookup.forKey === lookupKey && form.patientName.trim()
       ? lookup
@@ -851,6 +896,8 @@ export function TransactionForm(props: TransactionFormProps) {
       recallDate: form.recallDate,
       recallReason: form.recallReason,
       loeNumber: isHmoVisit ? form.loeNumber : "",
+      hmoEmployer: isHmoVisit ? form.hmoEmployer : "",
+      hmoAccountNumber: isHmoVisit ? form.hmoAccountNumber : "",
       lines: keptIndexes.map((index) => {
         if (checkInOnly) {
           return {
@@ -1234,6 +1281,51 @@ export function TransactionForm(props: TransactionFormProps) {
                 )}
               </div>
             </div>
+            {isHmoPayment(form.paymentType) && (
+              <fieldset className="space-y-3 rounded-lg border border-zinc-200 p-3 dark:border-zinc-800">
+                <legend className="px-1 text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+                  HMO details
+                </legend>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                  <div className="flex flex-col gap-1.5">
+                    <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+                      HMO name
+                    </span>
+                    <p
+                      className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-900 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-50"
+                      data-testid="hmo-name"
+                    >
+                      {form.paymentType}
+                    </p>
+                  </div>
+                  <FormField
+                    label="Patient's company"
+                    type="text"
+                    value={form.hmoEmployer}
+                    error={errors.hmoEmployer}
+                    placeholder="Where the patient works"
+                    onChange={(event) => {
+                      hmoEdited.current = true;
+                      updateField("hmoEmployer", event.target.value);
+                    }}
+                  />
+                  <FormField
+                    label="HMO account number"
+                    type="text"
+                    value={form.hmoAccountNumber}
+                    error={errors.hmoAccountNumber}
+                    onChange={(event) => {
+                      hmoEdited.current = true;
+                      updateField("hmoAccountNumber", event.target.value);
+                    }}
+                  />
+                </div>
+                <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                  Filled in from the patient&rsquo;s profile. What you keep here is saved with this
+                  visit, and added to the patient&rsquo;s profile if it has no {form.paymentType} yet.
+                </p>
+              </fieldset>
+            )}
           </section>
 
           <section className="space-y-3">

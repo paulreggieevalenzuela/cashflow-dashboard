@@ -1,6 +1,10 @@
 import { z } from "zod";
 import { transferDentistError } from "@/lib/cashflow/commission-split";
 import { MAX_HMO_REFERENCE_LENGTH } from "@/lib/cashflow/hmo";
+import {
+  MAX_HMO_ACCOUNT_LENGTH,
+  MAX_HMO_EMPLOYER_LENGTH,
+} from "@/lib/cashflow/patient-hmo";
 import { computeListPrice, isStatutoryDiscount, VAT_TYPES } from "@/lib/cashflow/pricing";
 import { teethError } from "@/lib/cashflow/teeth";
 
@@ -152,6 +156,18 @@ export const InvoiceInputSchema = z.object({
     .max(MAX_HMO_REFERENCE_LENGTH, "LOE number is too long.")
     .optional()
     .default(""),
+  // HMO visit: the patient's company and account number for the HMO the visit
+  // is paid through (the HMO is the payment method). Kept with the visit.
+  hmoEmployer: z
+    .string()
+    .trim()
+    .max(MAX_HMO_EMPLOYER_LENGTH, "The company name is too long.")
+    .optional(),
+  hmoAccountNumber: z
+    .string()
+    .trim()
+    .max(MAX_HMO_ACCOUNT_LENGTH, "The HMO account number is too long.")
+    .optional(),
   lines: z.array(InvoiceLineInputSchema).min(1, "Add at least one procedure."),
   payment: InvoicePaymentInputSchema.optional(),
 })

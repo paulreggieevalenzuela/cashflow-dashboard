@@ -631,9 +631,12 @@ export const patientHmos = pgTable(
     patientId: uuid("patient_id")
       .notNull()
       .references(() => patients.id, { onDelete: "cascade" }),
+    /** The HMO's name (Maxicare, Medicard...). */
     company: text("company").notNull(),
-    /** The company name, lower case, so "Maxicare" and "maxicare " are one. */
+    /** The HMO name, lower case, so "Maxicare" and "maxicare " are one. */
     companyKey: text("company_key").notNull(),
+    /** The PATIENT'S company (employer) behind this HMO membership. */
+    employer: text("employer").notNull().default(""),
     accountNumber: text("account_number").notNull().default(""),
     position: integer("position").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -644,6 +647,26 @@ export const patientHmos = pgTable(
 );
 
 export type PatientHmoRow = typeof patientHmos.$inferSelect;
+
+/**
+ * What was typed on ONE visit for the HMO it was paid through: the patient's
+ * company and the account number. Kept with the visit so a later change on the
+ * patient's profile does not alter an old Day end or HMO billing. One row per
+ * visit; goes with the visit when it is deleted. Created by
+ * scripts/sql/2026-11-patient-hmos.sql.
+ */
+export const invoiceHmoDetails = pgTable("invoice_hmo_details", {
+  invoiceId: uuid("invoice_id")
+    .primaryKey()
+    .references(() => invoices.id, { onDelete: "cascade" }),
+  /** The HMO these details are for (the visit's payment method). */
+  hmoName: text("hmo_name").notNull().default(""),
+  employer: text("employer").notNull().default(""),
+  accountNumber: text("account_number").notNull().default(""),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export type InvoiceHmoDetailsRow = typeof invoiceHmoDetails.$inferSelect;
 
 export type PatientRow = typeof patients.$inferSelect;
 export type NewPatientRow = typeof patients.$inferInsert;
@@ -860,6 +883,21 @@ export const hmoBillingLines = pgTable("hmo_billing_lines", {
 }, (table) => [
   index("hmo_billing_lines_billing_idx").on(table.billingId, table.lineNumber),
   uniqueIndex("hmo_billing_lines_active_transaction_idx").on(table.transactionId).where(sql`${table.active}`),
+]);
+
+/**
+ * The patient's company on each saved billing line, kept apart from
+ * `hmo_billing_lines` so that table stays as it was. Created by
+ * scripts/sql/2026-11-patient-hmos.sql; goes with the billing.
+ */
+export const hmoBillingEmployers = pgTable("hmo_billing_employers", {
+  billingId: uuid("billing_id")
+    .notNull()
+    .references(() => hmoBillings.id, { onDelete: "cascade" }),
+  transactionId: text("transaction_id").notNull(),
+  employer: text("employer").notNull().default(""),
+}, (table) => [
+  primaryKey({ columns: [table.billingId, table.transactionId] }),
 ]);
 
 /** The running billing number per branch code and year. */

@@ -5,6 +5,7 @@ import { currentPeriodKeys } from "@/lib/cashflow/dashboard-metrics";
 import { todayInManila } from "@/lib/cashflow/visit-status";
 import { getBranchById, listBranches } from "@/lib/db/branches";
 import { getOverviewData } from "@/lib/db/overview";
+import { getOverviewOps } from "@/lib/db/overview-ops";
 import { getSalesTarget } from "@/lib/db/targets";
 
 /**
@@ -31,9 +32,14 @@ export default async function CashflowPage() {
   const referenceDate = new Date(`${todayInManila()}T00:00:00`);
   const periodKeys = currentPeriodKeys(referenceDate);
 
-  const [data, branches, branch, monthTarget, quarterTarget, yearTarget] =
+  // The approval card is for people who give a check.
+  const withApprovals =
+    can(session, "transaction.verify") || can(session, "transaction.verify_hq");
+
+  const [data, ops, branches, branch, monthTarget, quarterTarget, yearTarget] =
     await Promise.all([
       getOverviewData({ branchId, referenceDate }),
+      getOverviewOps({ branchId, referenceDate, withApprovals }),
       listBranches(),
       branchId ? getBranchById(branchId) : Promise.resolve(undefined),
       // The clinic-wide targets are not compared with one branch's figures.
@@ -45,6 +51,8 @@ export default async function CashflowPage() {
   return (
     <CashflowOverview
       data={data}
+      ops={ops}
+      today={todayInManila()}
       userName={session?.user.name ?? session?.user.email ?? undefined}
       targets={
         branchId

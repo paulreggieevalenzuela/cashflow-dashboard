@@ -37,6 +37,8 @@ export type DayEndRow = {
   /** HMO details of the visit, on the same row (blank when it is not an HMO
    * visit). Several procedures' LOA / tooth numbers are joined with ", ". */
   hmo: string;
+  /** The patient's own company (employer), for that HMO. */
+  hmoEmployer: string;
   /** The patient's account (member) number with the HMO. */
   hmoAccountNumber: string;
   loaNumber: string;
@@ -260,6 +262,7 @@ export const DAY_END_HEADERS = [
   "Net Collection",
   // HMO details, on the same row as the payment.
   "HMO",
+  "Patient's Company",
   "HMO Account #",
   "LOA #",
   "LOE #",
@@ -307,6 +310,7 @@ export function buildDayEndSheet(report: DayEndReport): SheetInput {
       row.withholdingTax,
       row.netCollection,
       row.hmo,
+      row.hmoEmployer,
       row.hmoAccountNumber,
       row.hmo ? row.loaNumber.trim() || LOA_PENDING : "",
       row.loeNumber,

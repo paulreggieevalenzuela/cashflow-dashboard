@@ -12,12 +12,14 @@ import {
   type TargetPeriodData,
   type TargetPeriodType,
 } from "@/components/cashflow/dashboard/dashboard-cards";
+import { OpsSection } from "@/components/cashflow/dashboard/ops-cards";
 import { CsvUpload } from "@/components/cashflow/csv-upload";
 import {
   GRANULARITY_OPTIONS,
   type Granularity,
 } from "@/lib/cashflow/dashboard-metrics";
 import type { OverviewData } from "@/lib/cashflow/overview-data";
+import type { OverviewOps } from "@/lib/cashflow/overview-ops";
 import type { Branch } from "@/lib/db/branches";
 
 const currencyFormatter = new Intl.NumberFormat("en-PH", {
@@ -33,6 +35,8 @@ function greetingForHour(hour: number): string {
 
 export function CashflowOverview({
   data,
+  ops,
+  today,
   userName,
   targets,
   canEditTargets = false,
@@ -43,6 +47,10 @@ export function CashflowOverview({
    * `getOverviewData`): the browser gets a few hundred numbers, not the
    * transaction history. */
   data: OverviewData;
+  /** The "Right now" widgets (waiting times, balances, approvals, HMO). */
+  ops: OverviewOps;
+  /** Today on the clinic's calendar, YYYY-MM-DD. */
+  today: string;
   userName?: string;
   /** This period's admin-set target for month/quarter/year, `null` where
    * none has been set yet — fetched server-side from the `sales_targets`
@@ -141,10 +149,7 @@ export function CashflowOverview({
       </div>
 
       <section className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <StatCard
-          label="Transactions"
-          value={period.visits.toString()}
-        />
+        <StatCard label="Transactions" value={period.visits.toString()} />
         <StatCard
           label="Amount paid"
           value={currencyFormatter.format(period.amountPaid)}
@@ -157,9 +162,14 @@ export function CashflowOverview({
 
       {targetPeriods && (
         <section className="grid grid-cols-1">
-          <TargetVsActualCard periods={targetPeriods} canEdit={canEditTargets} />
+          <TargetVsActualCard
+            periods={targetPeriods}
+            canEdit={canEditTargets}
+          />
         </section>
       )}
+
+      <OpsSection ops={ops} granularity={granularity} today={today} />
 
       <section className="grid grid-cols-1 gap-6 xl:grid-cols-3">
         <div className="xl:col-span-2">

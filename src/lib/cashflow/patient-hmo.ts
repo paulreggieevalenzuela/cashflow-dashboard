@@ -78,7 +78,18 @@ export function cleanHmoText(value: unknown, max: number): string {
 /** How many HMOs one patient can have. */
 export const MAX_PATIENT_HMOS = 10;
 
-export type PatientHmoEntry = { company: string; accountNumber: string };
+/** The longest the patient's own company name (employer) may be. */
+export const MAX_HMO_EMPLOYER_LENGTH = 120;
+
+/**
+ * One HMO of a patient. `company` is the HMO's name (Maxicare, Medicard...);
+ * `employer` is the PATIENT'S company, the one that enrolled them in that HMO.
+ */
+export type PatientHmoEntry = {
+  company: string;
+  employer: string;
+  accountNumber: string;
+};
 
 /** The company name as compared: no capitals, no extra spaces. */
 export function hmoKey(name: string): string {
@@ -105,12 +116,15 @@ export function cleanHmoList(input: unknown): CleanHmoListResult {
   for (const raw of input) {
     const row = (raw ?? {}) as Record<string, unknown>;
     const company = cleanHmoText(row.company, MAX_HMO_COMPANY_LENGTH);
+    const employer = cleanHmoText(row.employer, MAX_HMO_EMPLOYER_LENGTH);
     const accountNumber = cleanHmoText(row.accountNumber, MAX_HMO_ACCOUNT_LENGTH);
-    if (company === "" && accountNumber === "") continue;
+    if (company === "" && accountNumber === "" && employer === "") continue;
     if (company === "") {
       return {
         ok: false,
-        message: `Enter the company name for account number ${accountNumber}.`,
+        message: `Enter the HMO name for ${
+          accountNumber ? `account number ${accountNumber}` : `the company ${employer}`
+        }.`,
       };
     }
     const key = hmoKey(company);
@@ -118,7 +132,7 @@ export function cleanHmoList(input: unknown): CleanHmoListResult {
       return { ok: false, message: `${company} is listed twice.` };
     }
     seen.add(key);
-    list.push({ company, accountNumber });
+    list.push({ company, employer, accountNumber });
   }
   if (list.length > MAX_PATIENT_HMOS) {
     return {
@@ -131,22 +145,62 @@ export function cleanHmoList(input: unknown): CleanHmoListResult {
 
 /** The old single HMO of a patient as a list of zero or one entry. */
 export function legacyHmoList(company: string, accountNumber: string): PatientHmoEntry[] {
-  return company.trim() === "" ? [] : [{ company: company.trim(), accountNumber }];
+  return company.trim() === ""
+    ? []
+    : [{ company: company.trim(), employer: "", accountNumber }];
 }
 
+/** What is known about a patient with ONE HMO: their company and account number. */
+export type HmoDetails = { employer: string; accountNumber: string };
+
 /**
- * The patient's account number for ONE HMO (the one a visit or billing line is
- * for). With a list, only that company's number counts, and it is blank when
- * the patient has no entry for it (another company's number would be wrong on
- * the billing). Without a list (older data, or the table not set up yet) the
- * single account number on the patient is used, as before.
+ * The patient's details for ONE HMO (the one a visit or billing line is for).
+ * With a list, only that HMO's entry counts, and the details are blank when
+ * the patient has no entry for it (another HMO's account number would be
+ * wrong on the billing). Without a list (older data, or the table not set up
+ * yet) the single account number on the patient is used, as before.
  */
+export function hmoDetailsFor(
+  entries: readonly PatientHmoEntry[],
+  hmoName: string,
+  legacyAccountNumber: string,
+): HmoDetails {
+  if (entries.length === 0) return { employer: "", accountNumber: legacyAccountNumber };
+  const key = hmoKey(hmoName);
+  const entry = entries.find((item) => hmoKey(item.company) === key);
+  return { employer: entry?.employer ?? "", accountNumber: entry?.accountNumber ?? "" };
+}
+
+/** The patient's account number for ONE HMO (see `hmoDetailsFor`). */
 export function accountNumberFor(
   entries: readonly PatientHmoEntry[],
   hmoName: string,
   legacyAccountNumber: string,
 ): string {
-  if (entries.length === 0) return legacyAccountNumber;
-  const key = hmoKey(hmoName);
-  return entries.find((entry) => hmoKey(entry.company) === key)?.accountNumber ?? "";
+  return hmoDetailsFor(entries, hmoName, legacyAccountNumber).accountNumber;
+}
+
+/** The details typed on one visit, for the HMO the visit was paid through. */
+export type VisitHmoDetails = { hmoName: string; employer: string; accountNumber: string };
+
+/**
+ * The company and account number to show for a visit's HMO. What was typed on
+ * the visit wins (when it is for that same HMO and has something in it); if
+ * not, the patient's own entry for that HMO is used.
+ */
+export function resolveHmoDetails(input: {
+  visit: VisitHmoDetails | undefined;
+  entries: readonly PatientHmoEntry[];
+  hmoName: string;
+  legacyAccountNumber: string;
+}): HmoDetails {
+  const saved = input.visit;
+  if (
+    saved &&
+    hmoKey(saved.hmoName) === hmoKey(input.hmoName) &&
+    (saved.employer.trim() !== "" || saved.accountNumber.trim() !== "")
+  ) {
+    return { employer: saved.employer, accountNumber: saved.accountNumber };
+  }
+  return hmoDetailsFor(input.entries, input.hmoName, input.legacyAccountNumber);
 }

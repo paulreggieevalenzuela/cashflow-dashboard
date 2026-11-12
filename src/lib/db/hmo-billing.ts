@@ -1,10 +1,12 @@
-import { accountNumberFor } from "@/lib/cashflow/patient-hmo";
+import { resolveHmoDetails } from "@/lib/cashflow/patient-hmo";
+import { getVisitHmoDetails } from "@/lib/db/visit-hmo";
 import { listPatientHmos } from "@/lib/db/patient-hmos";
 import { and, asc, desc, eq, gte, inArray, lte, sql } from "drizzle-orm";
 import { db } from "@/lib/db/client";
 import {
   branches,
   hmoBillingCounters,
+  hmoBillingEmployers,
   hmoBillingLines,
   hmoBillings,
   invoices,
@@ -35,9 +37,17 @@ function chunks<T>(items: T[], size = CHUNK): T[][] {
   return out;
 }
 
+/** True when only the "patient's company" table is missing (the SQL in
+ * scripts/sql/2026-11-patient-hmos.sql has not been run again). */
+function employersMissing(error: unknown): boolean {
+  const text = String(error) + String((error as { cause?: unknown })?.cause ?? "");
+  return /hmo_billing_employers/.test(text) && /does not exist|relation/i.test(text);
+}
+
 /** True when the HMO billing tables have not been created yet (the SQL in
  * scripts/sql/2026-11-hmo-billings.sql has not been run). */
 function billingTablesMissing(error: unknown): boolean {
+  if (employersMissing(error)) return false;
   return /hmo_billing|hmo_billings/.test(String(error)) &&
     /does not exist|relation/i.test(String(error));
 }
@@ -118,6 +128,10 @@ export async function getHmoBillingLines(input: {
   // A patient can have several HMOs: use the account number of the HMO the
   // line is billed to.
   const hmosByPatient = await listPatientHmos(patientIds);
+  // What was typed on the visit for its HMO wins over the patient's profile.
+  const visitDetails = await getVisitHmoDetails(
+    real.flatMap((row) => (row.invoiceId ? [row.invoiceId] : [])),
+  );
 
   // Which lines are already on an active billing.
   const billedBy = new Map<string, string>();
@@ -153,13 +167,15 @@ export async function getHmoBillingLines(input: {
       visitId: row.visitId,
       hmo: hmoNameFor(row.paymentType),
       patientName: row.patientName,
-      hmoAccountNumber: row.patientId
-        ? accountNumberFor(
-            hmosByPatient.get(row.patientId) ?? [],
-            hmoNameFor(row.paymentType),
-            accountByPatient.get(row.patientId) ?? "",
-          )
-        : "",
+      ...(() => {
+        const details = resolveHmoDetails({
+          visit: row.invoiceId ? visitDetails.get(row.invoiceId) : undefined,
+          entries: row.patientId ? (hmosByPatient.get(row.patientId) ?? []) : [],
+          hmoName: hmoNameFor(row.paymentType),
+          legacyAccountNumber: row.patientId ? (accountByPatient.get(row.patientId) ?? "") : "",
+        });
+        return { hmoEmployer: details.employer, hmoAccountNumber: details.accountNumber };
+      })(),
       loaNumber: (row.lineLoa || row.visitLoa || "").trim(),
       loeNumber: (row.loeNumber ?? "").trim(),
       procedure: row.procedure,
@@ -293,6 +309,22 @@ export async function createHmoBilling(input: {
         })),
       );
     }
+    // The patient's company, kept with the saved billing (a convenience:
+    // skipped while its table is missing).
+    try {
+      const withEmployer = lines.filter((line) => line.hmoEmployer !== "");
+      for (const part of chunks(withEmployer)) {
+        await db.insert(hmoBillingEmployers).values(
+          part.map((line) => ({
+            billingId: created.id,
+            transactionId: line.transactionId,
+            employer: line.hmoEmployer,
+          })),
+        );
+      }
+    } catch (error) {
+      if (!employersMissing(error)) throw error;
+    }
   } catch (error) {
     // Someone else billed one of these lines a moment ago (unique index),
     // or the save failed: take the half-made billing away again.
@@ -355,6 +387,17 @@ export async function getHmoBilling(
     .from(hmoBillingLines)
     .where(eq(hmoBillingLines.billingId, id))
     .orderBy(asc(hmoBillingLines.lineNumber));
+  // The patient's company, as it was when the billing was made.
+  const employers = new Map<string, string>();
+  try {
+    const saved = await db
+      .select()
+      .from(hmoBillingEmployers)
+      .where(eq(hmoBillingEmployers.billingId, id));
+    for (const entry of saved) employers.set(entry.transactionId, entry.employer);
+  } catch (error) {
+    if (!employersMissing(error)) throw error;
+  }
   return {
     billing: toBilling(row),
     branchId: row.branchId,
@@ -364,6 +407,7 @@ export async function getHmoBilling(
       visitId: line.visitId,
       hmo: row.hmo,
       patientName: line.patientName,
+      hmoEmployer: employers.get(line.transactionId) ?? "",
       hmoAccountNumber: line.hmoAccountNumber,
       loaNumber: line.loaNumber,
       loeNumber: line.loeNumber,

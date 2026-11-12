@@ -225,6 +225,15 @@ export default async function DayEndPage({
                   <td className="whitespace-nowrap px-3 py-2.5">
                     {row.hmo || <span className="text-zinc-400">—</span>}
                   </td>
+                  <td className="px-3 py-2.5">
+                    {row.hmo ? (
+                      row.hmoEmployer || (
+                        <span className="text-zinc-400">Not given</span>
+                      )
+                    ) : (
+                      <span className="text-zinc-400">—</span>
+                    )}
+                  </td>
                   <td className="px-3 py-2.5 font-mono text-xs">
                     {row.hmo ? (
                       row.hmoAccountNumber || (

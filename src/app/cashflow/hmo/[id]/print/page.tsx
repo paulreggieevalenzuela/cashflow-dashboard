@@ -101,6 +101,7 @@ export default async function HmoBillingPrintPage({
               "No.",
               "Visit date",
               "Patient",
+              "Patient's company",
               "HMO account #",
               "LOA #",
               "LOE #",
@@ -122,6 +123,7 @@ export default async function HmoBillingPrintPage({
                 {shortDate(line.visitDate)}
               </td>
               <td className="px-1.5 py-1">{line.patientName}</td>
+              <td className="px-1.5 py-1">{line.hmoEmployer || "—"}</td>
               <td className="px-1.5 py-1">{line.hmoAccountNumber || "—"}</td>
               <td className="px-1.5 py-1">
                 {line.loaNumber.trim() || LOA_PENDING_TEXT}
@@ -137,7 +139,7 @@ export default async function HmoBillingPrintPage({
         </tbody>
         <tfoot>
           <tr className="border-t-2 border-zinc-500 font-semibold">
-            <td colSpan={8} className="px-1.5 py-1.5 text-right">
+            <td colSpan={9} className="px-1.5 py-1.5 text-right">
               Total
             </td>
             <td className="whitespace-nowrap px-1.5 py-1.5 text-right tabular-nums">

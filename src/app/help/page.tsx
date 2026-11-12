@@ -91,11 +91,15 @@ const GROUPS: Group[] = [
       },
       {
         q: "Where do I enter the patient's HMO company and account number?",
-        a: "On the patient's profile: the HMO details section lists every HMO the patient has, each with its company name and account number. To change them, press Edit patient: use + Add HMO for another one, Remove to delete one, and Save. The first HMO in the list is the patient's main one. HMO billing and Day end use the account number of the HMO the visit was billed to. The HMOs, account numbers and birthday can all be used to search for the patient.",
+        a: "On the patient's profile: the HMO details section lists every HMO the patient has, each with three details: the HMO name, the patient's company (where the patient works, not the HMO) and the HMO account number. To change them, press Edit patient: use + Add HMO for another one, Remove to delete one, and Save. The first HMO in the list is the patient's main one. HMO billing and Day end use the details of the HMO the visit was billed to. The HMO names, patient's companies, account numbers and birthday can all be used to search for the patient.",
+      },
+      {
+        q: "What happens to the HMO details when I record a visit?",
+        a: "Pick the HMO as the payment method and an HMO details box appears under it: the HMO name, the patient's company and the HMO account number, filled in from the patient's profile. Correct them if they are different on this visit; what you leave there is saved with the visit. If the patient's profile has no entry for that HMO yet, it is added to the profile; details the profile already has are never overwritten. The visit's details are shown on Day end and on the HMO billing sheet.",
       },
       {
         q: "Can a patient have more than one HMO?",
-        a: "Yes, up to 10, each with its own company name and account number. The same company cannot be listed twice. If the patient is merged into another record, the HMOs the kept patient doesn't have yet are added to the list.",
+        a: "Yes, up to 10, each with its own patient's company and account number. The same HMO cannot be listed twice. If the patient is merged into another record, the HMOs the kept patient doesn't have yet are added to the list.",
       },
     ],
   },
@@ -104,7 +108,11 @@ const GROUPS: Group[] = [
     items: [
       {
         q: "What is on the Day end page?",
-        a: "One table of the day's payments and visits, with the HMO details (HMO, account #, LOA, LOE, tooth # and amount billed) on the same row. An HMO visit shows the HMO as its payment type with the amount billed to the HMO, because the HMO pays later; that amount is in the HMO's column of the breakdown, in the HMO figure and in the total. Below are the breakdown by payment method and the totals for the branch. There is no separate HMO section and no expenses. Staff see their own branch; admins can pick a branch.",
+        a: "One table of the day's payments and visits, with the HMO details (HMO, patient\u2019s company, account #, LOA, LOE, tooth # and amount billed) on the same row. An HMO visit shows the HMO as its payment type with the amount billed to the HMO, because the HMO pays later; that amount is in the HMO's column of the breakdown, in the HMO figure and in the total. Below are the breakdown by payment method and the totals for the branch. There is no separate HMO section and no expenses. Staff see their own branch; admins can pick a branch.",
+      },
+      {
+        q: "What are the four cards under the numbers on the Overview?",
+        a: "They show what needs attention now. Waiting times: who is waiting at each step of the Queue and for how long, plus the usual wait today and over the last 30 days. Outstanding balances: what patients still owe on visits that reached For Payment or Cleared, by age (up to 7 days, 8 to 30, over 30); the part an HMO pays is not included. Approval progress (for people who can check visits): finished visits still to check by the Branch manager, waiting for Headquarters, and approved, for the period you pick; the number waiting more than 2 days is called out, and each number opens the matching Transactions list. HMO receivables: what each HMO still owes for the period, split into not billed yet and billed but waiting for payment, plus how many open visits are waiting for an LOA number. Staff see only their own clinics. Waiting times and balances are always for right now; approval progress and HMO receivables follow the Viewing by picker.",
       },
       {
         q: "Can I download a report?",
@@ -125,7 +133,7 @@ const GROUPS: Group[] = [
       },
       {
         q: "What is on each row?",
-        a: "Visit date, patient, HMO account #, LOA #, LOE #, procedure, tooth # and the amount billed to the HMO. A line with no LOA shows \"LOA pending\" and is still counted in the total.",
+        a: "Visit date, patient, the patient\u2019s company, HMO account #, LOA #, LOE #, procedure, tooth # and the amount billed to the HMO. A saved billing keeps the company as it was when the billing was made. A line with no LOA shows \"LOA pending\" and is still counted in the total.",
       },
       {
         q: "Can the same line be billed twice?",
