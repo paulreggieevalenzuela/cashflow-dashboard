@@ -104,3 +104,126 @@ select.select-chevron:disabled,
 select.select-chevron-sm:disabled {
   cursor: not-allowed;
 }
+
+/*
+ * Landing page (src/app/page.tsx). CSS-only motion, no client JavaScript.
+ * Everything stops for people who ask for reduced motion.
+ */
+@keyframes landing-rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes landing-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-8px); }
+}
+@keyframes landing-glow {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(40px, 30px) scale(1.08); }
+}
+@keyframes landing-glow-alt {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(-30px, 40px) scale(1.06); }
+}
+/* The visit chip travels Arrived -> On-going -> For Payment -> Cleared. */
+@keyframes landing-visit {
+  0%, 14% { left: 12.5%; }
+  24%, 38% { left: 37.5%; }
+  48%, 62% { left: 62.5%; }
+  72%, 92% { left: 87.5%; }
+  100% { left: 12.5%; }
+}
+@keyframes landing-track-fill {
+  0%, 14% { width: 0%; }
+  24%, 38% { width: 25%; }
+  48%, 62% { width: 50%; }
+  72%, 92% { width: 75%; }
+  100% { width: 0%; }
+}
+@keyframes landing-bar {
+  from { width: 8%; }
+  to { width: 78%; }
+}
+@keyframes landing-pop {
+  0%, 70% { transform: scale(1); }
+  80% { transform: scale(1.15); }
+  90%, 100% { transform: scale(1); }
+}
+@keyframes landing-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.6); }
+  70% { box-shadow: 0 0 0 7px rgba(52, 211, 153, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(52, 211, 153, 0); }
+}
+@keyframes landing-flow {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(300%); }
+}
+
+.landing-rise {
+  animation: landing-rise 600ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.landing-float {
+  animation: landing-float 7s ease-in-out infinite;
+}
+.landing-float-slow {
+  animation: landing-float 11s ease-in-out infinite;
+}
+.landing-glow {
+  animation: landing-glow 18s ease-in-out infinite;
+}
+.landing-glow-alt {
+  animation: landing-glow-alt 22s ease-in-out infinite;
+}
+.landing-visit {
+  left: 12.5%;
+  animation: landing-visit 9s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+}
+.landing-track-fill {
+  width: 0%;
+  animation: landing-track-fill 9s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+}
+.landing-bar {
+  width: 78%;
+  animation: landing-bar 1.6s cubic-bezier(0.22, 1, 0.36, 1) 0.5s both;
+}
+.landing-chip {
+  animation: landing-rise 500ms ease-out both;
+}
+.landing-pop {
+  animation: landing-pop 9s ease-in-out infinite;
+}
+.landing-pulse {
+  animation: landing-pulse 2s ease-out infinite;
+}
+.landing-flow {
+  animation: landing-flow 3.2s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing-rise,
+  .landing-float,
+  .landing-float-slow,
+  .landing-glow,
+  .landing-glow-alt,
+  .landing-visit,
+  .landing-track-fill,
+  .landing-bar,
+  .landing-chip,
+  .landing-pop,
+  .landing-pulse,
+  .landing-flow {
+    animation: none;
+  }
+  .landing-visit {
+    left: 87.5%;
+  }
+  .landing-track-fill {
+    width: 75%;
+  }
+}
