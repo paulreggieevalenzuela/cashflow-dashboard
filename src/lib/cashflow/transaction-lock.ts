@@ -3,10 +3,11 @@
 //
 // Two approvals, in order. First the BRANCH MANAGER ticks a visit once it has
 // been Cleared and reviewed: each procedure line gets a "check" record and the
-// visit is LOCKED (nobody but the superuser can edit it, remove it or its
+// visit is LOCKED (nobody can edit it, remove it or its
 // lines, add or remove its payments, change its files or move its status).
 // Then HEADQUARTERS approves it, by a different person: each line gets a
-// second ("HQ") record. Only the superuser can unlock a visit, which removes
+// second ("HQ") record. A person with the "Unlock checked transactions"
+// privilege (owners and admins by default) can unlock a visit, which removes
 // both. Who may give each check is two privileges, ticked under Users -> Manage.
 
 import { isCheckInPlaceholder } from "@/lib/cashflow/visit-status";
@@ -73,7 +74,7 @@ export function isVisitLocked(check: Pick<VisitCheck, "lines" | "checked"> | und
 }
 
 export const LOCKED_MESSAGE =
-  "This visit has been checked and is locked. Only the superuser can change it.";
+  "This visit has been checked and is locked. Unlock it first (Unlock checked transactions privilege), then edit it.";
 
 /** The sentence shown when a locked visit blocks an action. */
 export function lockedMessageFor(action: string): string {

@@ -9,13 +9,13 @@ import {
   COMMISSION_SORT_KEYS,
   COMMISSION_SORT_LABELS,
   commissionFileName,
-  effectivePercent,
+  NO_RATE_TEXT,
+  rateText,
   formatSheetDateRange,
   parseCommissionFilters,
   summarizeCommission,
 } from "@/lib/cashflow/commission-report";
 import { formatSheetDate } from "@/lib/cashflow/day-end";
-import { isHmoPayment } from "@/lib/cashflow/pricing";
 import { todayInManila } from "@/lib/cashflow/visit-status";
 import { listBranches } from "@/lib/db/branches";
 import { getCommissionReport } from "@/lib/db/commission-report";
@@ -297,10 +297,13 @@ export default async function CommissionReportPage({
                     {money.format(row.commission)}
                   </td>
                   <td className="whitespace-nowrap px-3 py-2.5">
-                    {effectivePercent(row) || "—"}
-                    {isHmoPayment(row.paymentType) &&
-                      row.commission !== 0 &&
-                      " (HMO)"}
+                    {row.rateLabel === "" ? (
+                      <span className="text-amber-700 dark:text-amber-400">
+                        {NO_RATE_TEXT}
+                      </span>
+                    ) : (
+                      rateText(row) || "—"
+                    )}
                   </td>
                   <td className="px-3 py-2.5 text-xs text-zinc-500 dark:text-zinc-400">
                     {row.note ?? ""}

@@ -86,6 +86,7 @@ export default async function TransactionDetailPage({
       hqReady={hqReady}
       currentUserId={session?.user.id ?? null}
       isSuperuser={Boolean(session?.user.isSuperuser)}
+      canUnlock={can(session, "transaction.unlock")}
     />
   );
 }

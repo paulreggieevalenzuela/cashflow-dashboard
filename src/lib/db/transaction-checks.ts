@@ -148,8 +148,9 @@ export async function getVisitChecks(
 }
 
 /**
- * The sentence to hand back when this visit is locked and the person is not
- * the superuser; null when the action may go ahead. `action` names what was
+ * The sentence to hand back when this visit is locked; null when the action
+ * may go ahead. Nobody edits a checked visit directly, the superuser
+ * included: it has to be unlocked first (clinic rule, November 2026). `action` names what was
  * attempted ("edit", "remove", "record a payment", ...).
  */
 export async function visitLockMessage(
@@ -157,7 +158,8 @@ export async function visitLockMessage(
   actor: { isSuperuser: boolean },
   action: string,
 ): Promise<string | null> {
-  if (!invoiceId || actor.isSuperuser) return null;
+  void actor;
+  if (!invoiceId) return null;
   const check = (await getVisitChecks([invoiceId]))[invoiceId];
   return isVisitLocked(check) ? lockedMessageFor(action) : null;
 }
@@ -168,7 +170,6 @@ export async function lineLockMessage(
   actor: { isSuperuser: boolean },
   action: string,
 ): Promise<string | null> {
-  if (actor.isSuperuser) return null;
   const [line] = await db
     .select({ invoiceId: transactions.invoiceId })
     .from(transactions)
@@ -388,13 +389,33 @@ export async function approveVisitsHq(
 
 export type UncheckResult = { ok: true } | { ok: false; message: string };
 
-/** Unlocks a checked visit. Only the superuser may (enforced here too). */
+/**
+ * Unlocks a checked visit: removes the Branch manager and Headquarters
+ * checks. For people with the "Unlock checked transactions" privilege, in
+ * their own clinics (enforced here too).
+ */
 export async function uncheckVisit(
   invoiceId: string,
-  actor: { userId: string | null; name: string; isSuperuser: boolean },
+  actor: {
+    userId: string | null;
+    name: string;
+    canUnlock: boolean;
+    /** The clinics the person works in; null = every clinic. */
+    allowedBranchIds: string[] | null;
+  },
 ): Promise<UncheckResult> {
-  if (!actor.isSuperuser) {
-    return { ok: false, message: "Only the superuser can unlock a checked visit." };
+  if (!actor.canUnlock) {
+    return { ok: false, message: "You don't have permission to unlock checked transactions." };
+  }
+  if (actor.allowedBranchIds !== null) {
+    const [visit] = await db
+      .select({ branchId: invoices.branchId })
+      .from(invoices)
+      .where(eq(invoices.id, invoiceId))
+      .limit(1);
+    if (visit && !(visit.branchId && actor.allowedBranchIds.includes(visit.branchId))) {
+      return { ok: false, message: "That visit belongs to a clinic you don't work in." };
+    }
   }
   if (!(await transactionChecksReady())) {
     return { ok: false, message: CHECKS_NOT_READY };

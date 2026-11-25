@@ -24,8 +24,6 @@ import { listActiveDiscountTypes } from "@/lib/db/discount-types";
 import { listProcedureOptions } from "@/lib/db/procedures";
 import { listPendingRecalls } from "@/lib/db/recalls";
 import { listTransactionsPage } from "@/lib/db/transactions";
-import { AuditTrail } from "@/components/cashflow/audit-trail";
-import { listRecentAudit } from "@/lib/db/audit";
 import {
   ALL_BRANCHES,
   buildTransactionsSearch,
@@ -54,75 +52,24 @@ export default async function TransactionsPage({
 }) {
   const resolvedSearchParams = await searchParams;
 
+  // The audit trail moved to the profile menu; keep old links working.
+  if (resolvedSearchParams.tab === "audit") {
+    const group = resolvedSearchParams.group;
+    redirect(`/cashflow/audit${group ? `?group=${encodeURIComponent(group)}` : ""}`);
+  }
+
   // The queue now has its own page (and menu item); keep old links working.
   if (resolvedSearchParams.tab === "today") {
     redirect("/cashflow/queue");
   }
 
   const tab: TransactionsTab =
-    resolvedSearchParams.tab === "audit" ||
     resolvedSearchParams.tab === "expenses" ||
     resolvedSearchParams.tab === "procedures" ||
     resolvedSearchParams.tab === "recalls" ||
     resolvedSearchParams.tab === "payment-methods"
       ? resolvedSearchParams.tab
       : "transactions";
-
-  if (tab === "audit") {
-    const session = await auth();
-    if (!can(session, "audit.view")) {
-      redirect("/cashflow/transactions");
-    }
-    const group =
-      resolvedSearchParams.group === "visit" ||
-      resolvedSearchParams.group === "payment" ||
-      resolvedSearchParams.group === "status" ||
-      resolvedSearchParams.group === "patient"
-        ? resolvedSearchParams.group
-        : undefined;
-    const entries = await listRecentAudit({ group, limit: 200 });
-    const groups = [
-      { key: undefined, label: "Everything" },
-      { key: "visit", label: "Visits" },
-      { key: "payment", label: "Payments" },
-      { key: "status", label: "Status" },
-      { key: "patient", label: "Patients" },
-    ] as const;
-    return (
-      <div className="space-y-6">
-        <TransactionsTabs active="audit" />
-        <div className="space-y-4">
-          <div>
-            <h2 className="text-base font-semibold text-zinc-900 dark:text-zinc-50">
-              Audit trail
-            </h2>
-            <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-              Who created, edited or removed what, and when. The latest 200
-              entries; open a visit or patient to see its own trail.
-            </p>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {groups.map((option) => (
-              <a
-                key={option.label}
-                href={`/cashflow/transactions?tab=audit${option.key ? `&group=${option.key}` : ""}`}
-                className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
-                  option.key === group
-                    ? "border-amber-600 bg-amber-50 text-amber-700 dark:bg-amber-950 dark:text-amber-300"
-                    : "border-zinc-300 text-zinc-600 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-400 dark:hover:bg-zinc-800"
-                }`}
-              >
-                {option.label}
-              </a>
-            ))}
-          </div>
-          <div className="rounded-xl border border-zinc-200 bg-white px-5 py-2 dark:border-zinc-800 dark:bg-zinc-950">
-            <AuditTrail entries={entries} showLinks />
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   if (tab === "expenses") {
     const [session, expenses, suppliers, branches, files] = await Promise.all([
@@ -278,6 +225,7 @@ export default async function TransactionsPage({
         hqReady={hqReady}
         currentUserId={session?.user.id ?? null}
         isSuperuser={Boolean(session?.user.isSuperuser)}
+        canUnlock={can(session, "transaction.unlock")}
       />
     </div>
   );

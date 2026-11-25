@@ -1,6 +1,6 @@
 import { and, eq, ilike, isNull } from "drizzle-orm";
 import { normalizePriceBasis, type PriceBasis } from "@/lib/cashflow/price-basis";
-import { normalizeVatType, type VatType } from "@/lib/cashflow/pricing";
+import { procedureVatType, type VatType } from "@/lib/cashflow/pricing";
 import { db } from "@/lib/db/client";
 import {
   procedurePrices,
@@ -51,7 +51,8 @@ export async function listProcedureOptions(): Promise<ProcedureOption[]> {
       payerPrices: payerPrices.get(row.id) ?? {},
       name: row.name,
       defaultPrice: row.defaultPrice === null ? null : Number(row.defaultPrice),
-      defaultVatType: normalizeVatType(row.defaultVatType),
+      // The clinic's rule, whatever the stored value says.
+      defaultVatType: procedureVatType(row.name),
       priceBasis: normalizePriceBasis(row.priceBasis),
     }));
 }
@@ -72,7 +73,7 @@ export async function loadProcedureInfoMap(): Promise<Map<string, ProcedureInfo>
       row.name.trim().toLowerCase(),
       {
         id: row.id,
-        vatType: normalizeVatType(row.defaultVatType),
+        vatType: procedureVatType(row.name),
         priceBasis: normalizePriceBasis(row.priceBasis),
         active: row.active,
       },
@@ -123,4 +124,11 @@ export async function findProcedureByName(
     .where(ilike(procedures.name, name))
     .limit(1);
   return existing;
+}
+
+/** One procedure on the price list by its id. */
+export async function getProcedureById(id: string): Promise<ProcedureRow | undefined> {
+  if (!id) return undefined;
+  const [row] = await db.select().from(procedures).where(eq(procedures.id, id)).limit(1);
+  return row;
 }

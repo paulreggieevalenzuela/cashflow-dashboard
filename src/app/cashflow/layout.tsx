@@ -61,7 +61,7 @@ export default async function CashflowLayout({ children }: { children: ReactNode
       {/* `relative` gives the mobile nav panel (rendered by CashflowNav,
           `absolute inset-x-0 top-full` below `md`) something to anchor to,
           so it overlays the page instead of pushing content down. */}
-      <header className="relative border-b border-zinc-200 bg-white/80 backdrop-blur-sm print:hidden dark:border-zinc-800 dark:bg-zinc-950/80">
+      <header className="relative z-30 border-b border-zinc-200 bg-white/80 backdrop-blur-sm print:hidden dark:border-zinc-800 dark:bg-zinc-950/80">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3 sm:px-6">
           {/* White chip behind the logo regardless of light/dark mode — the
               logo art has a black outline that would disappear against the

@@ -51,9 +51,14 @@ export default async function CommissionsPage() {
           in a tier, and every procedure earns the tier&apos;s rate. A new
           procedure only needs to be added to a tier once. Visits paid through
           an HMO (Maxicare, Medicard, Intellicare, Avega, Valucare, Asiancare,
-          Elite Dental Network, or one added under Payment methods) use the HMO columns, and an HMO visit for a
-          procedure with no HMO rate earns no commission. A rate applies to
-          transactions saved after it is set. When a patient is transferred
+          Elite Dental Network, or one added under Payment methods) use the HMO
+          rate; a procedure with no HMO rate earns its regular rate. Commission
+          is (collected amount − VAT) × rate: the price after discount (the
+          card&apos;s merchant fee is not taken off), with the 12% VAT taken out
+          for every procedure except the Non-VAT ones (Consultation, Oral
+          Prophylaxis, Temporary and Permanent Filling, Simple Tooth
+          Extraction), which use the full amount. A rate change is applied to every saved visit at once,
+          checked ones included, and written to the audit trail. When a patient is transferred
           to a second dentist on a visit, the commission is worked out at the
           main dentist&apos;s rate and split 50% / 50% between the two.
         </p>

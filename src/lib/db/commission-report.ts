@@ -10,6 +10,8 @@ import {
 } from "@/lib/cashflow/commission-report";
 import { round2 } from "@/lib/cashflow/pricing";
 import { splitCommission, TRANSFER_SHARE_PERCENT } from "@/lib/cashflow/commission-split";
+import { commissionForLine } from "@/lib/cashflow/commission-calc";
+import { loadCommissionRateMaps } from "@/lib/db/commission-recalc";
 
 /**
  * Every procedure line with a dentist between two visit dates (inclusive),
@@ -26,8 +28,14 @@ export async function getCommissionReport(input: {
   sort: CommissionSortKey;
   dir: CommissionSortDir;
 }): Promise<CommissionReport> {
+  const mapsPromise = loadCommissionRateMaps();
   const result = await db
     .select({
+      procedureId: transactions.procedureId,
+      amountPaid: transactions.amountPaid,
+      vatType: transactions.vatType,
+      discountReason: transactions.discountReason,
+      withholdingTax: transactions.withholdingTax,
       date: transactions.date,
       visitId: transactions.visitId,
       patientName: transactions.patientName,
@@ -70,10 +78,25 @@ export async function getCommissionReport(input: {
   // half and the transferred dentist's half. The net collection is divided
   // the same way, so the report still adds up to what was collected and the
   // Rate column still shows the main dentist's rate on both.
+  const maps = await mapsPromise;
   const rows: CommissionRow[] = [];
   for (const row of result) {
     const net = round2(Number(row.netCollection));
+    const { rateLabel } = commissionForLine(
+      {
+        dentistUserId: row.dentistUserId,
+        procedureId: row.procedureId,
+        procedure: row.procedure,
+        paymentType: row.paymentType,
+        amountPaid: Number(row.amountPaid),
+        vatType: row.vatType,
+        discountReason: row.discountReason,
+        withholdingTax: Number(row.withholdingTax),
+      },
+      maps,
+    );
     const common = {
+      rateLabel,
       date: row.date,
       visitId: row.visitId,
       patientName: row.patientName,

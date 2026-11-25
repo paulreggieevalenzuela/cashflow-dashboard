@@ -221,3 +221,81 @@ export async function clearIndividualRatesForTieredDentists(): Promise<number> {
     .returning({ id: dentistCommissionRates.id });
   return removed.length;
 }
+
+/** One tier rate, with the procedure's name (for the audit trail). */
+export async function findTierRate(where: {
+  id?: string;
+  tier?: number;
+  procedureId?: string;
+}): Promise<TierRate | undefined> {
+  const condition = where.id
+    ? eq(commissionTierRates.id, where.id)
+    : and(
+        eq(commissionTierRates.tier, where.tier ?? 0),
+        eq(commissionTierRates.procedureId, where.procedureId ?? ""),
+      );
+  const [row] = await db
+    .select({
+      id: commissionTierRates.id,
+      tier: commissionTierRates.tier,
+      procedureId: commissionTierRates.procedureId,
+      procedureName: procedures.name,
+      ratePercent: commissionTierRates.ratePercent,
+      hmoRatePercent: commissionTierRates.hmoRatePercent,
+      pesoValue: commissionTierRates.pesoValue,
+      hmoPesoValue: commissionTierRates.hmoPesoValue,
+    })
+    .from(commissionTierRates)
+    .innerJoin(procedures, eq(procedures.id, commissionTierRates.procedureId))
+    .where(condition)
+    .limit(1);
+  return row
+    ? {
+        ...row,
+        ratePercent: Number(row.ratePercent),
+        hmoRatePercent: toNumberOrNull(row.hmoRatePercent),
+        pesoValue: toNumberOrNull(row.pesoValue),
+        hmoPesoValue: toNumberOrNull(row.hmoPesoValue),
+      }
+    : undefined;
+}
+
+/**
+ * The individual rates `clearIndividualRatesForTieredDentists` would remove,
+ * with names, so the audit trail can list exactly what went.
+ */
+export async function listIndividualRatesOfTieredDentists(): Promise<
+  Array<{
+    dentistUserId: string;
+    dentistName: string;
+    procedureName: string;
+    ratePercent: number;
+    hmoRatePercent: number | null;
+    hmoPesoValue: number | null;
+  }>
+> {
+  const rows = await db
+    .select({
+      dentistUserId: dentistCommissionRates.dentistUserId,
+      dentistName: users.name,
+      procedureName: procedures.name,
+      ratePercent: dentistCommissionRates.ratePercent,
+      hmoRatePercent: dentistCommissionRates.hmoRatePercent,
+      hmoPesoValue: dentistCommissionRates.hmoPesoValue,
+    })
+    .from(dentistCommissionRates)
+    .innerJoin(users, eq(users.id, dentistCommissionRates.dentistUserId))
+    .innerJoin(procedures, eq(procedures.id, dentistCommissionRates.procedureId))
+    .innerJoin(
+      dentistCommissionTiers,
+      eq(dentistCommissionTiers.dentistUserId, dentistCommissionRates.dentistUserId),
+    )
+    .where(eq(users.role, "dentist"))
+    .orderBy(users.name, procedures.name);
+  return rows.map((row) => ({
+    ...row,
+    ratePercent: Number(row.ratePercent),
+    hmoRatePercent: toNumberOrNull(row.hmoRatePercent),
+    hmoPesoValue: toNumberOrNull(row.hmoPesoValue),
+  }));
+}

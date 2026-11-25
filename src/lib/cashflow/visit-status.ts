@@ -80,12 +80,12 @@ export function isLocked(status: VisitStatus): boolean {
 }
 
 /**
- * Who can still edit a Cleared visit: admins and staff (every change is
- * written to the audit trail). Dentists cannot. Removing a visit or a
- * payment, and reopening a visit's status, stay admin-only.
+ * Who can edit a Cleared visit by ROLE alone: admins and owners (the
+ * superuser too). Anyone else needs the "visit.edit_cleared" privilege
+ * ticked for them; the server checks the privilege, not this function.
  */
 export function canEditClearedVisit(role: string | null | undefined): boolean {
-  return role === "admin" || role === "staff";
+  return role === "admin" || role === "owner" || role === "superuser";
 }
 
 export function balanceDueOf(totalDue: number, collected: number): number {

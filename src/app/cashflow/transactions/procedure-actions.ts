@@ -20,7 +20,8 @@ type Result =
 
 const InputSchema = z.object({
   name: z.string().trim().min(1, "Enter the procedure name.").max(200),
-  vatType: z.enum(["vat", "non_vat"]),
+  // Ignored: the VAT type follows the name (procedureVatType).
+  vatType: z.enum(["vat", "non_vat"]).optional(),
   price: z
     .number()
     .nonnegative("Price can't be negative.")

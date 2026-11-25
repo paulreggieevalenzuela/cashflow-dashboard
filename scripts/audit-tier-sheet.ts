@@ -188,7 +188,7 @@ async function main() {
       const tier = tierOf.get(dentist.id) as 1 | 2 | 3;
       const rate = row.tiers[tier];
       for (const proc of matched) {
-        const base = commissionBase(SAMPLE_NET, proc.name);
+        const base = commissionBase(SAMPLE_NET, { procedureName: proc.name });
         const want = !rate ? 0 : rate.kind === "peso" ? rate.value : Math.round(base * rate.value) / 100;
         const got = appPays(dentist.id, proc.id, proc.name);
         out.push({

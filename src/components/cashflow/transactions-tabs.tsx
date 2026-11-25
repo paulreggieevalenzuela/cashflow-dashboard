@@ -39,12 +39,6 @@ const TABS = [
     href: "/cashflow/transactions?tab=payment-methods",
     permission: "payment_method.manage",
   },
-  {
-    key: "audit",
-    label: "Audit",
-    href: "/cashflow/transactions?tab=audit",
-    adminOnly: true,
-  },
 ] as const;
 
 export type TransactionsTab = (typeof TABS)[number]["key"];
@@ -56,10 +50,9 @@ export async function TransactionsTabs({
   active: TransactionsTab;
 }) {
   const session = await auth();
-  const isAdmin = can(session, "audit.view");
   const visible = TABS.filter((tab) => {
     if ("permission" in tab) return can(session, tab.permission);
-    return !("adminOnly" in tab && tab.adminOnly) || isAdmin;
+    return true;
   });
   return (
     <nav

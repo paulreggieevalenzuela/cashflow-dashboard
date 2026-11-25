@@ -33,7 +33,14 @@ async function main() {
 
   // ───────────────────────── pure rules ─────────────────────────
   const { ALL_PERMISSIONS, roleDefaults, effectivePermissions, overridesFor } = perms;
-  check("27 privileges in the catalog", ALL_PERMISSIONS.length === 27, ALL_PERMISSIONS.length);
+  check("28 privileges in the catalog", ALL_PERMISSIONS.length === 28, ALL_PERMISSIONS.length);
+  {
+    const perms = await import("../src/lib/auth/permissions");
+    check("Unlock checked transactions: owners and admins by default", roleDefaults("owner").includes("transaction.unlock" as never) && roleDefaults("admin").includes("transaction.unlock" as never));
+    check("Unlock checked transactions: not staff or dentist by default", !roleDefaults("staff").includes("transaction.unlock" as never) && !roleDefaults("dentist").includes("transaction.unlock" as never));
+    check("only owner / admin / superuser may give Edit Cleared and Unlock", perms.MANAGER_GRANTED_PERMISSIONS.includes("visit.edit_cleared") && perms.MANAGER_GRANTED_PERMISSIONS.includes("transaction.unlock") && perms.canGrantManagerPermissions("owner") && perms.canGrantManagerPermissions("admin") && perms.canGrantManagerPermissions("superuser") && !perms.canGrantManagerPermissions("staff") && !perms.canGrantManagerPermissions("dentist"));
+    check("Unlock is a sensitive privilege (highlighted in the access review)", perms.SENSITIVE_PERMISSIONS.includes("transaction.unlock"));
+  }
   check("no duplicate keys", new Set(ALL_PERMISSIONS).size === ALL_PERMISSIONS.length);
   check("superuser holds every privilege", roleDefaults("superuser").length === ALL_PERMISSIONS.length);
   // The owner has everything an admin has, plus the Headquarters check.
@@ -42,8 +49,9 @@ async function main() {
     roleDefaults("owner").includes("transaction.verify_hq") && !roleDefaults("admin").includes("transaction.verify_hq"));
   check("admin can delete visits, staff cannot",
     roleDefaults("admin").includes("visit.delete") && !roleDefaults("staff").includes("visit.delete"));
-  check("staff can edit a Cleared visit, dentist cannot",
-    roleDefaults("staff").includes("visit.edit_cleared") && !roleDefaults("dentist").includes("visit.edit_cleared"));
+  check("editing a Cleared visit is admin and higher by default (not staff, not dentist)",
+    roleDefaults("admin").includes("visit.edit_cleared") && roleDefaults("owner").includes("visit.edit_cleared") &&
+    !roleDefaults("staff").includes("visit.edit_cleared") && !roleDefaults("dentist").includes("visit.edit_cleared"));
   check("dentist/staff cannot manage users",
     !roleDefaults("dentist").includes("user.manage") && !roleDefaults("staff").includes("user.manage"));
   check("everyone can add visits, payments, expenses, files",

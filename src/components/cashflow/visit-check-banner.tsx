@@ -33,6 +33,7 @@ export function VisitCheckBanner({
   hqReady,
   currentUserId,
   isSuperuser,
+  canUnlock = false,
 }: {
   invoiceId: string;
   status: string;
@@ -46,6 +47,8 @@ export function VisitCheckBanner({
   hqReady: boolean;
   currentUserId: string | null;
   isSuperuser: boolean;
+  /** May unlock it (the "Unlock checked transactions" privilege). */
+  canUnlock?: boolean;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState<"check" | "hq" | "uncheck" | null>(null);
@@ -65,7 +68,7 @@ export function VisitCheckBanner({
   async function run(kind: "check" | "hq" | "uncheck") {
     const message =
       kind === "check"
-        ? "Check this visit as Branch manager? It will be locked: only the superuser will be able to edit, remove or unlock it. Headquarters checks it next."
+        ? "Check this visit as Branch manager? It will be locked: nobody can edit or remove it until it is unlocked. Headquarters checks it next."
         : kind === "hq"
           ? "Approve this visit as Headquarters? This is the last check."
           : "Unlock this visit so it can be edited again? This removes both checks.";
@@ -119,9 +122,9 @@ export function VisitCheckBanner({
               )}
             </p>
             <p className="text-xs opacity-80">
-              {isSuperuser
-                ? "You can still edit it, or unlock it."
-                : "It can't be edited or removed; ask the superuser."}
+              {canUnlock
+                ? "To change it, unlock it first (this removes both checks)."
+                : "It can't be edited or removed until an owner or admin unlocks it."}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -144,7 +147,7 @@ export function VisitCheckBanner({
                 {busy === "hq" ? "Approving..." : "Approve as Headquarters"}
               </button>
             )}
-            {isSuperuser && (
+            {canUnlock && (
               <button
                 type="button"
                 onClick={() => void run("uncheck")}

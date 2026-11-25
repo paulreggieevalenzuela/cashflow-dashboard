@@ -38,6 +38,7 @@ export function TransactionsList({
   hqReady,
   currentUserId,
   isSuperuser,
+  canUnlock = false,
 }: {
   transactions: CashflowTransaction[];
   canDelete?: boolean;
@@ -62,6 +63,8 @@ export function TransactionsList({
   hqReady: boolean;
   currentUserId: string | null;
   isSuperuser: boolean;
+  /** May unlock a checked visit. */
+  canUnlock?: boolean;
 }) {
   const filtered = hasActiveTransactionFilters(query);
 
@@ -90,7 +93,7 @@ export function TransactionsList({
         branches={branches}
         defaultBranchId={defaultBranchId}
       />
-      {(canVerify || canVerifyHq || isSuperuser) && (
+      {(canVerify || canVerifyHq || canUnlock) && (
         <div className="flex flex-wrap items-center gap-2 text-xs">
           <span className="text-zinc-500 dark:text-zinc-400">Daily check:</span>
           {(
@@ -139,6 +142,7 @@ export function TransactionsList({
         hqReady={hqReady}
         currentUserId={currentUserId}
         isSuperuser={isSuperuser}
+        canUnlock={canUnlock}
         canDelete={canDelete}
         canEditCleared={canEditCleared}
         invoiceSummaries={invoiceSummaries}

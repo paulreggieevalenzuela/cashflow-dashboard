@@ -1,4 +1,4 @@
-import { and, desc, eq, like, ne } from "drizzle-orm";
+import { and, desc, eq, ilike, like, ne, or, sql, type SQL } from "drizzle-orm";
 import type { AuditChange } from "@/lib/cashflow/audit-diff";
 import { db } from "@/lib/db/client";
 import { auditLog } from "@/lib/db/schema";
@@ -24,7 +24,8 @@ export async function logAudit(entry: {
     | "payment"
     | "expense"
     | "user"
-    | "hmo_billing";
+    | "hmo_billing"
+    | "commission";
   entityId?: string;
   invoiceId?: string | null;
   patientId?: string | null;
@@ -103,8 +104,17 @@ export async function listAuditForPatient(
   return rows.map(toEntry);
 }
 
+export const AUDIT_GROUPS = [
+  "visit",
+  "payment",
+  "status",
+  "patient",
+  "commission",
+] as const;
+export type AuditGroup = (typeof AUDIT_GROUPS)[number];
+
 export async function listRecentAudit(input: {
-  group?: "visit" | "payment" | "status" | "patient";
+  group?: AuditGroup;
   limit?: number;
 }): Promise<AuditEntry[]> {
   const rows = await db
@@ -114,6 +124,57 @@ export async function listRecentAudit(input: {
     .orderBy(desc(auditLog.createdAt))
     .limit(input.limit ?? 200);
   return rows.map(toEntry);
+}
+
+/** `%`, `_` and `\` typed in the search box are matched as themselves. */
+function likePattern(text: string): string {
+  return `%${text.replace(/[\\%_]/g, (char) => `\\${char}`)}%`;
+}
+
+/**
+ * One page of the audit trail, newest first, for the Audit trail page:
+ * optionally one kind of change (`group`) and a search. Every word typed
+ * must appear somewhere in the entry: who, the summary, the kind of change
+ * or the changed fields (so "Ortho Adj" finds the commission changes to it).
+ */
+export async function listAuditPage(input: {
+  group?: AuditGroup;
+  q?: string;
+  page: number;
+  pageSize: number;
+}): Promise<{ entries: AuditEntry[]; total: number }> {
+  const words = (input.q ?? "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 8);
+  const conditions: SQL[] = [];
+  if (input.group) conditions.push(like(auditLog.action, `${input.group}.%`));
+  for (const word of words) {
+    const pattern = likePattern(word);
+    conditions.push(
+      or(
+        ilike(auditLog.summary, pattern),
+        ilike(auditLog.userName, pattern),
+        ilike(auditLog.action, pattern),
+        sql`${auditLog.details}::text ILIKE ${pattern}`,
+      ) as SQL,
+    );
+  }
+  const where = conditions.length > 0 ? and(...conditions) : undefined;
+  const page = Math.max(1, Math.floor(input.page));
+  const [countRow] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(auditLog)
+    .where(where);
+  const rows = await db
+    .select()
+    .from(auditLog)
+    .where(where)
+    .orderBy(desc(auditLog.createdAt), desc(auditLog.id))
+    .limit(input.pageSize)
+    .offset((page - 1) * input.pageSize);
+  return { entries: rows.map(toEntry), total: countRow?.n ?? 0 };
 }
 
 /** When (and by whom) each person's access was last changed, by user id. */

@@ -33,7 +33,14 @@ export type AuditAction =
   | "user.password_reset"
   | "user.reset_dismissed"
   | "auth.password_changed"
-  | "auth.reset_requested";
+  | "auth.reset_requested"
+  | "commission.rate_set"
+  | "commission.rate_removed"
+  | "commission.tier_assigned"
+  | "commission.tier_rate_set"
+  | "commission.tier_rate_removed"
+  | "commission.rates_cleared"
+  | "commission.recalculated";
 
 export type AuditEntry = {
   id: string;
@@ -79,4 +86,11 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   "user.reset_dismissed": "Reset request dismissed",
   "auth.password_changed": "Password changed",
   "auth.reset_requested": "Password reset requested",
+  "commission.rate_set": "Own commission rate set",
+  "commission.rate_removed": "Own commission rate removed",
+  "commission.tier_assigned": "Commission tier changed",
+  "commission.tier_rate_set": "Tier rate set",
+  "commission.tier_rate_removed": "Tier rate removed",
+  "commission.rates_cleared": "Own commission rates cleared",
+  "commission.recalculated": "Commissions recalculated",
 };

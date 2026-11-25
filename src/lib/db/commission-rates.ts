@@ -121,3 +121,41 @@ export async function deleteCommissionRate(id: string): Promise<void> {
     .delete(dentistCommissionRates)
     .where(eq(dentistCommissionRates.id, id));
 }
+
+/** One person's own rate for a procedure, with names (for the audit trail). */
+export async function findCommissionRate(where: {
+  id?: string;
+  dentistUserId?: string;
+  procedureId?: string;
+}): Promise<CommissionRate | undefined> {
+  const condition = where.id
+    ? eq(dentistCommissionRates.id, where.id)
+    : and(
+        eq(dentistCommissionRates.dentistUserId, where.dentistUserId ?? ""),
+        eq(dentistCommissionRates.procedureId, where.procedureId ?? ""),
+      );
+  const [row] = await db
+    .select({
+      id: dentistCommissionRates.id,
+      dentistUserId: dentistCommissionRates.dentistUserId,
+      dentistName: users.name,
+      procedureId: dentistCommissionRates.procedureId,
+      procedureName: procedures.name,
+      ratePercent: dentistCommissionRates.ratePercent,
+      hmoRatePercent: dentistCommissionRates.hmoRatePercent,
+      hmoPesoValue: dentistCommissionRates.hmoPesoValue,
+    })
+    .from(dentistCommissionRates)
+    .innerJoin(users, eq(users.id, dentistCommissionRates.dentistUserId))
+    .innerJoin(procedures, eq(procedures.id, dentistCommissionRates.procedureId))
+    .where(condition)
+    .limit(1);
+  return row
+    ? {
+        ...row,
+        ratePercent: Number(row.ratePercent),
+        hmoRatePercent: toNumberOrNull(row.hmoRatePercent),
+        hmoPesoValue: toNumberOrNull(row.hmoPesoValue),
+      }
+    : undefined;
+}

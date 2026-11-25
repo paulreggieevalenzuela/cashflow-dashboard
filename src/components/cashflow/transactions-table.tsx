@@ -263,7 +263,7 @@ function RowActionsMenu({
             title={
               editLocked
                 ? (lockedNote ??
-                  "Cleared visits are locked. An admin or staff member can correct it.")
+                  "Cleared visits are locked. An admin or owner (or someone given the privilege) can correct it.")
                 : undefined
             }
             onClick={() => {
@@ -334,6 +334,7 @@ export function TransactionsTable({
   hqReady = false,
   currentUserId = null,
   isSuperuser = false,
+  canUnlock = false,
 }: {
   transactions: CashflowTransaction[];
   canDelete?: boolean;
@@ -358,8 +359,10 @@ export function TransactionsTable({
   hqReady?: boolean;
   /** The signed-in person (Headquarters can't be the one who gave the Branch check). */
   currentUserId?: string | null;
-  /** The superuser can still edit a checked visit, and unlock it. */
+  /** The superuser is exempt from the HQ same-person rule. */
   isSuperuser?: boolean;
+  /** May unlock a checked visit (the "Unlock checked transactions" privilege). */
+  canUnlock?: boolean;
 }) {
   const router = useRouter();
   const [removingId, setRemovingId] = useState<string | null>(null);
@@ -376,7 +379,7 @@ export function TransactionsTable({
   const showCheckColumn =
     canVerify ||
     canVerifyHq ||
-    isSuperuser ||
+    canUnlock ||
     transactions.some((row) => isVisitLocked(checkOf(row.invoiceId)));
   const eligible = (row: CashflowTransaction) =>
     canVerify &&
@@ -451,7 +454,7 @@ export function TransactionsTable({
     if (ids.length === 0) return;
     if (
       !window.confirm(
-        `Check ${ids.length} ${ids.length === 1 ? "visit" : "visits"}? Each will be locked: only the superuser can edit, remove or unlock it.`,
+        `Check ${ids.length} ${ids.length === 1 ? "visit" : "visits"}? Each will be locked: nobody can edit or remove it until someone with the Unlock privilege unlocks it.`,
       )
     ) {
       return;
@@ -469,7 +472,7 @@ export function TransactionsTable({
   }
 
   async function handleUnlock(invoiceId: string) {
-    if (!window.confirm("Unlock this visit so it can be edited again?")) return;
+    if (!window.confirm("Unlock this visit so it can be edited again? This removes the Branch manager and Headquarters checks.")) return;
     setUnlockingId(invoiceId);
     setCheckNotice(null);
     try {
@@ -634,8 +637,8 @@ export function TransactionsTable({
       <div className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-200">
         <span>
           {selected.size} {selected.size === 1 ? "visit" : "visits"} selected for the Branch
-          manager check. Checking locks them: only the superuser can edit, remove or unlock
-          them. Headquarters checks them next.
+          manager check. Checking locks them: they have to be unlocked before anyone can edit
+          or remove them. Headquarters checks them next.
         </span>
         <span className="flex items-center gap-2">
           <button
@@ -763,7 +766,8 @@ export function TransactionsTable({
               : undefined;
             const check = checkOf(transaction.invoiceId);
             const isChecked = isVisitLocked(check);
-            const checkedLock = isChecked && !isSuperuser;
+            // Nobody edits a checked visit directly: unlock it first.
+            const checkedLock = isChecked;
             const canTick = eligible(transaction);
             const why =
               !isChecked && canVerify
@@ -785,7 +789,7 @@ export function TransactionsTable({
                   <>
                   <td className="w-20 px-3 py-3 text-center">
                     {isChecked ? (
-                      isSuperuser ? (
+                      canUnlock ? (
                         <button
                           type="button"
                           onClick={() =>
@@ -804,7 +808,7 @@ export function TransactionsTable({
                         </button>
                       ) : (
                         <span
-                          title={`Checked by the Branch manager: ${check.checkedBy || "someone"}${check.checkedAt ? ` on ${formatCheckedAt(check.checkedAt)}` : ""}. Locked: only the superuser can change it.`}
+                          title={`Checked by the Branch manager: ${check.checkedBy || "someone"}${check.checkedAt ? ` on ${formatCheckedAt(check.checkedAt)}` : ""}. Locked: it has to be unlocked before it can be changed.`}
                           className="inline-flex h-5 w-5 items-center justify-center text-emerald-600 dark:text-emerald-400"
                         >
                           <LockIcon />
@@ -961,7 +965,7 @@ export function TransactionsTable({
                       }
                       lockedNote={
                         checkedLock
-                          ? "Checked and locked. Only the superuser can change it."
+                          ? "Checked and locked. Unlock it first (owners and admins, or anyone given Unlock checked transactions)."
                           : undefined
                       }
                     />

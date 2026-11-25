@@ -12,6 +12,8 @@ import {
   managerRoleOf,
   effectivePermissions,
   worksInEveryClinic,
+  canGrantManagerPermissions,
+  MANAGER_GRANTED_PERMISSIONS,
   type Permission,
 } from "@/lib/auth/permissions";
 import { canActOnRequestFor, canResetPassword } from "@/lib/auth/reset-rules";
@@ -371,6 +373,20 @@ export async function saveUserAccessAction(
   const notHeld = chosen.filter(
     (key) => !before.includes(key) && me.role !== "superuser" && !mine.has(key),
   );
+  const managerOnly = chosen.filter(
+    (key) =>
+      !before.includes(key) &&
+      MANAGER_GRANTED_PERMISSIONS.includes(key) &&
+      !canGrantManagerPermissions(me.role),
+  );
+  if (managerOnly.length > 0) {
+    return {
+      ok: false,
+      message: `Only an owner, an admin or the superuser can give: ${managerOnly
+        .map((key) => permissionLabel(key))
+        .join("; ")}.`,
+    };
+  }
   if (notHeld.length > 0) {
     return {
       ok: false,

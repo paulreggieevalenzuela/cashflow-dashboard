@@ -130,7 +130,8 @@ async function main() {
     check("locked for anyone but the superuser: edit", /locked/i.test((await lib.visitLockMessage(I1, { isSuperuser: false }, "edit")) ?? ""));
     check("locked: remove, payment, status, file all report it",
       (await Promise.all(["remove", "record a payment", "change its status", "attach a file"].map((a) => lib.visitLockMessage(I1, { isSuperuser: false }, a)))).every((m) => /locked/i.test(m ?? "")));
-    check("superuser is never blocked", (await lib.visitLockMessage(I1, { isSuperuser: true }, "edit")) === null);
+    check("the superuser is blocked too: unlock first, then edit", /locked/i.test((await lib.visitLockMessage(I1, { isSuperuser: true }, "edit")) ?? ""));
+    check("the lock message says to unlock first", /unlock it first/i.test((await lib.visitLockMessage(I1, { isSuperuser: false }, "edit")) ?? ""));
     check("a single line of a locked visit is locked too", /locked/i.test((await lib.lineLockMessage("T-CK-1b", { isSuperuser: false }, "remove")) ?? ""));
     check("a line of an unchecked visit is not", (await lib.lineLockMessage("T-CK-2a", { isSuperuser: false }, "remove")) === null);
     check("an unchecked visit is not locked", (await lib.visitLockMessage(I2, { isSuperuser: false }, "edit")) === null);
@@ -181,11 +182,13 @@ async function main() {
     check("audit trail has one 'checked' entry with the person's name", auditRows.length === 1 && auditRows[0].user_name === "Sam Admin" && /checked and locked/.test(auditRows[0].summary), auditRows);
 
     // unlock
-    const bad = await lib.uncheckVisit(I1, { userId: ADMIN, name: "Sam Admin", isSuperuser: false });
-    check("an admin cannot unlock", !bad.ok && /superuser/.test(bad.ok ? "" : bad.message), bad);
+    const bad = await lib.uncheckVisit(I1, { userId: ADMIN, name: "Sam Staff", canUnlock: false, allowedBranchIds: [MAR] });
+    check("someone without the Unlock privilege cannot unlock", !bad.ok && /permission/.test(bad.ok ? "" : bad.message), bad);
+    const otherClinic = await lib.uncheckVisit(I1, { userId: ADMIN, name: "Sam Admin", canUnlock: true, allowedBranchIds: [ANT] });
+    check("someone with the privilege cannot unlock another clinic's visit", !otherClinic.ok && /clinic/.test(otherClinic.ok ? "" : otherClinic.message), otherClinic);
     check("still locked after the refused unlock", /locked/i.test((await lib.visitLockMessage(I1, { isSuperuser: false }, "edit")) ?? ""));
-    const good = await lib.uncheckVisit(I1, { userId: "0cd13091-5ab6-4dfb-b82f-4dd0ac5bf4b8", name: "Super User", isSuperuser: true });
-    check("the superuser can unlock", good.ok, good);
+    const good = await lib.uncheckVisit(I1, { userId: ADMIN, name: "Sam Admin", canUnlock: true, allowedBranchIds: [MAR] });
+    check("an admin with the Unlock privilege can unlock their clinic's visit", good.ok, good);
     check("unlocked: editable again", (await lib.visitLockMessage(I1, { isSuperuser: false }, "edit")) === null);
     const unlocked = (await lib.getVisitChecks([I1]))[I1];
     check("unlocking removes both the Branch and the Headquarters check", unlocked?.checked === 0 && unlocked?.hqChecked === 0 && rules.approvalStageOf(unlocked) === "none", unlocked);
@@ -193,7 +196,7 @@ async function main() {
     check("the unlock entry says the Headquarters approval went too", /Headquarters approval removed/.test((unlockAudit.rows ?? unlockAudit)[0]?.summary ?? ""));
     const unlockedAudit = await db.execute(sql`select count(*)::int as n from audit_log where invoice_id = ${I1}::uuid and action = 'visit.unchecked'`) as unknown as { rows?: Array<{ n: number }> } & Array<{ n: number }>;
     check("audit trail has the unlock", (unlockedAudit.rows ?? unlockedAudit)[0].n === 1);
-    const twice = await lib.uncheckVisit(I1, { userId: null, name: "Super User", isSuperuser: true });
+    const twice = await lib.uncheckVisit(I1, { userId: null, name: "Super User", canUnlock: true, allowedBranchIds: null });
     check("unlocking a visit that isn't checked says so", !twice.ok && /isn't checked/.test(twice.ok ? "" : twice.message), twice);
 
     // deleting a line removes its check
@@ -224,8 +227,8 @@ async function main() {
       check("HQ table missing: the Branch manager check still works", okBranch.ok);
       const listHq = await listTransactionsPage({ ...base, checked: "hq" });
       check("HQ table missing: the list still loads (HQ filters ignored)", listHq.rows.length >= 1);
-      const un = await lib.uncheckVisit(I1, { userId: null, name: "Super User", isSuperuser: true });
-      check("HQ table missing: the superuser can still unlock", un.ok, un);
+      const un = await lib.uncheckVisit(I1, { userId: null, name: "Super User", canUnlock: true, allowedBranchIds: null });
+      check("HQ table missing: unlocking still works", un.ok, un);
     } finally {
       await db.execute(sql`alter table transaction_hq_checks_off rename to transaction_hq_checks`);
     }

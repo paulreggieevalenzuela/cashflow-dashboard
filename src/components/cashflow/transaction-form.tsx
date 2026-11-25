@@ -47,6 +47,7 @@ import {
   round2,
   summarizeOr,
   normalizeVatType,
+  procedureVatType,
   type VatType,
 } from "@/lib/cashflow/pricing";
 import type { CashflowTransaction } from "@/lib/cashflow/schema";
@@ -296,8 +297,10 @@ function vatTypeFor(line: LineState, options: ProcedureOption[]): VatType {
   ) {
     return line.savedVatType;
   }
-  const known = options.find((option) => option.name.toLowerCase() === name);
-  return known ? known.defaultVatType : line.savedVatType;
+  // The clinic's rule (same as the server): only the basic procedures are
+  // Non-VAT. `options` is kept so the call sites stay the same.
+  void options;
+  return procedureVatType(line.procedure);
 }
 
 /** The discount this line uses: the chosen type, or the old reason text. */

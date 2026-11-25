@@ -146,7 +146,11 @@ const GROUPS: Group[] = [
     items: [
       {
         q: "How do I change a commission rate?",
-        a: "Admins open the Commissions tab. The big table has every procedure down the side and Tier 3, Tier 2 and Tier 1 across: click a percentage, type the new one and press Save (Enter also saves, Esc cancels). Click a dash to set a rate that is missing. To give one dentist a different rate for a single procedure, choose them under One person's own rates and set their own rate there; remove it to go back to the tier rate. A new rate applies to visits saved from then on.",
+        a: "Admins open the Commissions tab. The big table has every procedure down the side and Tier 3, Tier 2 and Tier 1 across: click a percentage, type the new one and press Save (Enter also saves, Esc cancels). Click a dash to set a rate that is missing. To give one dentist a different rate for a single procedure, choose them under One person's own rates and set their own rate there; remove it to go back to the tier rate. A change is applied straight away to every saved visit of that procedure or dentist, checked and approved visits included, and a green note says how many lines changed. Every change is written to the audit trail with the old and new rate. After a fix made outside this page, press Recalculate all commissions.",
+      },
+      {
+        q: "How is a commission worked out?",
+        a: "On the procedure's price after any discount, less withholding tax if there is any. The card terminal's merchant fee is not taken off: a \u20b11,000 Ortho Adj paid by GHL card earns on \u20b11,000. In short: (collected amount \u2212 VAT) \u00d7 rate. Only five kinds of procedure are Non-VAT and use the full amount: Consultation, Oral Prophylaxis, Temporary Filling, Permanent Filling and Simple Tooth Extraction. Every other procedure has its 12% VAT taken out first (the amount divided by 1.12). A PWD or Senior Citizen line is already charged without VAT, so it uses the amount charged. The rate is the dentist's own rate for the procedure if they have one, otherwise their tier's rate. On an HMO visit the HMO rate is used when one is set; a procedure without an HMO rate earns its regular rate. Every procedure on a visit is worked out on its own, so a second or third procedure earns like the first. The Commission report's Rate column shows the rate used, or No rate set when the dentist has none for that procedure.",
       },
       {
         q: "A patient was transferred to another dentist. How is the commission shared?",
@@ -163,7 +167,7 @@ const GROUPS: Group[] = [
       },
       {
         q: "How does the daily check work?",
-        a: "Every visit is checked twice, in order. First the Branch manager: at the end of the day, a person with the privilege \"Check transactions: Branch manager\" (owners and admins by default) opens Transactions, ticks the Branch box on each Cleared visit that is done and correct, and presses Check and lock. The visit then shows a lock and nobody except the superuser can edit it, remove it, change its payments or files, or move its status. Then Headquarters: a person with \"Check transactions: Headquarters\" (owners by default) ticks the HQ box on the visits waiting for them and presses Approve. Headquarters cannot tick a visit the Branch manager has not checked, and cannot be the same person who gave the Branch check. Both privileges are tick boxes under Users, Manage, Access & Permissions, so you can give them to anyone. Use the To check, Waiting for HQ and Approved by HQ buttons above the list to see what is left. Only the superuser can unlock a visit, which removes both checks. Every check and unlock is in the audit trail.",
+        a: "Every visit is checked twice, in order. First the Branch manager: at the end of the day, a person with the privilege \"Check transactions: Branch manager\" (owners and admins by default) opens Transactions, ticks the Branch box on each Cleared visit that is done and correct, and presses Check and lock. The visit then shows a lock and nobody can edit it, remove it, change its payments or files, or move its status until it is unlocked. Then Headquarters: a person with \"Check transactions: Headquarters\" (owners by default) ticks the HQ box on the visits waiting for them and presses Approve. Headquarters cannot tick a visit the Branch manager has not checked, and cannot be the same person who gave the Branch check. Both privileges are tick boxes under Users, Manage, Access & Permissions, so you can give them to anyone. Use the To check, Waiting for HQ and Approved by HQ buttons above the list to see what is left. To change a checked visit, unlock it first: owners and admins can, and anyone they tick Unlock checked transactions for. Unlocking removes both checks, so the visit has to be checked again afterwards. Every check and unlock is in the audit trail.",
       },
       {
         q: "How do I change what one person can do?",
@@ -193,6 +197,14 @@ const GROUPS: Group[] = [
       {
         q: "I entered the wrong amount or patient.",
         a: "Tell an admin. Admins can edit a transaction, and every change is recorded in the audit trail with who made it and when.",
+      },
+      {
+        q: "Where do I find the audit trail?",
+        a: "Click your name at the top right and choose Audit trail. It shows who created, edited or removed visits, payments, patients and commission rates, and when. Type in the search box (a person, patient, procedure or dentist; several words narrow it down), use the buttons to look at one kind of change (Commissions shows every rate change with the old and new rate), and move through the pages at the bottom. It is for people with the audit privilege, so you won't see it if you don't have it. A visit or patient also has its own trail on its page.",
+      },
+      {
+        q: "Who can edit a visit that is already Cleared?",
+        a: "Admins and owners (and the superuser). Anyone else only if Edit Cleared transactions is ticked for them under Users, Manage, Access & Permissions; only an owner, an admin or the superuser can tick it. Once the Branch manager has checked a visit it is locked: unlock it first (the lock icon in Transactions, or Unlock on the visit page), then edit it. Unlocking is the Unlock checked transactions privilege: owners and admins have it, and only an owner, an admin or the superuser can give it to someone else.",
       },
       {
         q: "A patient was entered twice.",

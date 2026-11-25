@@ -115,6 +115,7 @@ export function CashflowNav({
             email={email}
             isSuperuser={isSuperuser}
             deletedCount={deletedCount}
+            canViewAudit={permissions.includes("audit.view")}
           />
         ) : (
           <SignOutButton />
@@ -199,6 +200,15 @@ export function CashflowNav({
                   className="rounded-md px-3 py-2.5 text-sm font-medium text-zinc-600 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
                 >
                   Profile
+                </Link>
+              )}
+              {displayName && permissions.includes("audit.view") && (
+                <Link
+                  href="/cashflow/audit"
+                  onClick={() => setIsOpen(false)}
+                  className="rounded-md px-3 py-2.5 text-sm font-medium text-zinc-600 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+                >
+                  Audit trail
                 </Link>
               )}
               {displayName && isSuperuser && (

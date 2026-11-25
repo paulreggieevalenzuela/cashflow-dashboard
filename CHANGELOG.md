@@ -4,6 +4,88 @@ All notable changes to the ADT Dental Clinic Cashflow app. The version is in
 `package.json` and `src/lib/cashflow/version.ts` (shown at the foot of the Help
 page). Newest first.
 
+## 0.10.0 — 2026-11-24
+
+Commission fixes from the clinic's review, commission audit trail, and a searchable, paged audit trail.
+
+### Changed
+
+- **A rate change applies to every saved visit at once**, checked and approved
+  visits included (clinic decision). Saving a rate, changing a dentist's tier,
+  removing a rate or "Remove them" recalculates the affected lines and says how
+  many changed. New **Recalculate all commissions** button for changes made
+  outside the page, and to run once after installing this version.
+- **Commission base:** the price after discount, less withholding tax. The card
+  terminal's merchant fee is no longer taken off. Net collection is unchanged.
+- **HMO lines without an HMO rate** earn the procedure's regular tier (or own)
+  rate instead of ₱0. This was why the second procedure (Permanent Filling) of
+  HMO visits showed no commission. An HMO rate, when set, still wins; 0% set on
+  purpose stays 0.
+- **Commission = (collected amount − VAT) × rate.** Only Consultation, Oral
+  Prophylaxis, Temporary Filling, Permanent Filling and Simple Tooth Extraction
+  are Non-VAT and use the full amount (₱250 Permanent Filling at 10% = ₱25.00,
+  was ₱22.32). Every other procedure, Ortho included, has its VAT taken out
+  (÷ 1.12): ₱1,000 Ortho Adj by GHL card at 20% = ₱178.57 (was ₱194.40 after
+  the card fee). Decided by procedure, not by the VAT type saved on a line,
+  because some lines (Ortho Adj, RCM, Lost Bracket) were saved as Non-VAT by
+  mistake. PWD / Senior lines, already charged without VAT, use the amount
+  charged. The old "Ortho is always on the full amount" rule is gone.
+- **VAT rule enforced in the app:** only Consultation, Oral Prophylaxis,
+  Temporary Filling, Permanent Filling and Simple Tooth Extraction are Non-VAT;
+  everything else is VAT 12%. The price list shows it from the name (no longer
+  editable) and new procedure lines are saved that way, so receipts and
+  commission agree. Saved visits keep the VAT they were issued with.
+  `scripts/sql/2026-11-procedure-vat-types.sql` only tidies the stored values.
+- **Previous transactions:** `yarn db:recalc-commissions [--dry-run]` (new) or
+  the Recalculate all button recalculates every saved line with the new rules.
+- **Commission report Rate column** shows the rate actually used ("10% (HMO)",
+  "₱250 (HMO)", "₱70"), or **No rate set**. A flat ₱250 HMO rate no longer
+  shows as "112%".
+- **Edit Cleared transactions** is admin and higher by default (owner, admin,
+  superuser); tick it under Users → Manage → Access & Permissions for anyone
+  else. Staff no longer have it by default.
+- **Unlock checked transactions** is a new tick box next to it: owners and
+  admins by default, anyone else when ticked. It was superuser-only before.
+  Only an owner, an admin or the superuser can tick either of the two for
+  someone (also enforced on the server). Unlocking stays limited to the
+  person's own clinics and removes both checks.
+- **Unlock first, then edit:** nobody edits, removes, pays on, attaches to or
+  moves the status of a checked visit directly any more, the superuser
+  included. Unlock it (lock icon in Transactions, or Unlock on the visit
+  page), then edit; the visit has to be checked again afterwards.
+- Recalculation also links old lines to their procedure or dentist by name
+  when they were saved before the name was on the price list / had an account.
+
+### Added
+
+- **Audit trail for commissions:** own rate set or removed, tier changes, tier
+  rate set or removed, own rates cleared (listing what was removed), and
+  recalculations, with who, when, the old and new value and how much moved.
+- **Audit trail page:** search box, pages (10/25/50/100 rows) and a
+  **Commissions** filter.
+- Help: how a commission is worked out; who can edit a Cleared visit.
+
+### Needs
+
+- No SQL. After installing, run `yarn db:recalc-commissions --dry-run`, then
+  `yarn db:recalc-commissions` (or press **Commissions → Recalculate all
+  commissions**) once. See `docs/COMMISSION_FIXES_v0.10.0.md` for the data fixes the clinic
+  needs to make (Doc Anna's ₱250 override, "Lost" vs "Loss" Bracket, missing
+  rates).
+
+## 0.9.1 — 2026-11-23
+
+### Changed
+
+- **Audit trail moved to the profile menu.** Click your name (top right) and choose
+  Audit trail; on a phone it is in the menu panel. It has its own page
+  (`/cashflow/audit`) with the same Everything / Visits / Payments / Status /
+  Patients filters, and is shown only to people with the audit privilege. The
+  "Audit" tab on Transactions is gone, and old links to it open the new page.
+- The profile menu now opens above the page content, so Sign out is never hidden
+  behind a search box or table.
+- Help tells people where the audit trail is.
+
 ## 0.9.0 — 2026-11-12
 
 HMO details: the patient's company, the HMO name and the account number, on the patient and on each visit.

@@ -34,7 +34,25 @@ export type CommissionRow = {
    * with, e.g. "50% — shared with Katherine Roldan (transferred)". Blank
    * on an ordinary line. */
   note?: string;
+  /**
+   * The rate used, as worked out from today's rates (every saved line is
+   * recalculated when a rate changes), e.g. "10%", "10% (HMO)", "₱250 (HMO)".
+   * Blank when the dentist has no rate for the procedure.
+   */
+  rateLabel?: string;
 };
+
+export const NO_RATE_TEXT = "No rate set";
+
+/** The Rate column: the rate used, or "No rate set" so a missing rate stands out. */
+export function rateText(row: CommissionRow): string {
+  if (row.rateLabel !== undefined) {
+    return row.rateLabel || NO_RATE_TEXT;
+  }
+  const percent = effectivePercent(row);
+  if (!isHmoPayment(row.paymentType)) return percent;
+  return percent ? `${percent} (HMO)` : "HMO";
+}
 
 /** The columns the report's lines can be ordered by. */
 export const COMMISSION_SORT_KEYS = [
@@ -181,11 +199,12 @@ export function effectivePercent(row: {
   netCollection: number;
   commission: number;
   procedure?: string;
+  vatType?: string | null;
 }): string {
   if (!(row.netCollection > 0) || row.commission === 0) return "";
   const base = isXrayProcedure(row.procedure)
     ? row.netCollection
-    : commissionBase(row.netCollection, row.procedure);
+    : commissionBase(row.netCollection, { procedureName: row.procedure, vatType: row.vatType });
   return `${round2((row.commission / base) * 100)}%`;
 }
 
@@ -250,9 +269,7 @@ export function buildCommissionDetailSheet(
     row.paymentType,
     row.netCollection,
     row.commission,
-    isHmoPayment(row.paymentType)
-      ? `${effectivePercent(row)}${effectivePercent(row) ? " (HMO)" : "HMO"}`
-      : effectivePercent(row),
+    rateText(row),
     row.note ?? "",
   ];
   if (report.sort === "dentist") {

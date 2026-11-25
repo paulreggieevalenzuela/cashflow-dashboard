@@ -258,6 +258,18 @@ function SearchBox({
   );
 }
 
+export function NoticeBanner({ notice }: { notice: string | null }) {
+  if (!notice) return null;
+  return (
+    <div
+      role="status"
+      className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-300"
+    >
+      {notice}
+    </div>
+  );
+}
+
 function ErrorBanner({ message }: { message: string | null }) {
   if (!message) return null;
   return (
@@ -273,7 +285,7 @@ function ErrorBanner({ message }: { message: string | null }) {
 /**
  * One table for every tier: procedures down, Tier 3 / 2 / 1 across. Click a
  * rate to change it in place; click a dash to set one. Applies to every
- * dentist in that tier, on visits saved from then on.
+ * dentist in that tier; their saved visits are recalculated at once.
  */
 export function TierRateGrid({
   procedures,
@@ -287,6 +299,7 @@ export function TierRateGrid({
   const [editing, setEditing] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const rateOf = useMemo(() => {
     const map = new Map<string, TierRate>();
@@ -302,15 +315,20 @@ export function TierRateGrid({
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [procedures, search]);
 
-  async function run(key: string, task: () => Promise<{ ok: boolean; message?: string }>) {
+  async function run(
+    key: string,
+    task: () => Promise<{ ok: boolean; message?: string; notice?: string }>,
+  ) {
     setBusy(key);
     setMessage(null);
+    setNotice(null);
     try {
       const result = await task();
       if (!result.ok) {
         setMessage(result.message ?? "Something went wrong.");
         return false;
       }
+      setNotice(result.notice ?? null);
       router.refresh();
       return true;
     } finally {
@@ -327,13 +345,15 @@ export function TierRateGrid({
           </h3>
           <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
             Click a rate to change it, or a dash to set one. A change applies to
-            every dentist in that tier on visits saved from then on. Open{" "}
+            every dentist in that tier, and their saved visits are recalculated
+            at once (checked ones included). Open{" "}
             <em>More</em> for a flat peso value (X-rays) or the HMO rate.
           </p>
         </div>
         <SearchBox value={search} onChange={setSearch} />
       </div>
       <ErrorBanner message={message} />
+      <NoticeBanner notice={notice} />
       <div
         data-testid="tier-grid"
         className="max-h-[70vh] overflow-auto rounded-lg border border-zinc-200 dark:border-zinc-800"
@@ -465,6 +485,7 @@ export function PersonRateGrid({
   const [editing, setEditing] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const person = people.find((entry) => entry.id === personId);
   const tier = dentistTiers.find((entry) => entry.dentistUserId === personId)?.tier;
@@ -496,15 +517,20 @@ export function PersonRateGrid({
 
   const ownCount = ownByProcedure.size;
 
-  async function run(key: string, task: () => Promise<{ ok: boolean; message?: string }>) {
+  async function run(
+    key: string,
+    task: () => Promise<{ ok: boolean; message?: string; notice?: string }>,
+  ) {
     setBusy(key);
     setMessage(null);
+    setNotice(null);
     try {
       const result = await task();
       if (!result.ok) {
         setMessage(result.message ?? "Something went wrong.");
         return false;
       }
+      setNotice(result.notice ?? null);
       router.refresh();
       return true;
     } finally {
@@ -555,6 +581,7 @@ export function PersonRateGrid({
       ) : (
         <>
           <ErrorBanner message={message} />
+          <NoticeBanner notice={notice} />
           <div className="flex flex-wrap items-center gap-4">
             <SearchBox value={search} onChange={setSearch} />
             <label className="flex items-center gap-1.5 text-sm text-zinc-600 dark:text-zinc-300">

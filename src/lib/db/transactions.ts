@@ -8,8 +8,6 @@ import {
   visitHasCheckSql,
   visitHasHqCheckSql,
 } from "@/lib/db/transaction-checks";
-import { resolveRateSetting } from "@/lib/cashflow/commission-tiers";
-import { splitCommission } from "@/lib/cashflow/commission-split";
 import { getBranchById } from "@/lib/db/branches";
 import { getCommissionRateMap } from "@/lib/db/commission-rates";
 import { getDentistTierMap, getTierRateMap } from "@/lib/db/commission-tiers";
@@ -22,11 +20,8 @@ import {
   type NewTransactionRow,
   type TransactionRow,
 } from "@/lib/db/schema";
-import {
-  computeCommission,
-  DEFAULT_COMMISSION_PERCENT,
-  round2,
-} from "@/lib/cashflow/pricing";
+import { round2 } from "@/lib/cashflow/pricing";
+import { commissionForLine } from "@/lib/cashflow/commission-calc";
 import { CHECK_IN_PLACEHOLDER } from "@/lib/cashflow/visit-status";
 import {
   branchCode,
@@ -356,6 +351,12 @@ async function resolveCommissionLinks(rows: CashflowTransaction[]) {
     }
   });
 
+  const maps = {
+    individual: rateMap,
+    tier: tierRateMap,
+    dentistTier: dentistTierMap,
+  };
+
   return rows.map((row) => {
     const dentistUserId =
       dentistIdByName.get((row.dentist ?? "").trim().toLowerCase()) ?? null;
@@ -364,52 +365,38 @@ async function resolveCommissionLinks(rows: CashflowTransaction[]) {
       procedureIdByName.get(row.procedure.trim().toLowerCase()) ??
       null;
 
-    // The dentist's own individual rate wins; otherwise the rate their
-    // commission tier gives this procedure.
-    const tier = dentistUserId ? dentistTierMap.get(dentistUserId) : undefined;
-    const rate =
-      dentistUserId && procedureId
-        ? resolveRateSetting({
-            individual: rateMap.get(`${dentistUserId}:${procedureId}`),
-            tierRate:
-              tier !== undefined
-                ? tierRateMap.get(`${tier}:${procedureId}`)
-                : undefined,
-          })
-        : undefined;
-
-    // Commission is on (total - discount - fees): the line total after any
-    // discount, less card fees and withholding tax (= net collection). Cash
-    // visits use the cash-paying %; HMO visits use the HMO % / peso value.
-    // The commission % applies to the amount without VAT (net ÷ 1.12, Ortho
-    // excepted); a procedure with no rate falls back to the default %.
-    const commissionAmount = dentistUserId
-      ? computeCommission(row.netCollection, row.paymentType, rate, {
-          procedureName: row.procedure,
-          defaultPercent: DEFAULT_COMMISSION_PERCENT,
-        })
-      : 0;
-
-    // A transferred patient: the commission above is the MAIN dentist's
-    // rate; half stays with them and half goes to the dentist the patient
-    // was transferred to (who must be a different, known dentist account).
+    // A transferred patient: the commission is worked out at the MAIN
+    // dentist's rate; half stays with them and half goes to the dentist the
+    // patient was transferred to (who must be a different, known dentist).
     const transferName = (row.transferDentist ?? "").trim();
     const transferDentistUserId = transferName
       ? (dentistIdByName.get(transferName.toLowerCase()) ?? null)
       : null;
-    const transferred =
-      Boolean(dentistUserId) &&
-      transferDentistUserId !== null &&
-      transferDentistUserId !== dentistUserId;
-    const split = splitCommission(commissionAmount, transferred);
+
+    // The rules (base, VAT, HMO, tier vs own rate) live in commissionForLine,
+    // shared with the recalculation after a rate change.
+    const result = commissionForLine(
+      {
+        dentistUserId,
+        procedureId,
+        procedure: row.procedure,
+        paymentType: row.paymentType,
+        amountPaid: row.amountPaid,
+        vatType: row.vatType,
+        discountReason: row.discountReason,
+        withholdingTax: row.withholdingTax,
+        transferDentistUserId,
+      },
+      maps,
+    );
 
     return {
       dentistUserId,
       procedureId,
-      commissionAmount: split.main,
-      transferDentist: transferred ? transferName : "",
-      transferDentistUserId: transferred ? transferDentistUserId : null,
-      transferCommissionAmount: split.transfer,
+      commissionAmount: result.main,
+      transferDentist: result.transferred ? transferName : "",
+      transferDentistUserId: result.transferred ? transferDentistUserId : null,
+      transferCommissionAmount: result.transfer,
     };
   });
 }

@@ -236,7 +236,7 @@ async function main() {
     const matched = names
       .map((name) => procByNorm.get(norm(name)))
       .filter((p): p is { id: string; name: string } => Boolean(p));
-    const base = (name: string) => commissionBase(SAMPLE_NET, name);
+    const base = (name: string) => commissionBase(SAMPLE_NET, { procedureName: name });
     const expected = (name: string) =>
       entry.kind === "percent"
         ? Math.round(base(name) * entry.value) / 100

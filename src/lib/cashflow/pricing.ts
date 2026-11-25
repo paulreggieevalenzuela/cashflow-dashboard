@@ -48,9 +48,14 @@ export type CommissionRateSetting = {
 };
 
 /**
- * Commission is worked out on the amount WITHOUT the 12% VAT: the net
- * collection divided by 1.12 (e.g. ₱300 → ₱267.86). Ortho is the exception
- * and uses the full amount. (Clinic rule, November 2026.)
+ * Commission = (collected amount − VAT) × rate. Only the clinic's basic
+ * procedures are Non-VAT — Consultation, Oral Prophylaxis, Temporary
+ * Filling, Permanent Filling and Simple Tooth Extraction — so they use the
+ * full amount. Every other procedure is VAT: its 12% VAT is taken out first
+ * (the amount divided by 1.12, e.g. ₱1,120 → ₱1,000). A PWD / Senior Citizen
+ * line already has its VAT removed, so it uses the amount as charged.
+ * (Clinic rule, 24 November 2026. Decided by procedure, not by the VAT type
+ * saved on old lines, some of which were recorded as Non-VAT by mistake.)
  */
 export const COMMISSION_VAT_DIVISOR = 1.12;
 
@@ -70,64 +75,197 @@ export function isXrayProcedure(name: string | null | undefined): boolean {
   return /x-?\s?ray/i.test(name ?? "");
 }
 
-/** The amount the commission % is applied to. */
-export function commissionBase(
-  netCollection: number,
-  procedureName?: string | null,
-): number {
-  return isOrthoProcedure(procedureName)
-    ? netCollection
-    : round2(netCollection / COMMISSION_VAT_DIVISOR);
+/**
+ * What a procedure line's commission is worked out on, before the VAT rule:
+ * the line total after discount, less any withholding tax. The card
+ * terminal's merchant fee is NOT taken off (clinic rule, November 2026): a
+ * ₱1,000 Ortho Adj paid by GHL card earns on ₱1,000, not on the ₱972 the
+ * clinic receives.
+ */
+export function commissionAmountBase(line: {
+  amountPaid: number;
+  withholdingTax?: number | null;
+}): number {
+  return Math.max(0, round2(line.amountPaid - (line.withholdingTax ?? 0)));
+}
+
+/** The only Non-VAT procedures (every variant of each, e.g. all Oral Prophylaxis). */
+const NON_VAT_PROCEDURES: readonly RegExp[] = [
+  /^\s*consultation\b/i,
+  /^\s*oral\s+prophylaxis\b/i,
+  /^\s*temporary\s+filling\b/i,
+  /^\s*permanent\s+filling\b/i,
+  /^\s*simple\s+(tooth\s+)?extraction\b/i,
+];
+
+export const NON_VAT_PROCEDURE_NAMES = [
+  "Consultation",
+  "Oral Prophylaxis",
+  "Temporary Filling",
+  "Permanent Filling",
+  "Simple Tooth Extraction",
+] as const;
+
+/** True for the clinic's basic, Non-VAT procedures. */
+export function isNonVatProcedure(name: string | null | undefined): boolean {
+  const text = name ?? "";
+  return NON_VAT_PROCEDURES.some((pattern) => pattern.test(text));
+}
+
+/**
+ * The VAT type a procedure is sold with: Non-VAT for the five basic
+ * procedures, VAT 12% for everything else. The price list, the visit form
+ * and the server all follow this, so it cannot be set wrongly by hand.
+ */
+export function procedureVatType(name: string | null | undefined): "vat" | "non_vat" {
+  return isNonVatProcedure(name) ? "non_vat" : "vat";
+}
+
+export type CommissionVatInput = {
+  procedureName?: string | null;
+  /** The line's VAT type as saved ("vat_exempt" = VAT already removed). */
+  vatType?: string | null;
+  /** The line's discount reason (PWD / Senior Citizen = VAT already removed). */
+  discountReason?: string | null;
+};
+
+/** True when the line's VAT is taken out before the commission % applies. */
+export function commissionRemovesVat(line: CommissionVatInput): boolean {
+  if (isNonVatProcedure(line.procedureName)) return false;
+  // PWD / Senior lines are charged without VAT already.
+  if ((line.vatType ?? "").trim().toLowerCase() === "vat_exempt") return false;
+  if (isStatutoryDiscount(line.discountReason)) return false;
+  return true;
+}
+
+/**
+ * The amount the commission % is applied to: the collected amount less its
+ * VAT (÷ 1.12), or the full amount for the basic Non-VAT procedures and for
+ * PWD / Senior lines.
+ */
+export function commissionBase(amount: number, line: CommissionVatInput): number {
+  return commissionRemovesVat(line)
+    ? round2(amount / COMMISSION_VAT_DIVISOR)
+    : round2(amount);
 }
 
 /**
  * Commission one procedure line earns.
  *
- * - Percentages apply to `commissionBase` (net collection ÷ 1.12, Ortho
- *   excepted); fixed peso values (X-rays, some HMO procedures) are paid as
- *   they are.
+ * - `amount` is the line's `commissionAmountBase` (price less discount, less
+ *   withholding tax; the merchant fee is not taken off).
+ * - Percentages apply to `commissionBase`: that amount less VAT (÷ 1.12),
+ *   or the full amount for the basic Non-VAT procedures; fixed peso values
+ *   (X-rays, some HMO procedures) are paid as they are.
  * - Not an HMO payment: cash-paying % of the base, or the flat peso value.
- * - HMO payment: the fixed peso value when the procedure has one (X-rays),
- *   otherwise the HMO %.
+ * - HMO payment: the HMO peso value or HMO % when one is set (an HMO 0% set
+ *   on purpose stays 0); otherwise the procedure's regular rate (its tier
+ *   or own %), so a procedure without an HMO rate does not earn ₱0 on an
+ *   HMO visit.
  * - Nothing set for the dentist and procedure (or only a 0%): the default %
  *   when one is configured, for every procedure except X-rays.
  */
 export function computeCommission(
-  netCollection: number,
+  amount: number,
   paymentType: string | null | undefined,
   rate: CommissionRateSetting | undefined,
   options: {
     procedureName?: string | null;
+    /** The line's VAT type ("vat_exempt" = VAT already removed). */
+    vatType?: string | null;
+    /** PWD / Senior Citizen discounts already removed the VAT. */
+    discountReason?: string | null;
     defaultPercent?: number | null;
   } = {},
 ): number {
-  const base = commissionBase(netCollection, options.procedureName);
+  return computeCommissionDetail(amount, paymentType, rate, options).amount;
+}
+
+export type CommissionDetail = {
+  amount: number;
+  /** Which part of the rate was used. */
+  basis: "hmo_peso" | "hmo_percent" | "peso" | "percent" | "default" | "none";
+  /** The % or peso figure used (null for "none"). */
+  value: number | null;
+};
+
+/** `computeCommission` with what it was based on, for the Rate column. */
+export function computeCommissionDetail(
+  amount: number,
+  paymentType: string | null | undefined,
+  rate: CommissionRateSetting | undefined,
+  options: {
+    procedureName?: string | null;
+    /** The line's VAT type ("vat_exempt" = VAT already removed). */
+    vatType?: string | null;
+    /** PWD / Senior Citizen discounts already removed the VAT. */
+    discountReason?: string | null;
+    defaultPercent?: number | null;
+  } = {},
+): CommissionDetail {
+  const base = commissionBase(amount, {
+    procedureName: options.procedureName,
+    vatType: options.vatType,
+    discountReason: options.discountReason,
+  });
   const defaultPercent = options.defaultPercent ?? null;
-  const fallback =
+  const fallback = (): CommissionDetail =>
     defaultPercent !== null && !isXrayProcedure(options.procedureName)
-      ? round2(base * (defaultPercent / 100))
-      : 0;
+      ? {
+          amount: round2(base * (defaultPercent / 100)),
+          basis: "default",
+          value: defaultPercent,
+        }
+      : { amount: 0, basis: "none", value: null };
   if (!rate) {
-    return fallback;
+    return fallback();
   }
   const flatPeso = rate.pesoValue ?? null;
   if (isHmoPayment(paymentType)) {
     if (rate.hmoPesoValue !== null) {
-      return round2(rate.hmoPesoValue);
+      return { amount: round2(rate.hmoPesoValue), basis: "hmo_peso", value: rate.hmoPesoValue };
     }
-    if (rate.hmoRatePercent !== null && rate.hmoRatePercent > 0) {
-      return round2(base * (rate.hmoRatePercent / 100));
+    if (rate.hmoRatePercent !== null) {
+      // An HMO % set on purpose, 0% included ("no commission on HMO").
+      return {
+        amount: round2(base * (Math.max(rate.hmoRatePercent, 0) / 100)),
+        basis: "hmo_percent",
+        value: rate.hmoRatePercent,
+      };
     }
-    // No HMO-specific setting: a flat peso (X-ray) still applies, otherwise
-    // the default % (if any).
-    return flatPeso !== null ? round2(flatPeso) : fallback;
+    // No HMO-specific setting: the procedure's regular rate applies below.
   }
   if (flatPeso !== null) {
-    return round2(flatPeso);
+    return { amount: round2(flatPeso), basis: "peso", value: flatPeso };
   }
   return rate.ratePercent > 0
-    ? round2(base * (rate.ratePercent / 100))
-    : fallback;
+    ? {
+        amount: round2(base * (rate.ratePercent / 100)),
+        basis: "percent",
+        value: rate.ratePercent,
+      }
+    : fallback();
+}
+
+/** The Rate column text, e.g. "10%", "10% (HMO)", "₱250 (HMO)", "₱70". */
+export function describeCommissionDetail(
+  detail: Pick<CommissionDetail, "basis" | "value">,
+  paymentType?: string | null,
+): string {
+  if (detail.basis === "none" || detail.value === null) return "";
+  const hmo = isHmoPayment(paymentType) ? " (HMO)" : "";
+  const number = Number.isInteger(detail.value)
+    ? String(detail.value)
+    : String(round2(detail.value));
+  switch (detail.basis) {
+    case "hmo_peso":
+    case "peso":
+      return `₱${number}${hmo}`;
+    case "default":
+      return `${number}% (default)${hmo}`;
+    default:
+      return `${number}%${hmo}`;
+  }
 }
 
 /**

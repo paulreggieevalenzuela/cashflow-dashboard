@@ -15,7 +15,7 @@ import {
   type PriceBasis,
 } from "@/lib/cashflow/price-basis";
 import { hmoPaymentNames } from "@/lib/cashflow/payment-methods";
-import { type VatType } from "@/lib/cashflow/pricing";
+import { procedureVatType } from "@/lib/cashflow/pricing";
 import { useHmoNames } from "@/components/cashflow/payment-methods-context";
 import type {
   PriceHistoryEntry,
@@ -490,20 +490,19 @@ export function ProceduresManager({
               <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
                 VAT
               </label>
-              <select
-                value={draft.vatType}
-                onChange={(event) =>
-                  setDraft({
-                    ...draft,
-                    vatType: event.target.value as VatType &
-                      ("vat" | "non_vat"),
-                  })
-                }
-                className={`${FIELD} select-chevron`}
+              <p
+                data-testid="procedure-vat"
+                className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-900 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-50"
               >
-                <option value="vat">VAT 12% (included in the price)</option>
-                <option value="non_vat">Non-VAT</option>
-              </select>
+                {procedureVatType(draft.name) === "vat"
+                  ? "VAT 12% (included in the price)"
+                  : "Non-VAT"}
+              </p>
+              <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                Set by the name: only Consultation, Oral Prophylaxis,
+                Temporary Filling, Permanent Filling and Simple Tooth
+                Extraction are Non-VAT.
+              </p>
             </div>
             <div className="flex flex-col gap-1.5">
               <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">

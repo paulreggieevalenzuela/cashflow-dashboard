@@ -4,9 +4,10 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import {
   clearIndividualRatesAction,
+  recalculateAllCommissionsAction,
   setDentistTierAction,
 } from "@/app/cashflow/commissions/actions";
-import { TierRateGrid } from "@/components/cashflow/commission-rate-grids";
+import { NoticeBanner, TierRateGrid } from "@/components/cashflow/commission-rate-grids";
 import { COMMISSION_TIERS, tierLabel } from "@/lib/cashflow/commission-tiers";
 import type { DentistTier, TierRate } from "@/lib/db/commission-tiers";
 import type { ProcedureRow } from "@/lib/db/schema";
@@ -29,6 +30,7 @@ export function CommissionTiersManager({
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const tierByDentist = new Map(
     dentistTiers.map((entry) => [entry.dentistUserId, entry.tier]),
@@ -40,13 +42,19 @@ export function CommissionTiersManager({
     );
   const dentistOnly = dentists.filter((dentist) => dentist.role === "dentist");
 
-  async function run(key: string, task: () => Promise<{ ok: boolean; message?: string }>) {
+  async function run(
+    key: string,
+    task: () => Promise<{ ok: boolean; message?: string; notice?: string }>,
+  ) {
     setBusy(key);
     setMessage(null);
+    setNotice(null);
     try {
       const result = await task();
       if (!result.ok) {
         setMessage(result.message ?? "Something went wrong.");
+      } else {
+        setNotice(result.notice ?? null);
       }
       router.refresh();
     } finally {
@@ -65,6 +73,17 @@ export function CommissionTiersManager({
     await run("clear", clearIndividualRatesAction);
   }
 
+  async function handleRecalculateAll() {
+    if (
+      !window.confirm(
+        "Work out the commission of every saved visit again from today's rates? Checked and approved visits are included.",
+      )
+    ) {
+      return;
+    }
+    await run("recalc", recalculateAllCommissionsAction);
+  }
+
   return (
     <div className="space-y-6">
       {message && (
@@ -75,6 +94,30 @@ export function CommissionTiersManager({
           {message}
         </div>
       )}
+      <NoticeBanner notice={notice} />
+
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-zinc-200 bg-white px-6 py-4 dark:border-zinc-800 dark:bg-zinc-950">
+        <p className="max-w-2xl text-sm text-zinc-500 dark:text-zinc-400">
+          Every rate change below is applied to saved visits straight away.
+          Use this after a change made outside this page (for example in the
+          database), or once after installing this version.
+        </p>
+        <button
+          type="button"
+          onClick={handleRecalculateAll}
+          disabled={busy === "recalc"}
+          aria-busy={busy === "recalc"}
+          className="inline-flex items-center gap-2 rounded-lg border border-zinc-300 px-3.5 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-100 disabled:opacity-60 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+        >
+          {busy === "recalc" && (
+            <span
+              className="h-4 w-4 animate-spin rounded-full border-2 border-zinc-300 border-t-amber-600"
+              aria-hidden="true"
+            />
+          )}
+          {busy === "recalc" ? "Recalculating…" : "Recalculate all commissions"}
+        </button>
+      </div>
 
       <div className="rounded-xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-950">
         <h3 className="mb-1 text-sm font-semibold text-zinc-900 dark:text-zinc-50">
@@ -82,8 +125,8 @@ export function CommissionTiersManager({
         </h3>
         <p className="mb-4 text-sm text-zinc-500 dark:text-zinc-400">
           A dentist earns the rate their tier gives each procedure. Change a
-          dentist&apos;s tier here and it applies to transactions saved from
-          then on.
+          dentist&apos;s tier here and their saved visits are recalculated at
+          once.
         </p>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {dentistOnly.length === 0 && (

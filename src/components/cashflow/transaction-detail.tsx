@@ -63,6 +63,7 @@ export function TransactionDetail({
   hqReady = false,
   currentUserId = null,
   isSuperuser = false,
+  canUnlock = false,
 }: {
   detail: InvoiceDetail;
   openedLineId: string;
@@ -88,8 +89,10 @@ export function TransactionDetail({
   canVerifyHq?: boolean;
   hqReady?: boolean;
   currentUserId?: string | null;
-  /** The superuser can still edit a checked visit and unlock it. */
+  /** The superuser is exempt from the HQ same-person rule. */
   isSuperuser?: boolean;
+  /** May unlock a checked visit (the "Unlock checked transactions" privilege). */
+  canUnlock?: boolean;
 }) {
   const router = useRouter();
   const [isRemoving, setIsRemoving] = useState(false);
@@ -113,7 +116,8 @@ export function TransactionDetail({
   });
   // A Cleared visit is locked for dentists; admins and staff can still edit it
   // (and only an admin can reopen it or remove it).
-  const checkedLock = isVisitLocked(visitCheck) && !isSuperuser;
+  // Nobody edits a checked visit directly, the superuser included: unlock it first.
+  const checkedLock = isVisitLocked(visitCheck);
   const locked = checkedLock || (isLocked(status) && !canDelete && !canEditCleared);
   const dentistNames = [
     ...new Set(lines.map((line) => line.dentist).filter(Boolean)),
@@ -223,8 +227,8 @@ export function TransactionDetail({
               className="rounded-lg border border-dashed border-zinc-300 px-3.5 py-2 text-sm text-zinc-500 dark:border-zinc-700 dark:text-zinc-400"
               title={
                 checkedLock
-                  ? "Checked and locked. Only the superuser can change it."
-                  : "Cleared visits are locked. An admin or staff member can correct it."
+                  ? "Checked and locked. Unlock it first (owners and admins, or anyone given Unlock checked transactions)."
+                  : "Cleared visits are locked. An admin or owner (or someone given the privilege) can correct it."
               }
             >
               {checkedLock ? "Checked · locked" : "Cleared · locked"}
@@ -264,6 +268,7 @@ export function TransactionDetail({
         hqReady={hqReady}
         currentUserId={currentUserId}
         isSuperuser={isSuperuser}
+        canUnlock={canUnlock}
       />
 
       <div className="grid grid-cols-1 gap-6 rounded-xl border border-zinc-200 bg-white p-6 dark:border-zinc-800 dark:bg-zinc-950 sm:grid-cols-2">

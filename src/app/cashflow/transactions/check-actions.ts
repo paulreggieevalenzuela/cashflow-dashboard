@@ -1,7 +1,6 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { auth } from "@/lib/auth/access";
 import { getBranchPolicy } from "@/lib/auth/branch-policy";
 import { requirePermission } from "@/lib/auth/guards";
 import { approveVisitsHq, checkVisits, uncheckVisit } from "@/lib/db/transaction-checks";
@@ -86,17 +85,24 @@ export async function approveVisitsHqAction(invoiceIds: string[]): Promise<Check
   return { ok: result.checked > 0 || result.skipped.length === 0, message: parts.join(" "), skipped: result.skipped } as CheckActionResult;
 }
 
-/** Unlocks a checked visit (removes both checks). Superuser only. */
+/**
+ * Unlocks a checked visit (removes both checks) so it can be edited again.
+ * For people with the "Unlock checked transactions" privilege (owners and
+ * admins by default), within their own clinics.
+ */
 export async function uncheckVisitAction(invoiceId: string): Promise<CheckActionResult> {
-  const session = await auth();
-  if (!session?.user) return { ok: false, message: "You must be signed in." };
-  if (!session.user.isSuperuser) {
-    return { ok: false, message: "Only the superuser can unlock a checked visit." };
-  }
+  const guard = await requirePermission(
+    "transaction.unlock",
+    "You don't have permission to unlock checked transactions.",
+  );
+  if (!guard.ok) return { ok: false, message: guard.message };
+  const session = guard.session;
+  const policy = await getBranchPolicy(session);
   const result = await uncheckVisit(invoiceId, {
     userId: session.user.id,
     name: session.user.name ?? session.user.email ?? "",
-    isSuperuser: true,
+    canUnlock: true,
+    allowedBranchIds: policy.allowedBranchIds,
   });
   if (!result.ok) return result;
   revalidate();

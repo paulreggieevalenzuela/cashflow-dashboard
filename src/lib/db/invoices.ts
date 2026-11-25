@@ -23,6 +23,7 @@ import {
   isHmoPayment,
   isStatutoryDiscount,
   normalizeVatType,
+  procedureVatType,
   priceLine,
   round2,
   type VatType,
@@ -310,9 +311,9 @@ function sameProcedure(a: string, b: string): boolean {
  * - A line that is still on the same procedure keeps the VAT setting and
  *   procedure link it was saved with: changing the price list later never
  *   re-prices or re-classifies an old visit when someone edits it.
- * - A new line, or one switched to another procedure, takes the procedure
- *   list's current VAT setting (a procedure that isn't on the list keeps the
- *   setting the form sent).
+ * - A new line, or one switched to another procedure, gets the clinic's VAT
+ *   rule: Non-VAT only for Consultation, Oral Prophylaxis, Temporary and
+ *   Permanent Filling and Simple Tooth Extraction; VAT 12% for the rest.
  * - The discount type, not its wording, decides the PWD / Senior rule.
  */
 function priceLines(
@@ -332,9 +333,12 @@ function priceLines(
     const info = context.procedures.get(line.procedure.trim().toLowerCase());
     const previous = line.id ? context.previousById.get(line.id) : undefined;
     const unchanged = !!previous && sameProcedure(previous.procedure, line.procedure);
+    // A new line, or one moved to another procedure, follows the clinic's
+    // rule (only the basic procedures are Non-VAT); a saved line that stays
+    // on its procedure keeps what its receipt was issued with.
     const vatType: VatType = unchanged
       ? normalizeVatType(previous.vatType)
-      : (info?.vatType ?? line.vatType);
+      : procedureVatType(line.procedure);
     const procedureId = unchanged
       ? (previous.procedureId ?? info?.id ?? null)
       : (info?.id ?? null);
@@ -865,7 +869,7 @@ export async function updateInvoice(
     userId: string | null;
     userName?: string;
     isAdmin?: boolean;
-    /** Admins and staff may edit a Cleared visit (see canEditClearedVisit). */
+    /** May edit a Cleared visit (the "visit.edit_cleared" privilege: admin and higher by default). */
     canEditCleared?: boolean;
   },
 ): Promise<SaveInvoiceResult> {

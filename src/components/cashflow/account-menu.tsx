@@ -60,6 +60,7 @@ export function AccountMenu({
   email,
   isSuperuser = false,
   deletedCount = null,
+  canViewAudit = false,
 }: {
   role: UserRole;
   displayName: string;
@@ -68,6 +69,8 @@ export function AccountMenu({
   isSuperuser?: boolean;
   /** Items waiting in Deleted items; shown on the avatar and next to the link. */
   deletedCount?: number | null;
+  /** Adds "Audit trail" (who changed what), for people with the audit privilege. */
+  canViewAudit?: boolean;
 }) {
   const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
@@ -181,6 +184,29 @@ export function AccountMenu({
             </svg>
             Profile
           </Link>
+          {canViewAudit && (
+            <Link
+              href="/cashflow/audit"
+              role="menuitem"
+              onClick={() => setIsOpen(false)}
+              className="flex items-center gap-2.5 px-3.5 py-2 text-sm text-zinc-700 transition-colors hover:bg-zinc-50 dark:text-zinc-300 dark:hover:bg-zinc-800"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                viewBox="0 0 20 20"
+                fill="currentColor"
+                className="h-4 w-4 text-zinc-400"
+                aria-hidden="true"
+              >
+                <path
+                  fillRule="evenodd"
+                  d="M4 2a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8.414a2 2 0 0 0-.586-1.414l-4.414-4.414A2 2 0 0 0 11.586 2H4Zm2.75 8a.75.75 0 0 0 0 1.5h6.5a.75.75 0 0 0 0-1.5h-6.5Zm0 3a.75.75 0 0 0 0 1.5h6.5a.75.75 0 0 0 0-1.5h-6.5Zm0-6a.75.75 0 0 0 0 1.5h2.5a.75.75 0 0 0 0-1.5h-2.5Z"
+                  clipRule="evenodd"
+                />
+              </svg>
+              Audit trail
+            </Link>
+          )}
           {isSuperuser && (
             <Link
               href="/cashflow/trash"

@@ -14,7 +14,7 @@ import {
   normalizePriceBasis,
   type PriceBasis,
 } from "@/lib/cashflow/price-basis";
-import { normalizeVatType, type VatType } from "@/lib/cashflow/pricing";
+import { procedureVatType, type VatType } from "@/lib/cashflow/pricing";
 
 /** A price change bigger than this (either way) asks the admin to confirm. */
 export const LARGE_PRICE_CHANGE_RATIO = 0.25;
@@ -68,7 +68,7 @@ export async function listProcedureAdminRows(): Promise<ProcedureAdminRow[]> {
   return rows.map((row) => ({
     id: row.id,
     name: row.name,
-    vatType: normalizeVatType(row.defaultVatType),
+    vatType: procedureVatType(row.name),
     price: row.defaultPrice === null ? null : Number(row.defaultPrice),
     priceBasis: normalizePriceBasis(row.priceBasis),
     active: row.active,
@@ -118,7 +118,8 @@ export async function listPriceHistory(
 
 export type ProcedureInput = {
   name: string;
-  vatType: VatType;
+  /** Ignored: the VAT type follows the name (see procedureVatType). */
+  vatType?: VatType;
   price: number | null;
   priceBasis: PriceBasis;
   active: boolean;
@@ -240,7 +241,7 @@ export async function createProcedure(
     .insert(procedures)
     .values({
       name,
-      defaultVatType: input.vatType,
+      defaultVatType: procedureVatType(name),
       defaultPrice: price === null ? null : price.toString(),
       priceBasis: input.priceBasis,
       active: input.active,
@@ -322,7 +323,7 @@ export async function updateProcedure(
     .update(procedures)
     .set({
       name,
-      defaultVatType: input.vatType,
+      defaultVatType: procedureVatType(name),
       defaultPrice: newPrice === null ? null : newPrice.toString(),
       priceBasis: input.priceBasis,
       active: input.active,

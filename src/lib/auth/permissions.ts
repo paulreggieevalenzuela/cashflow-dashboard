@@ -31,7 +31,16 @@ export const PERMISSION_GROUPS = [
     permissions: [
       { key: "visit.create", label: "Add visits and check patients in" },
       { key: "visit.edit", label: "Edit visits that are not Cleared yet" },
-      { key: "visit.edit_cleared", label: "Edit visits that are already Cleared" },
+      {
+        key: "visit.edit_cleared",
+        label: "Edit Cleared transactions",
+        hint: "Owners and admins by default; only an owner, admin or the superuser can give it. A checked (locked) visit has to be unlocked first. Every change is in the audit trail.",
+      },
+      {
+        key: "transaction.unlock",
+        label: "Unlock checked transactions",
+        hint: "Owners and admins by default; only an owner, admin or the superuser can give it. Removes the Branch manager and Headquarters checks so the visit can be edited again. Recorded in the audit trail.",
+      },
       {
         key: "visit.status_override",
         label: "Move a visit back or skip a step",
@@ -46,7 +55,7 @@ export const PERMISSION_GROUPS = [
       {
         key: "transaction.verify",
         label: "Check transactions: Branch manager (first check)",
-        hint: "Ticks a Cleared visit as reviewed and locks it: only the superuser can edit, remove or unlock it.",
+        hint: "Ticks a Cleared visit as reviewed and locks it: it has to be unlocked before anyone can edit or remove it.",
       },
       {
         key: "transaction.verify_hq",
@@ -131,6 +140,7 @@ export const SENSITIVE_PERMISSIONS: readonly Permission[] = [
   "attachment.delete",
   "visit.status_override",
   "visit.edit_cleared",
+  "transaction.unlock",
   "transaction.verify",
   "transaction.verify_hq",
   "import.csv",
@@ -141,6 +151,20 @@ export const SENSITIVE_PERMISSIONS: readonly Permission[] = [
   "audit.view",
 ];
 
+/**
+ * Privileges only an owner, an admin (Branch manager) or the superuser may
+ * tick for someone: correcting and unlocking Cleared / checked transactions.
+ */
+export const MANAGER_GRANTED_PERMISSIONS: readonly Permission[] = [
+  "visit.edit_cleared",
+  "transaction.unlock",
+];
+
+/** May someone with this role give the manager-granted privileges? */
+export function canGrantManagerPermissions(role: UserRole): boolean {
+  return role === "superuser" || role === "owner" || role === "admin";
+}
+
 const EVERYONE = ["owner", "admin", "dentist", "staff"] as const;
 const OWNER_ADMIN = ["owner", "admin"] as const;
 
@@ -148,8 +172,12 @@ const OWNER_ADMIN = ["owner", "admin"] as const;
 const DEFAULT_ROLES: Record<Permission, readonly UserRole[]> = {
   "visit.create": EVERYONE,
   "visit.edit": EVERYONE,
-  // Staff correct Cleared visits today; dentists do not.
-  "visit.edit_cleared": ["owner", "admin", "staff"],
+  // Admin and higher by default (clinic decision, November 2026); anyone
+  // else only when it is ticked for them under Manage -> Access.
+  "visit.edit_cleared": OWNER_ADMIN,
+  // Unlocking a checked visit (removes both checks): owners and admins by
+  // default, anyone else only when an owner or admin ticks it for them.
+  "transaction.unlock": OWNER_ADMIN,
   "visit.status_override": OWNER_ADMIN,
   "visit.delete": OWNER_ADMIN,
   "import.csv": OWNER_ADMIN,
