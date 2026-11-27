@@ -297,10 +297,10 @@ function vatTypeFor(line: LineState, options: ProcedureOption[]): VatType {
   ) {
     return line.savedVatType;
   }
-  // The clinic's rule (same as the server): only the basic procedures are
-  // Non-VAT. `options` is kept so the call sites stay the same.
-  void options;
-  return procedureVatType(line.procedure);
+  // As set on the price list (same as the server); a procedure typed in
+  // that is not on the list follows the name rule.
+  const option = options.find((o) => o.name.trim().toLowerCase() === name);
+  return option ? option.defaultVatType : procedureVatType(line.procedure);
 }
 
 /** The discount this line uses: the chosen type, or the old reason text. */

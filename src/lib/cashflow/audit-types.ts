@@ -40,7 +40,8 @@ export type AuditAction =
   | "commission.tier_rate_set"
   | "commission.tier_rate_removed"
   | "commission.rates_cleared"
-  | "commission.recalculated";
+  | "commission.recalculated"
+  | "commission.procedure_vat_changed";
 
 export type AuditEntry = {
   id: string;
@@ -93,4 +94,5 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   "commission.tier_rate_removed": "Tier rate removed",
   "commission.rates_cleared": "Own commission rates cleared",
   "commission.recalculated": "Commissions recalculated",
+  "commission.procedure_vat_changed": "Procedure VAT type changed",
 };

@@ -14,6 +14,7 @@ import {
   describeCommissionDetail,
   type CommissionDetail,
   type CommissionRateSetting,
+  type ProcedureVatType,
 } from "@/lib/cashflow/pricing";
 
 /** Every rate, as loaded once for a batch of lines. */
@@ -24,6 +25,11 @@ export type CommissionRateMaps = {
   tier: Map<string, CommissionRateSetting>;
   /** dentistUserId -> tier. */
   dentistTier: Map<string, number>;
+  /**
+   * procedureId -> its VAT type on the price list. A line whose procedure
+   * is not in here (not linked) uses the name rule.
+   */
+  procedureVat?: Map<string, ProcedureVatType>;
 };
 
 export type CommissionLineInput = {
@@ -91,6 +97,9 @@ export function commissionForLine(
     rateFor(maps, line.dentistUserId, line.procedureId),
     {
       procedureName: line.procedure,
+      priceListVatType: line.procedureId
+        ? (maps.procedureVat?.get(line.procedureId) ?? null)
+        : null,
       vatType: line.vatType,
       discountReason: line.discountReason,
       defaultPercent: DEFAULT_COMMISSION_PERCENT,

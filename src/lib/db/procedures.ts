@@ -1,6 +1,10 @@
 import { and, eq, ilike, isNull } from "drizzle-orm";
 import { normalizePriceBasis, type PriceBasis } from "@/lib/cashflow/price-basis";
-import { procedureVatType, type VatType } from "@/lib/cashflow/pricing";
+import {
+  toProcedureVatType,
+  type ProcedureVatType,
+  type VatType,
+} from "@/lib/cashflow/pricing";
 import { db } from "@/lib/db/client";
 import {
   procedurePrices,
@@ -51,8 +55,8 @@ export async function listProcedureOptions(): Promise<ProcedureOption[]> {
       payerPrices: payerPrices.get(row.id) ?? {},
       name: row.name,
       defaultPrice: row.defaultPrice === null ? null : Number(row.defaultPrice),
-      // The clinic's rule, whatever the stored value says.
-      defaultVatType: procedureVatType(row.name),
+      // As set on the price list.
+      defaultVatType: toProcedureVatType(row.defaultVatType),
       priceBasis: normalizePriceBasis(row.priceBasis),
     }));
 }
@@ -73,12 +77,20 @@ export async function loadProcedureInfoMap(): Promise<Map<string, ProcedureInfo>
       row.name.trim().toLowerCase(),
       {
         id: row.id,
-        vatType: procedureVatType(row.name),
+        vatType: toProcedureVatType(row.defaultVatType),
         priceBasis: normalizePriceBasis(row.priceBasis),
         active: row.active,
       },
     ]),
   );
+}
+
+/** Every procedure's VAT type on the price list, by id (for commissions). */
+export async function getProcedureVatMap(): Promise<Map<string, ProcedureVatType>> {
+  const rows = await db
+    .select({ id: procedures.id, vatType: procedures.defaultVatType })
+    .from(procedures);
+  return new Map(rows.map((row) => [row.id, toProcedureVatType(row.vatType)]));
 }
 
 /**

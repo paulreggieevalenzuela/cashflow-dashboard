@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#ffffff" />
+    <title>Offline · ADT Cashflow</title>
+    <style>
+      html, body { height: 100%; margin: 0; }
+      body {
+        display: flex; align-items: center; justify-content: center;
+        padding: 24px; box-sizing: border-box;
+        font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        background: linear-gradient(160deg, #f0f9ff, #ffffff 45%, #fffbeb);
+        color: #18181b; text-align: center;
+      }
+      .card { max-width: 360px; }
+      img { width: 72px; height: 72px; border-radius: 18px; box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08); }
+      h1 { font-size: 20px; margin: 20px 0 8px; }
+      p { font-size: 15px; line-height: 1.55; color: #52525b; margin: 0; }
+      button {
+        margin-top: 22px; padding: 12px 22px; border: 0; border-radius: 12px;
+        background: #d97706; color: #fff; font-size: 15px; font-weight: 600; cursor: pointer;
+      }
+      .note { margin-top: 18px; font-size: 13px; color: #71717a; }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <img src="/icons/icon-192.png" alt="" />
+      <h1>You're offline</h1>
+      <p>The clinic system needs an internet connection. Check the Wi-Fi or mobile data, then try again.</p>
+      <button type="button" onclick="location.reload()">Try again</button>
+      <p class="note">Nothing you entered is saved while offline. If a save didn't go through, enter it again once you're back online.</p>
+    </div>
+  </body>
+</html>

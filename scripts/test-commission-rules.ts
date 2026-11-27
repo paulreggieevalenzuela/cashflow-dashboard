@@ -75,6 +75,13 @@ async function main() {
   check("line: no dentist = nothing", calc.commissionForLine({ ...line, dentistUserId: null }, maps).total === 0);
   check("line: second procedure is rated exactly like the first", calc.commissionForLine({ ...line, procedure: "PF 2" }, maps).main === 100);
 
+  // VAT type picked on the price list decides (Nov 2026), the name rule only for unlinked lines.
+  const vatMaps = { ...maps, procedureVat: new Map([["P1", "non_vat" as const], ["P2", "vat" as const]]) };
+  check("chosen Non-VAT on the price list: full amount", calc.commissionForLine({ ...line, procedure: "Ortho Adj" }, vatMaps).main === 112);
+  check("chosen VAT on the price list beats the name rule", calc.commissionForLine({ ...line, procedureId: "P2", procedure: "Consultation" }, vatMaps).main === 300);
+  check("unlinked line: name rule (Consultation = Non-VAT)", calc.commissionForLine({ ...line, procedureId: "P9", procedure: "Consultation" }, { ...vatMaps, tier: new Map([["1:P9", tier10]]) }).main === 112);
+  check("PWD line on a VAT procedure: still the full amount", calc.commissionForLine({ ...line, procedureId: "P2", vatType: "vat_exempt" }, vatMaps).main === 336);
+  check("stored VAT type normalises", pricing.toProcedureVatType("vat") === "vat" && pricing.toProcedureVatType("non_vat") === "non_vat" && pricing.toProcedureVatType("vat_exempt") === "non_vat" && pricing.toProcedureVatType(null) === "non_vat");
   check("price list VAT rule: basic procedures Non-VAT", ["Consultation", "Oral Prophylaxis (SEVERE)", "Temporary Filling", "Permanent Filling (Anterior)", "Simple Tooth Extraction"].every((n) => pricing.procedureVatType(n) === "non_vat"));
   check("price list VAT rule: everything else VAT", ["Ortho Adj", "RCM", "Lost Bracket", "Calcimol", "Reservation Fee", "TMJ Consultation", "Periapical Xray", "Complicated Tooth Extraction w/ suture (silk)"].every((n) => pricing.procedureVatType(n) === "vat"));
   check("Edit Cleared transactions: admin and owner by default", roleDefaults("admin").includes("visit.edit_cleared") && roleDefaults("owner").includes("visit.edit_cleared"));
@@ -102,6 +109,15 @@ async function main() {
   const [orthoAdj] = await db.select().from(procedures).where(eq(procedures.name, "Ortho Adj"));
   const [tier1Ortho] = await db.select().from(commissionTierRates).where(and(eq(commissionTierRates.tier, 1), eq(commissionTierRates.procedureId, orthoAdj.id)));
   const originalOrtho = tier1Ortho.ratePercent;
+  // The price list's VAT type now decides: start from the clinic's rule
+  // (as scripts/sql/2026-11-procedure-vat-types.sql does) and put the
+  // stored values back afterwards.
+  const storedVat = await db.select({ id: procedures.id, name: procedures.name, v: procedures.defaultVatType }).from(procedures);
+  for (const p of storedVat) {
+    const rule = pricing.procedureVatType(p.name);
+    if (p.v !== rule) await db.update(procedures).set({ defaultVatType: rule }).where(eq(procedures.id, p.id));
+  }
+  const rcmProc = storedVat.find((p) => p.name === "RCM")!;
   await cleanup();
   try {
     // Two procedures on one HMO visit (the "second procedure has no commission" case).
@@ -165,7 +181,7 @@ async function main() {
     check("GHL: net collection still has the fee taken off", (ortho()?.merchantFee ?? 0) > 0 && near(ortho()?.netCollection, 1000 - (ortho()?.merchantFee ?? 0)), ortho());
     check("GHL: Ortho Adj (VAT) on ₱1,000 less VAT at 20% = ₱178.57 (fee not taken off)", near(ortho()?.commissionAmount, 178.57), ortho());
     check("GHL: RCM (VAT) ₱500 less VAT at 20% = ₱89.29", near(rcm()?.commissionAmount, 89.29), rcm());
-    check("new lines follow the VAT rule: Ortho Adj and RCM saved as VAT (price list says Non-VAT)", ortho()?.vatType === "vat" && rcm()?.vatType === "vat" && (ortho()?.vatAmount ?? 0) > 0, [ortho()?.vatType, rcm()?.vatType, ortho()?.vatAmount]);
+    check("new lines follow the price list: Ortho Adj and RCM saved as VAT", ortho()?.vatType === "vat" && rcm()?.vatType === "vat" && (ortho()?.vatAmount ?? 0) > 0, [ortho()?.vatType, rcm()?.vatType, ortho()?.vatAmount]);
     check("new lines follow the VAT rule: basic procedures saved as Non-VAT", hmoLines.every((l) => l.vatType === "non_vat"), hmoLines.map((l) => l.vatType));
 
     // Perez's own Temporary Filling override (₱250 HMO): flat ₱250, shown as pesos.
@@ -190,6 +206,27 @@ async function main() {
     cardLines = await listLinesForInvoice(cardId);
     check("rate change: checked visit recalculated too (₱178.57 -> ₱133.93)", near(ortho()?.commissionAmount, 133.93), ortho());
     check("rate change: other procedures untouched (RCM still ₱89.29)", near(rcm()?.commissionAmount, 89.29), rcm());
+    // RCM switched to Non-VAT on the price list: its saved lines (checked
+    // ones too) earn on the full amount, new RCM lines are saved Non-VAT,
+    // and the receipt already issued keeps its VAT.
+    const admin = await import("../src/lib/db/procedure-admin");
+    const rcmRow = (await admin.listProcedureAdminRows()).find((r) => r.id === rcmProc.id)!;
+    const sw = await admin.updateProcedure(rcmProc.id, { name: rcmRow.name, vatType: "non_vat", price: rcmRow.price, priceBasis: rcmRow.priceBasis, active: rcmRow.active, note: "", payerPrices: rcmRow.payerPrices }, { userId: null, name: "Test" }, true);
+    check("VAT switch reported", sw.ok && sw.vatChange?.from === "vat" && sw.vatChange?.to === "non_vat", sw);
+    const r5 = await recalc.recalculateCommissions({ procedureIds: [rcmProc.id] });
+    cardLines = await listLinesForInvoice(cardId);
+    check("VAT switch: saved RCM line now on the full amount (₱500 × 20% = ₱100)", near(rcm()?.commissionAmount, 100) && r5.changed >= 1, rcm());
+    check("VAT switch: the issued receipt keeps its VAT", rcm()?.vatType === "vat" && (rcm()?.vatAmount ?? 0) > 0, rcm());
+    const rcmNew = await inv.createInvoice({ ...base, lines: [lineOf("RCM", 500)], payment: { amount: 500, paymentType: "Cash", referenceNo: "" } }, ctx);
+    const [rcmNewLine] = await listLinesForInvoice((rcmNew as { invoiceId: string }).invoiceId);
+    check("VAT switch: a new RCM line is saved Non-VAT", rcmNewLine?.vatType === "non_vat" && near(rcmNewLine?.vatAmount, 0), rcmNewLine);
+    const sw2 = await admin.updateProcedure(rcmProc.id, { name: rcmRow.name, vatType: "vat", price: rcmRow.price, priceBasis: rcmRow.priceBasis, active: rcmRow.active, note: "", payerPrices: rcmRow.payerPrices }, { userId: null, name: "Test" }, true);
+    await recalc.recalculateCommissions({ procedureIds: [rcmProc.id] });
+    cardLines = await listLinesForInvoice(cardId);
+    check("VAT switch back: ₱89.29 again", sw2.ok && near(rcm()?.commissionAmount, 89.29), rcm());
+    const same = await admin.updateProcedure(rcmProc.id, { name: rcmRow.name, price: rcmRow.price, priceBasis: rcmRow.priceBasis, active: rcmRow.active, note: "", payerPrices: rcmRow.payerPrices }, { userId: null, name: "Test" }, true);
+    check("edit without a VAT type keeps it (no change reported)", same.ok && !same.vatChange, same);
+
     check("rate change: result counts the change", r1.changed >= 1 && r1.difference <= -44, r1);
     await db.execute(sql`update transactions set commission_amount = 1 where invoice_id = ${cardId} and procedure = 'Ortho Adj'`);
     const dry = await recalc.recalculateCommissions({ procedureIds: [orthoAdj.id] }, { dryRun: true });
@@ -236,6 +273,7 @@ async function main() {
     await db.delete(auditLog).where(sql`${auditLog.summary} like ${`%${marker}%`}`);
   } finally {
     await db.update(commissionTierRates).set({ ratePercent: originalOrtho }).where(eq(commissionTierRates.id, tier1Ortho.id));
+    for (const p of storedVat) await db.update(procedures).set({ defaultVatType: p.v }).where(eq(procedures.id, p.id));
     await cleanup();
   }
 

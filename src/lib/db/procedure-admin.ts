@@ -14,7 +14,11 @@ import {
   normalizePriceBasis,
   type PriceBasis,
 } from "@/lib/cashflow/price-basis";
-import { procedureVatType, type VatType } from "@/lib/cashflow/pricing";
+import {
+  procedureVatType,
+  toProcedureVatType,
+  type ProcedureVatType,
+} from "@/lib/cashflow/pricing";
 
 /** A price change bigger than this (either way) asks the admin to confirm. */
 export const LARGE_PRICE_CHANGE_RATIO = 0.25;
@@ -22,7 +26,7 @@ export const LARGE_PRICE_CHANGE_RATIO = 0.25;
 export type ProcedureAdminRow = {
   id: string;
   name: string;
-  vatType: VatType;
+  vatType: ProcedureVatType;
   price: number | null;
   priceBasis: PriceBasis;
   active: boolean;
@@ -68,7 +72,7 @@ export async function listProcedureAdminRows(): Promise<ProcedureAdminRow[]> {
   return rows.map((row) => ({
     id: row.id,
     name: row.name,
-    vatType: procedureVatType(row.name),
+    vatType: toProcedureVatType(row.defaultVatType),
     price: row.defaultPrice === null ? null : Number(row.defaultPrice),
     priceBasis: normalizePriceBasis(row.priceBasis),
     active: row.active,
@@ -118,8 +122,8 @@ export async function listPriceHistory(
 
 export type ProcedureInput = {
   name: string;
-  /** Ignored: the VAT type follows the name (see procedureVatType). */
-  vatType?: VatType;
+  /** VAT 12% or Non-VAT. Missing: the name rule (procedureVatType). */
+  vatType?: ProcedureVatType;
   price: number | null;
   priceBasis: PriceBasis;
   active: boolean;
@@ -132,7 +136,12 @@ export type ProcedureInput = {
 type Actor = { userId: string | null; name: string };
 
 export type SaveProcedureResult =
-  | { ok: true; id: string }
+  | {
+      ok: true;
+      id: string;
+      /** Set when an edit changed the procedure's VAT type. */
+      vatChange?: { name: string; from: ProcedureVatType; to: ProcedureVatType };
+    }
   | { ok: false; message: string; needsConfirm?: boolean };
 
 async function nameTaken(name: string, exceptId?: string): Promise<boolean> {
@@ -241,7 +250,7 @@ export async function createProcedure(
     .insert(procedures)
     .values({
       name,
-      defaultVatType: procedureVatType(name),
+      defaultVatType: input.vatType ?? procedureVatType(name),
       defaultPrice: price === null ? null : price.toString(),
       priceBasis: input.priceBasis,
       active: input.active,
@@ -278,6 +287,9 @@ export async function updateProcedure(
   if (await nameTaken(name, id)) {
     return { ok: false, message: `“${name}” is already on the list.` };
   }
+
+  const oldVatType = toProcedureVatType(current.defaultVatType);
+  const vatType = input.vatType ?? oldVatType;
 
   const oldPrice =
     current.defaultPrice === null ? null : Number(current.defaultPrice);
@@ -323,7 +335,7 @@ export async function updateProcedure(
     .update(procedures)
     .set({
       name,
-      defaultVatType: procedureVatType(name),
+      defaultVatType: vatType,
       defaultPrice: newPrice === null ? null : newPrice.toString(),
       priceBasis: input.priceBasis,
       active: input.active,
@@ -335,7 +347,12 @@ export async function updateProcedure(
     await recordPriceChange(id, oldPrice, newPrice, actor, input.note);
   }
   await writePayerPrices(id, currentPayer, nextPayer, actor, input.note);
-  return { ok: true, id };
+  return {
+    ok: true,
+    id,
+    vatChange:
+      vatType !== oldVatType ? { name, from: oldVatType, to: vatType } : undefined,
+  };
 }
 
 /**

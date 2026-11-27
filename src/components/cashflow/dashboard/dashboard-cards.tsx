@@ -243,16 +243,18 @@ export function ExpenseBreakdownCard({
       <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">Expenses by category</h3>
       <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">Share of expenses, this period</p>
       {segments.length > 0 ? (
-        <div className="mt-4 flex items-center gap-6">
+        <div className="@container mt-4">
+        <div className="flex flex-col items-center gap-5 @sm:flex-row @sm:gap-6">
           <DonutChart
             segments={segments}
             centerValue={formatCompactCurrency(grandTotal)}
             centerLabel="of expenses"
             formatValue={formatCompactCurrency}
           />
-          <div className="flex-1">
+          <div className="w-full min-w-0 flex-1 @sm:max-w-sm">
             <DonutLegend segments={segments} total={grandTotal} />
           </div>
+        </div>
         </div>
       ) : (
         <p className="mt-4 text-sm text-zinc-400 dark:text-zinc-500">
@@ -354,16 +356,18 @@ export function PaymentMethodsCard({
         Share of amount paid, this {option.periodNoun}
       </p>
       {segments.length > 0 ? (
-        <div className="mt-4 flex items-center gap-6">
+        <div className="@container mt-4">
+        <div className="flex flex-col items-center gap-5 @sm:flex-row @sm:gap-6">
           <DonutChart
             segments={segments}
             centerValue={formatCompactCurrency(grandTotal)}
             centerLabel="collected"
             formatValue={formatCompactCurrency}
           />
-          <div className="flex-1">
+          <div className="w-full min-w-0 flex-1 @sm:max-w-sm">
             <DonutLegend segments={segments} total={grandTotal} />
           </div>
+        </div>
         </div>
       ) : (
         <p className="mt-4 text-sm text-zinc-400 dark:text-zinc-500">No transactions yet.</p>

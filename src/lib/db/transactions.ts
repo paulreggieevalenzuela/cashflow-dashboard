@@ -12,7 +12,7 @@ import { getBranchById } from "@/lib/db/branches";
 import { getCommissionRateMap } from "@/lib/db/commission-rates";
 import { getDentistTierMap, getTierRateMap } from "@/lib/db/commission-tiers";
 import { findDentistUserByName } from "@/lib/db/dentists";
-import { findProcedureByName } from "@/lib/db/procedures";
+import { findProcedureByName, getProcedureVatMap } from "@/lib/db/procedures";
 import {
   dentistCommissionRates,
   transactions,
@@ -323,6 +323,7 @@ async function resolveCommissionLinks(rows: CashflowTransaction[]) {
     rateMap,
     tierRateMap,
     dentistTierMap,
+    procedureVatMap,
   ] = await Promise.all([
     Promise.all(
       distinctDentistNames.map((name) => findDentistUserByName(name)),
@@ -333,6 +334,7 @@ async function resolveCommissionLinks(rows: CashflowTransaction[]) {
     getCommissionRateMap(),
     getTierRateMap(),
     getDentistTierMap(),
+    getProcedureVatMap(),
   ]);
 
   const dentistIdByName = new Map<string, string>();
@@ -355,6 +357,7 @@ async function resolveCommissionLinks(rows: CashflowTransaction[]) {
     individual: rateMap,
     tier: tierRateMap,
     dentistTier: dentistTierMap,
+    procedureVat: procedureVatMap,
   };
 
   return rows.map((row) => {
