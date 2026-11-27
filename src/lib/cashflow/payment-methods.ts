@@ -120,6 +120,19 @@ export function canonicalPaymentName(name: string | null | undefined): string | 
   );
 }
 
+export const NO_PAYMENT_METHOD_LABEL = "No payment method yet";
+
+/**
+ * The name to group a payment type under in charts: the method's own
+ * spelling, so "maxicare" and "Maxicare" are one slice; a blank one (a visit
+ * with no payment recorded yet) gets a plain label.
+ */
+export function paymentLabel(name: string | null | undefined): string {
+  const trimmed = (name ?? "").trim();
+  if (!trimmed) return NO_PAYMENT_METHOD_LABEL;
+  return canonicalPaymentName(trimmed) ?? trimmed;
+}
+
 /** Is this payment type an HMO / dental-insurance company? */
 export function isHmoPayment(paymentType: string | null | undefined): boolean {
   const wanted = (paymentType ?? "").trim().toLowerCase();

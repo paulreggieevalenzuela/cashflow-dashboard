@@ -3,7 +3,7 @@ import { db } from "@/lib/db/client";
 import { transactions } from "@/lib/db/schema";
 import { getCommissionRateMap } from "@/lib/db/commission-rates";
 import { getDentistTierMap, getTierRateMap } from "@/lib/db/commission-tiers";
-import { findProcedureByName } from "@/lib/db/procedures";
+import { findProcedureByName, getProcedureVatMap } from "@/lib/db/procedures";
 import { findDentistUserByName } from "@/lib/db/dentists";
 import {
   commissionForLine,
@@ -13,12 +13,13 @@ import { round2 } from "@/lib/cashflow/pricing";
 
 /** Every rate, loaded once. */
 export async function loadCommissionRateMaps(): Promise<CommissionRateMaps> {
-  const [individual, tier, dentistTier] = await Promise.all([
+  const [individual, tier, dentistTier, procedureVat] = await Promise.all([
     getCommissionRateMap(),
     getTierRateMap(),
     getDentistTierMap(),
+    getProcedureVatMap(),
   ]);
-  return { individual, tier, dentistTier };
+  return { individual, tier, dentistTier, procedureVat };
 }
 
 export type RecalcScope = {

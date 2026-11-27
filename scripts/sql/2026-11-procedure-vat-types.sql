@@ -1,15 +1,23 @@
--- Price list VAT types: only the basic procedures are Non-VAT (clinic, 24 Nov 2026):
+-- Price list VAT types: the clinic's rule (24 Nov 2026) is that only the basic
+-- procedures are Non-VAT:
 --   Consultation, Oral Prophylaxis (every kind), Temporary Filling,
 --   Permanent Filling (every kind), Simple Tooth Extraction.
 -- Every other procedure is VAT.
 --
--- Optional tidying. The app already applies this rule itself (procedureVatType):
--- the price list shows the VAT type from the name, new procedure lines are
--- saved with it, and commission uses it, whatever the stored value says. This
--- script only makes the stored price-list values match (for SQL reports and
--- exports). Saved visits are not changed: their receipts were already issued.
+-- REQUIRED ONCE before deploying 0.11.0. From 0.11.0 the VAT type stored on
+-- the price list is what the app uses (it can be changed per procedure under
+-- Transactions -> Procedures), for new lines and for commission. Some old
+-- procedures are stored as Non-VAT (Ortho Adj, RCM, Lost Bracket ...); this
+-- sets every stored value to the rule above. Afterwards, change any exception
+-- in the app (it recalculates that procedure's commissions and logs it).
+-- Saved visits are not changed: their receipts were already issued.
 --
--- Run in the Neon SQL Editor, staging first. Safe to run more than once.
+-- Run it ONCE only: running it again later would undo VAT types changed in
+-- the app on purpose.
+--
+-- After it: yarn db:recalc-commissions --dry-run, check, then without --dry-run.
+--
+-- Run in the Neon SQL Editor, staging first.
 
 -- 1. Preview: what would change (run this alone first and check the list).
 --    Look closely at the non-treatment items (Reservation Fee, Dental

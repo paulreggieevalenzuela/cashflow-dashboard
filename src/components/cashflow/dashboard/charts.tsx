@@ -485,7 +485,7 @@ export function DonutChart({
   }
 
   return (
-    <div ref={containerRef} className="relative mx-auto h-40 w-40">
+    <div ref={containerRef} className="relative mx-auto h-40 w-40 shrink-0">
       <svg viewBox={`0 0 ${size} ${size}`} className="h-40 w-40 -rotate-90" role="img" aria-label="Breakdown chart — see the list beside it for values">
         <circle
           cx={center}
@@ -542,15 +542,20 @@ export function DonutLegend({ segments, total }: { segments: DonutSegment[]; tot
     <ul className="space-y-2 text-sm">
       {segments.map((segment) => (
         <li key={segment.label} className="flex items-center justify-between gap-3">
-          <span className="flex items-center gap-2 text-zinc-600 dark:text-zinc-400">
+          {/* Long names (e.g. "POS (GHL) - CREDIT") stay on one line and are
+              cut with "…" only when there is really no room; the full name
+              is in the tooltip. */}
+          <span className="flex min-w-0 items-center gap-2 text-zinc-600 dark:text-zinc-400">
             <span
               className="h-2.5 w-2.5 shrink-0 rounded-full"
               style={{ backgroundColor: segment.color }}
               aria-hidden="true"
             />
-            {segment.label}
+            <span className="truncate whitespace-nowrap" title={segment.label}>
+              {segment.label}
+            </span>
           </span>
-          <span className="font-medium text-zinc-900 dark:text-zinc-50">
+          <span className="shrink-0 font-medium tabular-nums text-zinc-900 dark:text-zinc-50">
             {sum === 0 ? "0%" : `${Math.round((segment.value / sum) * 100)}%`}
           </span>
         </li>

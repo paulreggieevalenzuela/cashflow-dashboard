@@ -112,17 +112,31 @@ export function isNonVatProcedure(name: string | null | undefined): boolean {
   return NON_VAT_PROCEDURES.some((pattern) => pattern.test(text));
 }
 
+/** The two VAT types a procedure on the price list can have. */
+export type ProcedureVatType = "vat" | "non_vat";
+
 /**
- * The VAT type a procedure is sold with: Non-VAT for the five basic
- * procedures, VAT 12% for everything else. The price list, the visit form
- * and the server all follow this, so it cannot be set wrongly by hand.
+ * The suggested VAT type for a procedure name: Non-VAT for the five basic
+ * procedures, VAT 12% for everything else. Used to pre-fill a new
+ * procedure, and for old lines that are not linked to the price list. The
+ * VAT type chosen on the price list is what counts (November 2026).
  */
-export function procedureVatType(name: string | null | undefined): "vat" | "non_vat" {
+export function procedureVatType(name: string | null | undefined): ProcedureVatType {
   return isNonVatProcedure(name) ? "non_vat" : "vat";
+}
+
+/** A stored price-list VAT type as VAT or Non-VAT (anything not VAT is Non-VAT). */
+export function toProcedureVatType(value: string | null | undefined): ProcedureVatType {
+  return (value ?? "").trim().toLowerCase() === "vat" ? "vat" : "non_vat";
 }
 
 export type CommissionVatInput = {
   procedureName?: string | null;
+  /**
+   * The procedure's VAT type on the price list. When given it decides;
+   * when missing (a line not linked to the price list) the name rule does.
+   */
+  priceListVatType?: ProcedureVatType | null;
   /** The line's VAT type as saved ("vat_exempt" = VAT already removed). */
   vatType?: string | null;
   /** The line's discount reason (PWD / Senior Citizen = VAT already removed). */
@@ -131,7 +145,10 @@ export type CommissionVatInput = {
 
 /** True when the line's VAT is taken out before the commission % applies. */
 export function commissionRemovesVat(line: CommissionVatInput): boolean {
-  if (isNonVatProcedure(line.procedureName)) return false;
+  const nonVat = line.priceListVatType
+    ? line.priceListVatType === "non_vat"
+    : isNonVatProcedure(line.procedureName);
+  if (nonVat) return false;
   // PWD / Senior lines are charged without VAT already.
   if ((line.vatType ?? "").trim().toLowerCase() === "vat_exempt") return false;
   if (isStatutoryDiscount(line.discountReason)) return false;
@@ -140,8 +157,8 @@ export function commissionRemovesVat(line: CommissionVatInput): boolean {
 
 /**
  * The amount the commission % is applied to: the collected amount less its
- * VAT (÷ 1.12), or the full amount for the basic Non-VAT procedures and for
- * PWD / Senior lines.
+ * VAT (÷ 1.12), or the full amount for Non-VAT procedures (as set on the
+ * price list) and for PWD / Senior lines.
  */
 export function commissionBase(amount: number, line: CommissionVatInput): number {
   return commissionRemovesVat(line)
@@ -155,7 +172,7 @@ export function commissionBase(amount: number, line: CommissionVatInput): number
  * - `amount` is the line's `commissionAmountBase` (price less discount, less
  *   withholding tax; the merchant fee is not taken off).
  * - Percentages apply to `commissionBase`: that amount less VAT (÷ 1.12),
- *   or the full amount for the basic Non-VAT procedures; fixed peso values
+ *   or the full amount for Non-VAT procedures; fixed peso values
  *   (X-rays, some HMO procedures) are paid as they are.
  * - Not an HMO payment: cash-paying % of the base, or the flat peso value.
  * - HMO payment: the HMO peso value or HMO % when one is set (an HMO 0% set
@@ -171,6 +188,8 @@ export function computeCommission(
   rate: CommissionRateSetting | undefined,
   options: {
     procedureName?: string | null;
+    /** The procedure's VAT type on the price list (decides when given). */
+    priceListVatType?: ProcedureVatType | null;
     /** The line's VAT type ("vat_exempt" = VAT already removed). */
     vatType?: string | null;
     /** PWD / Senior Citizen discounts already removed the VAT. */
@@ -196,6 +215,8 @@ export function computeCommissionDetail(
   rate: CommissionRateSetting | undefined,
   options: {
     procedureName?: string | null;
+    /** The procedure's VAT type on the price list (decides when given). */
+    priceListVatType?: ProcedureVatType | null;
     /** The line's VAT type ("vat_exempt" = VAT already removed). */
     vatType?: string | null;
     /** PWD / Senior Citizen discounts already removed the VAT. */
@@ -205,6 +226,7 @@ export function computeCommissionDetail(
 ): CommissionDetail {
   const base = commissionBase(amount, {
     procedureName: options.procedureName,
+    priceListVatType: options.priceListVatType,
     vatType: options.vatType,
     discountReason: options.discountReason,
   });

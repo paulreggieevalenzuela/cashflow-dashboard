@@ -1,6 +1,7 @@
 import type { CashflowTransaction } from "@/lib/cashflow/schema";
 import { isCheckInPlaceholder } from "@/lib/cashflow/visit-status";
 import type { Expense } from "@/lib/cashflow/expense-schema";
+import { paymentLabel } from "@/lib/cashflow/payment-methods";
 
 /**
  * How many transactions (visits) a set of rows is. A visit with several
@@ -386,7 +387,7 @@ export function paymentMethodBreakdown(
   let grandTotal = 0;
 
   for (const transaction of transactions) {
-    const key = transaction.paymentType.trim() || "Unspecified";
+    const key = paymentLabel(transaction.paymentType);
     byType.set(key, (byType.get(key) ?? 0) + transaction.amountPaid);
     grandTotal += transaction.amountPaid;
   }

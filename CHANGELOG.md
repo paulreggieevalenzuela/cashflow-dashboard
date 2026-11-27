@@ -4,6 +4,44 @@ All notable changes to the ADT Dental Clinic Cashflow app. The version is in
 `package.json` and `src/lib/cashflow/version.ts` (shown at the foot of the Help
 page). Newest first.
 
+## 0.11.0 — 2026-11-27
+
+VAT or Non-VAT chosen per procedure, installable phone app, and mobile fixes.
+
+### Added
+
+- **VAT 12% / Non-VAT choice on the price list** (Transactions → Procedures →
+  Add or Edit). A new procedure starts from the name rule (Consultation, Oral
+  Prophylaxis, Temporary Filling, Permanent Filling and Simple Tooth Extraction
+  Non-VAT; the rest VAT) and can be switched before saving.
+- **Commission follows the chosen VAT type.** Changing a procedure's VAT type
+  recalculates the commission on its saved lines (checked visits included) and
+  says how many changed; it is logged in the audit trail under Commissions
+  ("Procedure VAT type changed"). Receipts already issued keep their VAT.
+  New lines take the procedure's VAT type; lines not linked to the price list
+  still follow the name rule.
+- **Install as a phone app** (Android: Chrome → Install app; iPhone: Safari →
+  Share → Add to Home Screen). Opens full screen on Overview, with shortcuts to
+  Queue, Transactions and Day end, and an offline page. No patient or money
+  data is stored on the phone.
+
+### Fixed
+
+- Overview "Payment methods" and "Expenses by category": the legend no longer
+  squeezes on narrow cards (donut above, legend below); one line per label.
+- Payment methods with different capitals ("maxicare" / "Maxicare") are one
+  slice; a blank method shows "No payment method yet".
+- Procedures page no longer scrolls sideways on phones; no zoom on iPhone when
+  typing; content clears the notch and home bar.
+
+### To do once, before deploying
+
+- Run `scripts/sql/2026-11-procedure-vat-types.sql` in Neon (staging, then
+  production): it sets the stored VAT types to the clinic rule. The app now
+  uses the stored value, and some old procedures (Ortho Adj, RCM, Lost Bracket)
+  are stored as Non-VAT. Then `yarn db:recalc-commissions --dry-run`, check,
+  and run it without `--dry-run`.
+
 ## 0.10.0 — 2026-11-24
 
 Commission fixes from the clinic's review, commission audit trail, and a searchable, paged audit trail.

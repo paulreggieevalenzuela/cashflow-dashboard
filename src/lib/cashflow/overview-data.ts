@@ -23,6 +23,7 @@ import {
   type ProcedureStat,
 } from "@/lib/cashflow/dashboard-metrics";
 import { isCheckInPlaceholder } from "@/lib/cashflow/visit-status";
+import { paymentLabel } from "@/lib/cashflow/payment-methods";
 
 /** "YYYY-MM" */
 type YearMonth = string;
@@ -128,7 +129,7 @@ function periodStats(
   const byPayment = new Map<string, number>();
   for (const row of raw.yearPayments) {
     if (!inPeriod(row.ym)) continue;
-    const key = row.paymentType.trim() || "Unspecified";
+    const key = paymentLabel(row.paymentType);
     byPayment.set(key, (byPayment.get(key) ?? 0) + row.total);
   }
   const payments: PaymentStat[] = toShares(byPayment, (key) => key).map(

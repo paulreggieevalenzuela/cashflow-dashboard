@@ -5,6 +5,8 @@ import { z } from "zod";
 import { auth } from "@/lib/auth/access";
 import { requirePermission } from "@/lib/auth/guards";
 import { isPriceBasis } from "@/lib/cashflow/price-basis";
+import { logAudit } from "@/lib/db/audit";
+import { recalculateCommissions, type RecalcResult } from "@/lib/db/commission-recalc";
 import {
   createProcedure,
   deleteUnusedProcedure,
@@ -15,12 +17,12 @@ import {
 } from "@/lib/db/procedure-admin";
 
 type Result =
-  | { ok: true }
+  | { ok: true; notice?: string }
   | { ok: false; message: string; needsConfirm?: boolean };
 
 const InputSchema = z.object({
   name: z.string().trim().min(1, "Enter the procedure name.").max(200),
-  // Ignored: the VAT type follows the name (procedureVatType).
+  // VAT 12% or Non-VAT, as picked on the price list.
   vatType: z.enum(["vat", "non_vat"]).optional(),
   price: z
     .number()
@@ -123,8 +125,49 @@ export async function updateProcedureAction(
   if (!result.ok) {
     return result;
   }
+  let notice: string | undefined;
+  if (result.vatChange) {
+    // Commission follows the price list's VAT type: the procedure's saved
+    // lines are worked out again, checked visits included (November 2026).
+    // Receipts keep the VAT they were issued with.
+    let recalc: RecalcResult | null = null;
+    try {
+      recalc = await recalculateCommissions({ procedureIds: [id] });
+    } catch (error) {
+      console.error("Couldn't recalculate commissions", error);
+    }
+    const from = VAT_LABELS[result.vatChange.from];
+    const to = VAT_LABELS[result.vatChange.to];
+    await logAudit({
+      action: "commission.procedure_vat_changed",
+      entityType: "commission",
+      entityId: id,
+      summary: `${guard.actor.name} changed ${result.vatChange.name} from ${from} to ${to}${
+        recalc ? ` · ${recalcSummary(recalc)}` : ""
+      }`,
+      changes: [{ field: `${result.vatChange.name} · VAT`, from, to }],
+      actor: guard.actor,
+    });
+    notice = recalc
+      ? recalc.changed === 0
+        ? `Saved. ${result.vatChange.name} is now ${to}. No saved commission changed.`
+        : `Saved. ${result.vatChange.name} is now ${to}. ${recalcSummary(recalc)}.`
+      : "Saved, but saved commissions could not be updated. Press Recalculate all commissions on the Commissions page.";
+  }
   refresh();
-  return { ok: true };
+  return { ok: true, notice };
+}
+
+const VAT_LABELS = { vat: "VAT 12%", non_vat: "Non-VAT" } as const;
+
+const peso = new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" });
+
+function recalcSummary(result: RecalcResult): string {
+  if (result.changed === 0) return "no saved commission changed";
+  const sign = result.difference > 0 ? "+" : result.difference < 0 ? "−" : "";
+  return `Commission updated on ${result.changed} saved line${
+    result.changed === 1 ? "" : "s"
+  } (${sign}${peso.format(Math.abs(result.difference))} in total)`;
 }
 
 export async function deleteProcedureAction(id: string): Promise<Result> {

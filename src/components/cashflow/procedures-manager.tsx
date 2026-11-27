@@ -45,9 +45,13 @@ const FILTER_LABELS: Record<Filter, string> = {
   hidden: "Hidden",
 };
 
+const VAT_CHOICE_LABELS = { vat: "VAT 12%", non_vat: "Non-VAT" } as const;
+
 type Draft = {
   name: string;
   vatType: "vat" | "non_vat";
+  /** False while a new procedure's VAT type still follows its name. */
+  vatChosen: boolean;
   price: string;
   priceBasis: PriceBasis;
   active: boolean;
@@ -61,6 +65,7 @@ function emptyDraft(): Draft {
   return {
     name: "",
     vatType: "vat",
+    vatChosen: false,
     price: "",
     priceBasis: "flat",
     active: true,
@@ -85,6 +90,7 @@ function draftFrom(row: ProcedureAdminRow): Draft {
   return {
     name: row.name,
     vatType: row.vatType === "vat" ? "vat" : "non_vat",
+    vatChosen: true,
     price: row.price === null ? "" : String(row.price),
     priceBasis: row.priceBasis,
     active: row.active,
@@ -120,6 +126,7 @@ export function ProceduresManager({
   const [error, setError] = useState<string | null>(null);
   const [confirmMessage, setConfirmMessage] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   const [historyFor, setHistoryFor] = useState<ProcedureAdminRow | null>(null);
@@ -226,6 +233,7 @@ export function ProceduresManager({
         }
         return;
       }
+      setNotice(result.notice ?? null);
       closeEditor();
       router.refresh();
     } finally {
@@ -299,6 +307,22 @@ export function ProceduresManager({
         )}
       </div>
 
+      {notice && (
+        <div
+          role="status"
+          className="flex items-start justify-between gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-200"
+        >
+          <span>{notice}</span>
+          <button
+            type="button"
+            onClick={() => setNotice(null)}
+            className="shrink-0 font-medium underline-offset-2 hover:underline"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
       <div className="flex flex-col gap-3 rounded-lg border border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-950 sm:flex-row sm:items-center">
         <input
           type="search"
@@ -325,7 +349,7 @@ export function ProceduresManager({
         </span>
       </div>
 
-      <div className="overflow-x-auto rounded-lg border border-zinc-200 dark:border-zinc-800">
+      <div className="relative overflow-x-auto rounded-lg border border-zinc-200 dark:border-zinc-800">
         <table className="w-full min-w-[860px] text-left text-sm">
           <thead className="bg-zinc-50 text-xs uppercase tracking-wide text-zinc-500 dark:bg-zinc-900 dark:text-zinc-400">
             <tr>
@@ -441,9 +465,16 @@ export function ProceduresManager({
             <input
               required
               value={draft.name}
-              onChange={(event) =>
-                setDraft({ ...draft, name: event.target.value })
-              }
+              onChange={(event) => {
+                const name = event.target.value;
+                // A new procedure suggests its VAT type from the name until
+                // one is picked.
+                setDraft(
+                  draft.vatChosen
+                    ? { ...draft, name }
+                    : { ...draft, name, vatType: procedureVatType(name) },
+                );
+              }}
               className={FIELD}
             />
           </div>
@@ -486,24 +517,52 @@ export function ProceduresManager({
                 ))}
               </select>
             </div>
-            <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+            <fieldset className="flex flex-col gap-1.5">
+              <legend className="mb-1.5 text-sm font-medium text-zinc-700 dark:text-zinc-300">
                 VAT
-              </label>
-              <p
+              </legend>
+              <div
                 data-testid="procedure-vat"
-                className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-900 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-50"
+                className="grid grid-cols-2 gap-1 rounded-lg border border-zinc-300 bg-zinc-50 p-1 dark:border-zinc-700 dark:bg-zinc-900"
               >
-                {procedureVatType(draft.name) === "vat"
-                  ? "VAT 12% (included in the price)"
-                  : "Non-VAT"}
-              </p>
+                {(["vat", "non_vat"] as const).map((type) => (
+                  <label
+                    key={type}
+                    className={`flex cursor-pointer items-center justify-center rounded-md px-3 py-2 text-sm font-medium transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-amber-300 ${
+                      draft.vatType === type
+                        ? "bg-white text-zinc-900 shadow-sm ring-1 ring-amber-400 dark:bg-zinc-700 dark:text-zinc-50 dark:ring-amber-500"
+                        : "text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-200"
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="procedure-vat"
+                      value={type}
+                      checked={draft.vatType === type}
+                      onChange={() =>
+                        setDraft({ ...draft, vatType: type, vatChosen: true })
+                      }
+                      className="sr-only"
+                    />
+                    {VAT_CHOICE_LABELS[type]}
+                  </label>
+                ))}
+              </div>
               <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                Set by the name: only Consultation, Oral Prophylaxis,
-                Temporary Filling, Permanent Filling and Simple Tooth
-                Extraction are Non-VAT.
+                {draft.vatType === "vat"
+                  ? "The price includes 12% VAT. Commission is worked out on the price ÷ 1.12."
+                  : "No VAT. Commission is worked out on the full price."}
               </p>
-            </div>
+              {editing !== null &&
+                editing !== "new" &&
+                draft.vatType !== editing.vatType && (
+                  <p className="rounded-md bg-amber-50 px-2.5 py-1.5 text-xs text-amber-800 dark:bg-amber-950 dark:text-amber-200">
+                    {editing.usedCount > 0
+                      ? `Saving recalculates the commission on this procedure's ${editing.usedCount} saved line${editing.usedCount === 1 ? "" : "s"}, checked visits included. Receipts already issued keep their VAT.`
+                      : "New visits will use this VAT type."}
+                  </p>
+                )}
+            </fieldset>
             <div className="flex flex-col gap-1.5">
               <label className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
                 Status
@@ -653,7 +712,7 @@ export function ProceduresManager({
           </p>
         )}
         {history !== null && history.length > 0 && (
-          <div className="overflow-x-auto">
+          <div className="relative overflow-x-auto">
             <table className="w-full min-w-[560px] text-left text-sm">
               <thead className="text-xs uppercase tracking-wide text-zinc-500">
                 <tr>

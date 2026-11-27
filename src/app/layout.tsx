@@ -1,12 +1,32 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import NextTopLoader from "nextjs-toploader";
 import { auth } from "@/lib/auth/access";
 import { getUserTheme } from "@/lib/db/user-preferences";
+import { RegisterServiceWorker } from "@/components/pwa/register-service-worker";
 import "./globals.css";
 
 export const metadata: Metadata = {
   title: "ADT Dental Clinic",
   description: "Financial & Cashflow Management System for ADT Dental Clinic",
+  applicationName: "ADT Cashflow",
+  // Installed on an iPhone / iPad ("Add to Home Screen"): open full screen
+  // with this name under the icon (the icon itself is src/app/apple-icon.png).
+  appleWebApp: {
+    capable: true,
+    title: "ADT Cashflow",
+    statusBarStyle: "default",
+  },
+  // Don't turn amounts or invoice numbers into phone-number links on iOS.
+  formatDetection: { telephone: false },
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  // Lets the installed app use the whole screen (notch / home bar); the
+  // layout keeps its content inside the safe area (see globals.css).
+  viewportFit: "cover",
+  themeColor: "#ffffff",
 };
 
 export default async function RootLayout({ children }: LayoutProps<"/">) {
@@ -32,6 +52,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
           shadow="0 0 8px #d97706, 0 0 4px #d97706"
         />
         {children}
+        <RegisterServiceWorker />
       </body>
     </html>
   );
